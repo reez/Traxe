@@ -76,13 +76,9 @@ struct DangerZoneSection: View {
 
     var body: some View {
         Section {
-            Button("Restart Device", role: .destructive, action: onRestart)
+            Button("Restart BitAxe Device", role: .destructive, action: onRestart)
         } header: {
             Text("Danger Zone")
-        } footer: {
-            Text("Warning: Restarting the device will temporarily interrupt mining operations.")
-                .font(.caption2)
-                .foregroundColor(.red)
         }
     }
 }
@@ -137,9 +133,9 @@ struct FanControlSection: View {
             Text("Fan Control")
         } footer: {
             VStack(alignment: .leading) {
-                Text("Switch Auto Fan off to manually control fan speed.")
+                Text("Switch Auto Fan **Off** to manually control fan speed.")
                     .foregroundColor(viewModel.isAutoFan ? .secondary : .clear)
-                Text("I have not tested these yet, so use with extra caution.")
+                Text("I have not tested this yet myself, so extra caution!")
                     .font(.caption2)
                     .foregroundColor(.red)
                     .padding(.top, 2)
@@ -163,7 +159,7 @@ struct SettingsView: View {
                     isConnected: viewModel.isConnected
                 )
                 
-                Section {
+                Section("Firmware") {
                     HStack {
                         Text("Firmware Version")
                         Spacer()
