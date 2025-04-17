@@ -37,7 +37,7 @@ struct FirmwareSection: View {
     var body: some View {
         Section {
             HStack {
-                Text("Current Version")
+                Text("Firmware Version")
                 Spacer()
                 Text(currentVersion)
                     .foregroundColor(.secondary)
@@ -63,7 +63,7 @@ struct FirmwareSection: View {
         } header: {
             Text("Firmware")
         } footer: {
-            Text("I have not tested these yet, so use with extra caution.")
+            Text("I have not tested this yet myself, so extra caution!")
                 .font(.caption2)
                 .foregroundColor(.red)
         }
@@ -81,6 +81,7 @@ struct DangerZoneSection: View {
             Text("Danger Zone")
         } footer: {
             Text("Warning: Restarting the device will temporarily interrupt mining operations.")
+                .font(.caption2)
                 .foregroundColor(.red)
         }
     }
@@ -161,6 +162,15 @@ struct SettingsView: View {
                     onSubmit: viewModel.saveSettings,
                     isConnected: viewModel.isConnected
                 )
+                
+                Section {
+                    HStack {
+                        Text("Firmware Version")
+                        Spacer()
+                        Text(viewModel.currentVersion)
+                            .foregroundColor(.secondary)
+                    }
+                }
 
                 Section("Reset") {
                     Button("Reset Connection & Clear Data", role: .destructive) {
@@ -173,15 +183,7 @@ struct SettingsView: View {
                         AdvancedSettingsView(viewModel: viewModel)
                     }
                 }
-
-                Section {
-                    HStack {
-                        Text("Version")
-                        Spacer()
-                        Text(viewModel.currentVersion)
-                            .foregroundColor(.secondary)
-                    }
-                }
+   
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
