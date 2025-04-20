@@ -64,7 +64,12 @@ struct Provider: TimelineProvider {
 
             } catch let error as NetworkError {
                 print("Widget Network Error: \(error.localizedDescription)")
-                fetchedHashrate = "Error" // Or more specific based on error type
+                // Check if the error is due to missing configuration
+                if case .configurationMissing = error {
+                    fetchedHashrate = "Setup?" // Show setup message
+                } else {
+                    fetchedHashrate = "Error" // Or more specific based on error type
+                }
             } catch {
                 print("Widget Unknown Error: \(error)")
                 fetchedHashrate = "Error"
@@ -154,7 +159,9 @@ struct TraxeWidget: Widget {
         }
         .configurationDisplayName("Hashrate Widget")
         .description("This is a hashrate widget.")
-        .widgetAccentable()
+        .supportedFamilies([.systemSmall])
+//        .widgetAccentable()
+        .disfavoredLocations([.homeScreen, .lockScreen, .iPhoneWidgetsOnMac], for: [.systemSmall]) // Disallow on Lock Screen for small family
     }
 }
 

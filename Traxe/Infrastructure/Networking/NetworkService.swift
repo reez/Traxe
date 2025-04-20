@@ -8,6 +8,7 @@ enum NetworkError: Error, LocalizedError {
     case decodingError(Error)
     case apiError(message: String)
     case unknown
+    case configurationMissing
 
     var errorDescription: String? {
         switch self {
@@ -31,6 +32,7 @@ enum NetworkError: Error, LocalizedError {
         case .decodingError(let error):
             return "Failed to process data from the device: \(error.localizedDescription)"
         case .apiError(let message): return "Device API Error: \(message)"
+        case .configurationMissing: return "Device IP address is not configured. Please set it in the app."
         case .unknown: return "An unknown network error occurred."
         }
     }
@@ -48,28 +50,24 @@ actor NetworkService {
     }
 
     // Function to get the base URL, potentially from storage
-    private func getBaseURL() throws -> URL {
+    private func getBaseURL() -> URL? {
         let suiteName = "group.matthewramsden.traxe"
-        print("[NetworkService] Attempting to read from UserDefaults suite: \(suiteName)")
-        
+        // print("[NetworkService] Attempting to read from UserDefaults suite: \(suiteName)") // Less noisy logging
+
         guard let sharedDefaults = UserDefaults(suiteName: suiteName) else {
             print("[NetworkService] ERROR: Failed to initialize UserDefaults with suite name: \(suiteName)")
-            throw NetworkError.invalidURL // Consider a more specific error maybe? .configError?
+            return nil // Return nil instead of throwing
         }
-        
+
         guard let ipAddress = sharedDefaults.string(forKey: "bitaxeIPAddress"),
               !ipAddress.isEmpty
         else {
-            // Log what was found (or not found) in shared defaults
-            if let storedValue = sharedDefaults.object(forKey: "bitaxeIPAddress") {
-                print("[NetworkService] Found key 'bitaxeIPAddress' in shared defaults, but value is empty or invalid: \(storedValue)")
-            } else {
-                print("[NetworkService] ERROR: Key 'bitaxeIPAddress' not found in shared UserDefaults suite: \(suiteName)")
-            }
-            throw NetworkError.invalidURL // Or a new error case like .missingConfiguration
+            // Only log if key truly doesn't exist, not if it's just empty after reset etc.
+            // if sharedDefaults.object(forKey: "bitaxeIPAddress") == nil {
+            //     print("[NetworkService] INFO: Key 'bitaxeIPAddress' not found in shared UserDefaults suite: \(suiteName). Configuration needed.")
+            // }
+            return nil // Return nil instead of throwing
         }
-        
-        print("[NetworkService] Successfully retrieved IP '\(ipAddress)' from shared defaults.")
 
         // Clean up the IP address (remove any http:// or trailing slashes)
         let cleanIP = ipAddress.replacingOccurrences(of: "http://", with: "")
@@ -89,11 +87,14 @@ actor NetworkService {
         let ipRegex =
             #"^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"#
         guard cleanIP.range(of: ipRegex, options: .regularExpression) != nil else {
-            throw NetworkError.invalidURL
+             print("[NetworkService] ERROR: Stored IP '\(ipAddress)' is invalid format.")
+            return nil // Return nil for invalid format
         }
 
+        // Construct URL
         guard let url = URL(string: "http://\(cleanIP)") else {
-            throw NetworkError.invalidURL
+             print("[NetworkService] ERROR: Could not construct URL from clean IP '\(cleanIP)'.")
+            return nil // Return nil if URL construction fails
         }
 
         return url
@@ -101,7 +102,10 @@ actor NetworkService {
 
     // Generic GET request function
     func performGET<T: Codable>(endpoint: String) async throws -> T {
-        let url = try getBaseURL().appendingPathComponent(endpoint)
+        guard let baseURL = getBaseURL() else {
+            throw NetworkError.configurationMissing
+        }
+        let url = baseURL.appendingPathComponent(endpoint)
         var request = URLRequest(url: url)
         request.timeoutInterval = 5.0  // Increased timeout to 5 seconds
 
@@ -161,7 +165,10 @@ actor NetworkService {
 
     // Generic POST request function
     func performPOST(endpoint: String) async throws {
-        let url = try getBaseURL().appendingPathComponent(endpoint)
+        guard let baseURL = getBaseURL() else {
+            throw NetworkError.configurationMissing
+        }
+        let url = baseURL.appendingPathComponent(endpoint)
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = 30.0  // Longer timeout for firmware updates
@@ -203,7 +210,10 @@ actor NetworkService {
 
     // Generic PATCH request function
     private func performPATCH<T: Encodable>(endpoint: String, body: T) async throws {
-        let url = try getBaseURL().appendingPathComponent(endpoint)
+        guard let baseURL = getBaseURL() else {
+            throw NetworkError.configurationMissing
+        }
+        let url = baseURL.appendingPathComponent(endpoint)
         var request = URLRequest(url: url)
         request.httpMethod = "PATCH"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")

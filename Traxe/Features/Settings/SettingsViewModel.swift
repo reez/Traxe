@@ -2,6 +2,7 @@ import Combine
 import Foundation
 import Network
 import SwiftUI  // For @MainActor
+import WidgetKit // Import WidgetKit
 
 @MainActor
 final class SettingsViewModel: ObservableObject {
@@ -93,6 +94,8 @@ final class SettingsViewModel: ObservableObject {
         if let sharedDefaults = UserDefaults(suiteName: "group.matthewramsden.traxe") {
             sharedDefaults.set(trimmedIP, forKey: "bitaxeIPAddress")
             print("Mirrored IP \(trimmedIP) to shared defaults during save.") // Optional debugging
+            // Reload widget timeline
+            WidgetCenter.shared.reloadTimelines(ofKind: "TraxeWidget")
         } else {
             print("Error: Could not access shared UserDefaults in saveSettings to mirror IP.")
         }
