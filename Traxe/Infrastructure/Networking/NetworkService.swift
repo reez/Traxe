@@ -49,11 +49,27 @@ actor NetworkService {
 
     // Function to get the base URL, potentially from storage
     private func getBaseURL() throws -> URL {
-        guard let ipAddress = UserDefaults.standard.string(forKey: "bitaxeIPAddress"),
-            !ipAddress.isEmpty
-        else {
-            throw NetworkError.invalidURL
+        let suiteName = "group.matthewramsden.traxe"
+        print("[NetworkService] Attempting to read from UserDefaults suite: \(suiteName)")
+        
+        guard let sharedDefaults = UserDefaults(suiteName: suiteName) else {
+            print("[NetworkService] ERROR: Failed to initialize UserDefaults with suite name: \(suiteName)")
+            throw NetworkError.invalidURL // Consider a more specific error maybe? .configError?
         }
+        
+        guard let ipAddress = sharedDefaults.string(forKey: "bitaxeIPAddress"),
+              !ipAddress.isEmpty
+        else {
+            // Log what was found (or not found) in shared defaults
+            if let storedValue = sharedDefaults.object(forKey: "bitaxeIPAddress") {
+                print("[NetworkService] Found key 'bitaxeIPAddress' in shared defaults, but value is empty or invalid: \(storedValue)")
+            } else {
+                print("[NetworkService] ERROR: Key 'bitaxeIPAddress' not found in shared UserDefaults suite: \(suiteName)")
+            }
+            throw NetworkError.invalidURL // Or a new error case like .missingConfiguration
+        }
+        
+        print("[NetworkService] Successfully retrieved IP '\(ipAddress)' from shared defaults.")
 
         // Clean up the IP address (remove any http:// or trailing slashes)
         let cleanIP = ipAddress.replacingOccurrences(of: "http://", with: "")
