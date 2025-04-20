@@ -45,7 +45,7 @@ struct DashboardView: View {
 
                         Text(connectionStatusText)
                             .font(.caption)
-                            .foregroundColor(connectionStatusColor)
+                            .foregroundColor(.primary)
                             .offset(x: showStatusText ? 0 : -10)
                             .opacity(showStatusText ? 1 : 0)
                             .animation(.easeInOut, value: showStatusText)
@@ -247,16 +247,16 @@ struct DashboardView: View {
         }
     }
 
-    private var connectionStatusColor: Color {
-        switch viewModel.connectionState {
-        case .disconnected:
-            return .red
-        case .connecting:
-            return .secondary  //.orange
-        case .connected:
-            return .green
-        }
-    }
+//    private var connectionStatusColor: Color {
+//        switch viewModel.connectionState {
+//        case .disconnected:
+//            return .red
+//        case .connecting:
+//            return .secondary  //.orange
+//        case .connected:
+//            return .green
+//        }
+//    }
 
     private var connectionStatusText: String {
         switch viewModel.connectionState {
