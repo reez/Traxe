@@ -247,16 +247,16 @@ struct DashboardView: View {
         }
     }
 
-//    private var connectionStatusColor: Color {
-//        switch viewModel.connectionState {
-//        case .disconnected:
-//            return .red
-//        case .connecting:
-//            return .secondary  //.orange
-//        case .connected:
-//            return .green
-//        }
-//    }
+    //    private var connectionStatusColor: Color {
+    //        switch viewModel.connectionState {
+    //        case .disconnected:
+    //            return .red
+    //        case .connecting:
+    //            return .secondary  //.orange
+    //        case .connected:
+    //            return .green
+    //        }
+    //    }
 
     private var connectionStatusText: String {
         switch viewModel.connectionState {

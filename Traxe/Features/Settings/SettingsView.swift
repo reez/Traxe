@@ -158,7 +158,7 @@ struct SettingsView: View {
                     onSubmit: viewModel.saveSettings,
                     isConnected: viewModel.isConnected
                 )
-                
+
                 Section("Firmware") {
                     HStack {
                         Text("Firmware Version")
@@ -179,7 +179,7 @@ struct SettingsView: View {
                         AdvancedSettingsView(viewModel: viewModel)
                     }
                 }
-   
+
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
