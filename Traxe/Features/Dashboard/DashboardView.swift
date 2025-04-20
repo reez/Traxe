@@ -185,10 +185,10 @@ struct DashboardView: View {
                 icon: nil,
                 progress: viewModel.connectionState == .connected
                     ? (value: viewModel.currentMetrics.temperature, maxValue: 100) : nil,
-                historicalData: viewModel.connectionState == .connected
-                    ? viewModel.historicalData : [],
-                historicalDataKey: \.temperature,
-                chartStyle: .line,
+                //                historicalData: viewModel.connectionState == .connected
+                //                    ? viewModel.historicalData : [],
+                //                historicalDataKey: \.temperature,
+                //                chartStyle: .line,
                 isConnected: viewModel.connectionState == .connected
             )
             .padding(.horizontal)
