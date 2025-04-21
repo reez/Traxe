@@ -2,6 +2,7 @@ import Combine  // For ObservableObject
 import Foundation
 import Network
 import SwiftUI  // For @MainActor
+import WidgetKit  // Import WidgetKit
 
 struct DiscoveredDevice: Identifiable {
     let id = UUID()
@@ -308,7 +309,18 @@ final class OnboardingViewModel: ObservableObject {
     }
 
     func selectDevice(_ device: DiscoveredDevice) {
+        // Keep writing to standard defaults for the main app
         UserDefaults.standard.set(device.ip, forKey: "bitaxeIPAddress")
+
+        // ALSO write to shared defaults for the widget/NetworkService
+        if let sharedDefaults = UserDefaults(suiteName: "group.matthewramsden.traxe") {
+            sharedDefaults.set(device.ip, forKey: "bitaxeIPAddress")
+            print("Mirrored IP \(device.ip) to shared defaults.")  // Optional: for debugging
+            // Reload widget timeline
+            WidgetCenter.shared.reloadTimelines(ofKind: "TraxeWidget")
+        } else {
+            print("Error: Could not access shared UserDefaults in selectDevice to mirror IP.")
+        }
     }
 
     // Modified to return Bool indicating success

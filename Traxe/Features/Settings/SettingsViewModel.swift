@@ -2,6 +2,7 @@ import Combine
 import Foundation
 import Network
 import SwiftUI  // For @MainActor
+import WidgetKit  // Import WidgetKit
 
 @MainActor
 final class SettingsViewModel: ObservableObject {
@@ -84,9 +85,20 @@ final class SettingsViewModel: ObservableObject {
             return
         }
 
+        // Keep writing to standard defaults
         userDefaults.set(trimmedIP, forKey: "bitaxeIPAddress")
         userDefaults.set(tempAlertThreshold, forKey: "tempAlertThreshold")
         userDefaults.set(hashrateAlertThreshold, forKey: "hashrateAlertThreshold")
+
+        // ALSO write IP to shared defaults
+        if let sharedDefaults = UserDefaults(suiteName: "group.matthewramsden.traxe") {
+            sharedDefaults.set(trimmedIP, forKey: "bitaxeIPAddress")
+            print("Mirrored IP \(trimmedIP) to shared defaults during save.")  // Optional debugging
+            // Reload widget timeline
+            WidgetCenter.shared.reloadTimelines(ofKind: "TraxeWidget")
+        } else {
+            print("Error: Could not access shared UserDefaults in saveSettings to mirror IP.")
+        }
     }
 
     func requestResetConfirmation() {
@@ -94,11 +106,19 @@ final class SettingsViewModel: ObservableObject {
     }
 
     func performReset() {
-        // Clear relevant UserDefaults
+        // Clear relevant UserDefaults (standard)
         userDefaults.removeObject(forKey: "bitaxeIPAddress")
         userDefaults.removeObject(forKey: "tempAlertThreshold")
         userDefaults.removeObject(forKey: "hashrateAlertThreshold")
         // Add any other keys that need resetting
+
+        // ALSO clear from shared defaults
+        if let sharedDefaults = UserDefaults(suiteName: "group.matthewramsden.traxe") {
+            sharedDefaults.removeObject(forKey: "bitaxeIPAddress")
+            print("Removed IP from shared defaults during reset.")  // Optional debugging
+        } else {
+            print("Error: Could not access shared UserDefaults in performReset to remove IP.")
+        }
 
         // Reload settings in the view model to reflect cleared state
         loadSettings()
