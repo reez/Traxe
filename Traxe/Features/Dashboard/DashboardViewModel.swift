@@ -3,6 +3,7 @@ import Foundation
 import Network
 import SwiftData
 import SwiftUI
+import os.log
 
 enum TimeRange: String, CaseIterable, Identifiable {
     case lastHour = "1H"
@@ -72,6 +73,7 @@ final class DashboardViewModel: ObservableObject {
                         await self.connect()
                     }
                 } else {
+                    Logger.dashboard.info("Network path became unsatisfied, disconnecting.")
                     await MainActor.run {
                         self.pollingTask?.cancel()
                         self.connectionState = .disconnected
@@ -104,6 +106,7 @@ final class DashboardViewModel: ObservableObject {
                 self.startPolling()
             }
         } catch {
+            Logger.dashboard.error("Connection failed: \(error.localizedDescription)")
             handleError(error)
             await MainActor.run {
                 self.connectionState = .disconnected
@@ -127,7 +130,10 @@ final class DashboardViewModel: ObservableObject {
                         fetchHistoricalData(timeRange: .lastHour)
                         try await Task.sleep(nanoseconds: 5_000_000_000)
                     } catch {
-                        if error is CancellationError { throw error }
+                        if error is CancellationError {
+                           Logger.dashboard.info("Polling cancelled.")
+                           throw error
+                        }
 
                         // --- New Error Handling Logic ---
                         // Check if it's the specific invalidURL error AND we think we are connected
@@ -137,13 +143,14 @@ final class DashboardViewModel: ObservableObject {
                             currentState == .connected
                         {
                             // Likely the transient UserDefaults sync issue right after connecting.
-                            // Log it for debugging, but don't show alert or disconnect.
+                            Logger.dashboard.warning("Polling encountered transient invalidURL error, likely UserDefaults sync. Retrying.")
                             // Add a small delay before the next poll attempt just in case
                             try? await Task.sleep(nanoseconds: 1_000_000_000)
                             // Continue to the next iteration of the loop
                             continue
                         } else {
                             // Handle all other errors normally (including invalidURL if not connected)
+                            Logger.dashboard.error("Polling error: \(error.localizedDescription)")
                             handleError(error)
                             await MainActor.run { self.connectionState = .disconnected }
                             return  // Stop polling on other errors
@@ -153,8 +160,10 @@ final class DashboardViewModel: ObservableObject {
                 }
             } catch {
                 if error is CancellationError {
+                    Logger.dashboard.info("Polling task cancelled externally.")
                     return
                 }
+                Logger.dashboard.fault("Unhandled error in polling task: \(error.localizedDescription)")
                 handleError(error)
                 await MainActor.run {
                     self.connectionState = .disconnected
@@ -271,13 +280,15 @@ final class DashboardViewModel: ObservableObject {
                 let oldPoints = try modelContext.fetch(descriptor)
                 oldPoints.forEach { modelContext.delete($0) }
             } catch {
-
+                 Logger.dashboard.error("Failed to delete old historical data: \(error.localizedDescription)")
             }
         }
     }
 
     private func handleError(_ error: Error) {
-        if connectionState == .connecting || isLoading {
+        // Avoid logging redundant errors if we are already in a connecting/loading state
+        // or if it's just a cancellation.
+        if connectionState == .connecting || isLoading || error is CancellationError {
             return
         }
 
@@ -285,16 +296,20 @@ final class DashboardViewModel: ObservableObject {
         let message: String
         if let networkError = error as? NetworkError {
             message = networkError.localizedDescription
-        } else if error is CancellationError {
-            return
+            Logger.dashboard.error("Handling network error: \(message)")
         } else {
             message = error.localizedDescription
+            Logger.dashboard.error("Handling general error: \(message)")
         }
 
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { [weak self] in // Use weak self
+            guard let self else { return }
             if shouldDisconnect {
-                self.connectionState = .disconnected
-                self.pollingTask?.cancel()
+                 if self.connectionState != .disconnected { // Only log if state actually changes
+                    Logger.dashboard.notice("Setting connection state to disconnected due to error.")
+                    self.connectionState = .disconnected
+                    self.pollingTask?.cancel() // Ensure polling stops
+                }
             }
             self.errorMessage = message
             self.showErrorAlert = true
