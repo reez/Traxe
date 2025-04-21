@@ -33,7 +33,7 @@ struct ParticleSphereView: View {
 
                 let drawRadius = min(size.width, size.height) / 2  // Adjust drawing size
 
-                for (_, particle) in particles.enumerated() {  // Use enumerated to limit prints
+                for (_, particle) in particles.enumerated() {  // Use enumerated to limit
                     // --- Basic Rotation (around Y axis) ---
                     let rotatedX =
                         particle.x * cos(currentAngle.radians) + particle.z
@@ -57,7 +57,6 @@ struct ParticleSphereView: View {
 
                     // --- Check for invalid values before drawing ---
                     guard viewX.isFinite, viewY.isFinite, pointSize > 0, opacity > 0 else {
-                        // if index < 5 { print("Particle \(index): Invalid drawing values, skipping.") } // Remove DEBUG print
                         continue  // Skip drawing if values are bad
                     }
 

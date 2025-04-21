@@ -315,11 +315,9 @@ final class OnboardingViewModel: ObservableObject {
         // ALSO write to shared defaults for the widget/NetworkService
         if let sharedDefaults = UserDefaults(suiteName: "group.matthewramsden.traxe") {
             sharedDefaults.set(device.ip, forKey: "bitaxeIPAddress")
-            print("Mirrored IP \(device.ip) to shared defaults.")  // Optional: for debugging
             // Reload widget timeline
             WidgetCenter.shared.reloadTimelines(ofKind: "TraxeWidget")
         } else {
-            print("Error: Could not access shared UserDefaults in selectDevice to mirror IP.")
         }
     }
 

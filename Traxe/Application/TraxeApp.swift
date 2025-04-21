@@ -57,7 +57,6 @@ struct TraxeApp: App {
         .modelContainer(sharedModelContainer)  // Inject the container into the environment
         .onChange(of: scenePhase) { oldPhase, newPhase in
             if newPhase == .active {
-                print("App became active, reloading widget timeline.")
                 WidgetCenter.shared.reloadTimelines(ofKind: "TraxeWidget")
             }
         }

@@ -17,7 +17,6 @@ struct Provider: TimelineProvider {
         guard let sharedDefaults = UserDefaults(suiteName: appGroupID),
             sharedDefaults.string(forKey: "bitaxeIPAddress") != nil  // Check if IP exists
         else {
-            print("Widget Provider: Missing App Group or IP Address in shared defaults.")
             return nil  // Cannot proceed without IP
         }
         // You might want to configure the session specifically for the widget
@@ -66,7 +65,6 @@ struct Provider: TimelineProvider {
                 // fetchedHashrate = systemInfo.hashrateString ?? "N/A" // Replace 'hashrateString'
 
             } catch let error as NetworkError {
-                print("Widget Network Error: \(error.localizedDescription)")
                 // Check if the error is due to missing configuration
                 if case .configurationMissing = error {
                     fetchedHashrate = "Setup?"  // Show setup message
@@ -74,7 +72,6 @@ struct Provider: TimelineProvider {
                     fetchedHashrate = "Error"  // Or more specific based on error type
                 }
             } catch {
-                print("Widget Unknown Error: \(error)")
                 fetchedHashrate = "Error"
             }
 
