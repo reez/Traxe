@@ -32,7 +32,8 @@ enum NetworkError: Error, LocalizedError {
         case .decodingError(let error):
             return "Failed to process data from the device: \(error.localizedDescription)"
         case .apiError(let message): return "Device API Error: \(message)"
-        case .configurationMissing: return "Device IP address is not configured. Please set it in the app."
+        case .configurationMissing:
+            return "Device IP address is not configured. Please set it in the app."
         case .unknown: return "An unknown network error occurred."
         }
     }
@@ -55,18 +56,20 @@ actor NetworkService {
         // print("[NetworkService] Attempting to read from UserDefaults suite: \(suiteName)") // Less noisy logging
 
         guard let sharedDefaults = UserDefaults(suiteName: suiteName) else {
-            print("[NetworkService] ERROR: Failed to initialize UserDefaults with suite name: \(suiteName)")
-            return nil // Return nil instead of throwing
+            print(
+                "[NetworkService] ERROR: Failed to initialize UserDefaults with suite name: \(suiteName)"
+            )
+            return nil  // Return nil instead of throwing
         }
 
         guard let ipAddress = sharedDefaults.string(forKey: "bitaxeIPAddress"),
-              !ipAddress.isEmpty
+            !ipAddress.isEmpty
         else {
             // Only log if key truly doesn't exist, not if it's just empty after reset etc.
             // if sharedDefaults.object(forKey: "bitaxeIPAddress") == nil {
             //     print("[NetworkService] INFO: Key 'bitaxeIPAddress' not found in shared UserDefaults suite: \(suiteName). Configuration needed.")
             // }
-            return nil // Return nil instead of throwing
+            return nil  // Return nil instead of throwing
         }
 
         // Clean up the IP address (remove any http:// or trailing slashes)
@@ -87,14 +90,14 @@ actor NetworkService {
         let ipRegex =
             #"^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"#
         guard cleanIP.range(of: ipRegex, options: .regularExpression) != nil else {
-             print("[NetworkService] ERROR: Stored IP '\(ipAddress)' is invalid format.")
-            return nil // Return nil for invalid format
+            print("[NetworkService] ERROR: Stored IP '\(ipAddress)' is invalid format.")
+            return nil  // Return nil for invalid format
         }
 
         // Construct URL
         guard let url = URL(string: "http://\(cleanIP)") else {
-             print("[NetworkService] ERROR: Could not construct URL from clean IP '\(cleanIP)'.")
-            return nil // Return nil if URL construction fails
+            print("[NetworkService] ERROR: Could not construct URL from clean IP '\(cleanIP)'.")
+            return nil  // Return nil if URL construction fails
         }
 
         return url

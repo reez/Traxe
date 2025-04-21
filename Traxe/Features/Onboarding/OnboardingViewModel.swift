@@ -2,7 +2,7 @@ import Combine  // For ObservableObject
 import Foundation
 import Network
 import SwiftUI  // For @MainActor
-import WidgetKit // Import WidgetKit
+import WidgetKit  // Import WidgetKit
 
 struct DiscoveredDevice: Identifiable {
     let id = UUID()
@@ -315,7 +315,7 @@ final class OnboardingViewModel: ObservableObject {
         // ALSO write to shared defaults for the widget/NetworkService
         if let sharedDefaults = UserDefaults(suiteName: "group.matthewramsden.traxe") {
             sharedDefaults.set(device.ip, forKey: "bitaxeIPAddress")
-            print("Mirrored IP \(device.ip) to shared defaults.") // Optional: for debugging
+            print("Mirrored IP \(device.ip) to shared defaults.")  // Optional: for debugging
             // Reload widget timeline
             WidgetCenter.shared.reloadTimelines(ofKind: "TraxeWidget")
         } else {

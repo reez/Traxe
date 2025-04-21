@@ -5,8 +5,8 @@
 //  Created by Matthew Ramsden on 4/20/25.
 //
 
-import WidgetKit
 import SwiftUI
+import WidgetKit
 
 @main
 struct TraxeWidgetBundle: WidgetBundle {

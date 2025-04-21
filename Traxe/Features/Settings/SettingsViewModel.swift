@@ -2,7 +2,7 @@ import Combine
 import Foundation
 import Network
 import SwiftUI  // For @MainActor
-import WidgetKit // Import WidgetKit
+import WidgetKit  // Import WidgetKit
 
 @MainActor
 final class SettingsViewModel: ObservableObject {
@@ -93,7 +93,7 @@ final class SettingsViewModel: ObservableObject {
         // ALSO write IP to shared defaults
         if let sharedDefaults = UserDefaults(suiteName: "group.matthewramsden.traxe") {
             sharedDefaults.set(trimmedIP, forKey: "bitaxeIPAddress")
-            print("Mirrored IP \(trimmedIP) to shared defaults during save.") // Optional debugging
+            print("Mirrored IP \(trimmedIP) to shared defaults during save.")  // Optional debugging
             // Reload widget timeline
             WidgetCenter.shared.reloadTimelines(ofKind: "TraxeWidget")
         } else {
@@ -115,7 +115,7 @@ final class SettingsViewModel: ObservableObject {
         // ALSO clear from shared defaults
         if let sharedDefaults = UserDefaults(suiteName: "group.matthewramsden.traxe") {
             sharedDefaults.removeObject(forKey: "bitaxeIPAddress")
-            print("Removed IP from shared defaults during reset.") // Optional debugging
+            print("Removed IP from shared defaults during reset.")  // Optional debugging
         } else {
             print("Error: Could not access shared UserDefaults in performReset to remove IP.")
         }
