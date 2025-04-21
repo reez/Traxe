@@ -3,6 +3,7 @@ import Foundation
 import Network
 import SwiftUI  // For @MainActor
 import WidgetKit  // Import WidgetKit
+import os.log
 
 @MainActor
 final class SettingsViewModel: ObservableObject {
@@ -82,6 +83,7 @@ final class SettingsViewModel: ObservableObject {
         let trimmedIP = bitaxeIPAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedIP.isEmpty /* Add more IP validation if needed */ else {
             // Optionally show an error to the user
+            Logger.settings.warning("Attempted to save settings with empty IP address.")
             return
         }
 
@@ -95,15 +97,19 @@ final class SettingsViewModel: ObservableObject {
             sharedDefaults.set(trimmedIP, forKey: "bitaxeIPAddress")
             // Reload widget timeline
             WidgetCenter.shared.reloadTimelines(ofKind: "TraxeWidget")
+            Logger.settings.info("Saved settings with IP: \(trimmedIP, privacy: .public)")
         } else {
+            Logger.settings.error("Failed to access shared UserDefaults group.")
         }
     }
 
     func requestResetConfirmation() {
+        Logger.settings.info("Reset confirmation requested.")
         showingResetConfirmation = true
     }
 
     func performReset() {
+        Logger.settings.notice("Performing settings reset.")
         // Clear relevant UserDefaults (standard)
         userDefaults.removeObject(forKey: "bitaxeIPAddress")
         userDefaults.removeObject(forKey: "tempAlertThreshold")
@@ -114,10 +120,12 @@ final class SettingsViewModel: ObservableObject {
         if let sharedDefaults = UserDefaults(suiteName: "group.matthewramsden.traxe") {
             sharedDefaults.removeObject(forKey: "bitaxeIPAddress")
         } else {
+            Logger.settings.error("Failed to access shared UserDefaults group during reset.")
         }
 
         // Reload settings in the view model to reflect cleared state
         loadSettings()
+        Logger.settings.notice("Settings reset completed.")
     }
 
     func openPremiumPage() {
