@@ -97,7 +97,7 @@ final class SettingsViewModel: ObservableObject {
             sharedDefaults.set(trimmedIP, forKey: "bitaxeIPAddress")
             // Reload widget timeline
             WidgetCenter.shared.reloadTimelines(ofKind: "TraxeWidget")
-            Logger.settings.info("Saved settings with IP: \(trimmedIP, privacy: .public)")
+            Logger.settings.info("Saved settings successfully.")
         } else {
             Logger.settings.error("Failed to access shared UserDefaults group.")
         }

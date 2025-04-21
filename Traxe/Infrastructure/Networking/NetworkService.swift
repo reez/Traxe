@@ -85,16 +85,16 @@ actor NetworkService {
         let ipRegex =
             #"^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"#
         guard cleanIP.range(of: ipRegex, options: .regularExpression) != nil else {
-            Self.logger.warning("Invalid IP address format found in UserDefaults: '\(cleanIP, privacy: .public)'")
+            Self.logger.warning("Invalid IP address format found in UserDefaults.")
             return nil  // Return nil for invalid format
         }
 
         // Construct URL
         guard let url = URL(string: "http://\(cleanIP)") else {
-            Self.logger.error("Failed to construct URL from valid IP: '\(cleanIP, privacy: .public)'")
+            Self.logger.error("Failed to construct URL from valid IP.")
             return nil  // Return nil if URL construction fails
         }
-        Self.logger.debug("Base URL constructed: \(url.absoluteString, privacy: .public)")
+        Self.logger.debug("Base URL constructed successfully.")
         return url
     }
 
@@ -107,33 +107,33 @@ actor NetworkService {
         let url = baseURL.appendingPathComponent(endpoint)
         var request = URLRequest(url: url)
         request.timeoutInterval = 5.0  // Increased timeout to 5 seconds
-        Self.logger.info("GET \(url.absoluteString, privacy: .public)")
+        Self.logger.info("GET \(endpoint)")
 
         do {
             let (data, response) = try await session.data(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse else {
-                 Self.logger.error("GET \(url.absoluteString, privacy: .public) failed: Invalid HTTP response.")
+                 Self.logger.error("GET \(endpoint) failed: Invalid HTTP response.")
                 throw NetworkError.invalidResponse
             }
-            Self.logger.debug("GET \(url.absoluteString, privacy: .public) received status: \(httpResponse.statusCode)")
+            Self.logger.debug("GET \(endpoint) received status: \(httpResponse.statusCode)")
 
             switch httpResponse.statusCode {
             case 200:
                 do {
                     return try decoder.decode(T.self, from: data)
                 } catch {
-                    Self.logger.error("GET \(url.absoluteString, privacy: .public) decoding error: \(error.localizedDescription)")
+                    Self.logger.error("GET \(endpoint) decoding error: \(error.localizedDescription)")
                     throw NetworkError.decodingError(error)
                 }
             case 404:
-                Self.logger.warning("GET \(url.absoluteString, privacy: .public) failed: 404 Not Found.")
+                Self.logger.warning("GET \(endpoint) failed: 404 Not Found.")
                 throw NetworkError.apiError(message: "Device not found at the specified IP address")
             case 500:
-                Self.logger.error("GET \(url.absoluteString, privacy: .public) failed: 500 Server Error.")
+                Self.logger.error("GET \(endpoint) failed: 500 Server Error.")
                 throw NetworkError.apiError(message: "Device server error")
             default:
-                Self.logger.error("GET \(url.absoluteString, privacy: .public) failed: Unexpected status code \(httpResponse.statusCode).")
+                Self.logger.error("GET \(endpoint) failed: Unexpected status code \(httpResponse.statusCode).")
                 throw NetworkError.apiError(
                     message: "Unexpected response: \(httpResponse.statusCode)"
                 )
@@ -142,7 +142,7 @@ actor NetworkService {
              // Already logged in specific cases or will be logged below
             throw error
         } catch {
-            Self.logger.error("GET \(url.absoluteString, privacy: .public) request failed: \(error.localizedDescription)")
+            Self.logger.error("GET \(endpoint) request failed: \(error.localizedDescription)")
             if let urlError = error as? URLError {
                 switch urlError.code {
                 case .notConnectedToInternet, .cannotConnectToHost, .timedOut:
@@ -150,7 +150,7 @@ actor NetworkService {
                     throw NetworkError.requestFailed(error)
                 default:
                      // Log other URL errors more verbosely here
-                    Self.logger.error("GET \(url.absoluteString, privacy: .public) detailed URLError: \(String(describing: urlError))")
+                    Self.logger.error("GET \(endpoint) detailed URLError: \(String(describing: urlError))")
                     throw NetworkError.requestFailed(error)
                 }
             }
@@ -180,29 +180,29 @@ actor NetworkService {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = 30.0  // Longer timeout for firmware updates
-        Self.logger.info("POST \(url.absoluteString, privacy: .public)")
+        Self.logger.info("POST \(endpoint)")
 
         do {
             let (_, response) = try await session.data(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse else {
-                 Self.logger.error("POST \(url.absoluteString, privacy: .public) failed: Invalid HTTP response.")
+                 Self.logger.error("POST \(endpoint) failed: Invalid HTTP response.")
                 throw NetworkError.invalidResponse
             }
-             Self.logger.debug("POST \(url.absoluteString, privacy: .public) received status: \(httpResponse.statusCode)")
+             Self.logger.debug("POST \(endpoint) received status: \(httpResponse.statusCode)")
 
             switch httpResponse.statusCode {
             case 200, 202:
-                Self.logger.debug("POST \(url.absoluteString, privacy: .public) successful.")
+                Self.logger.debug("POST \(endpoint) successful.")
                 return  // Success
             case 404:
-                 Self.logger.warning("POST \(url.absoluteString, privacy: .public) failed: 404 Not Found.")
+                 Self.logger.warning("POST \(endpoint) failed: 404 Not Found.")
                 throw NetworkError.apiError(message: "Endpoint not found")
             case 500:
-                 Self.logger.error("POST \(url.absoluteString, privacy: .public) failed: 500 Server Error.")
+                 Self.logger.error("POST \(endpoint) failed: 500 Server Error.")
                 throw NetworkError.apiError(message: "Device server error")
             default:
-                 Self.logger.error("POST \(url.absoluteString, privacy: .public) failed: Unexpected status code \(httpResponse.statusCode).")
+                 Self.logger.error("POST \(endpoint) failed: Unexpected status code \(httpResponse.statusCode).")
                 throw NetworkError.apiError(
                     message: "Unexpected response: \(httpResponse.statusCode)"
                 )
@@ -210,7 +210,7 @@ actor NetworkService {
         } catch let error as NetworkError {
             throw error
         } catch {
-            Self.logger.error("POST \(url.absoluteString, privacy: .public) request failed: \(error.localizedDescription)")
+            Self.logger.error("POST \(endpoint) request failed: \(error.localizedDescription)")
             throw NetworkError.requestFailed(error)
         }
     }
@@ -235,14 +235,14 @@ actor NetworkService {
         request.httpMethod = "PATCH"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 5.0
-        Self.logger.info("PATCH \(url.absoluteString, privacy: .public)")
+        Self.logger.info("PATCH \(endpoint)")
 
         let encoder = JSONEncoder()
         do {
              request.httpBody = try encoder.encode(body)
-             Self.logger.debug("PATCH \(url.absoluteString, privacy: .public) request body encoded.")
+             Self.logger.debug("PATCH \(endpoint) request body encoded.")
         } catch {
-            Self.logger.error("PATCH \(url.absoluteString, privacy: .public) failed to encode body: \(error.localizedDescription)")
+            Self.logger.error("PATCH \(endpoint) failed to encode body: \(error.localizedDescription)")
             // Throw a specific error or rethrow? Rethrowing seems appropriate.
             throw error
         }
@@ -251,23 +251,23 @@ actor NetworkService {
             let (_, response) = try await session.data(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse else {
-                Self.logger.error("PATCH \(url.absoluteString, privacy: .public) failed: Invalid HTTP response.")
+                Self.logger.error("PATCH \(endpoint) failed: Invalid HTTP response.")
                 throw NetworkError.invalidResponse
             }
-            Self.logger.debug("PATCH \(url.absoluteString, privacy: .public) received status: \(httpResponse.statusCode)")
+            Self.logger.debug("PATCH \(endpoint) received status: \(httpResponse.statusCode)")
 
             switch httpResponse.statusCode {
             case 200, 202:
-                Self.logger.debug("PATCH \(url.absoluteString, privacy: .public) successful.")
+                Self.logger.debug("PATCH \(endpoint) successful.")
                 return  // Success
             case 404:
-                Self.logger.warning("PATCH \(url.absoluteString, privacy: .public) failed: 404 Not Found.")
+                Self.logger.warning("PATCH \(endpoint) failed: 404 Not Found.")
                 throw NetworkError.apiError(message: "Endpoint not found")
             case 500:
-                Self.logger.error("PATCH \(url.absoluteString, privacy: .public) failed: 500 Server Error.")
+                Self.logger.error("PATCH \(endpoint) failed: 500 Server Error.")
                 throw NetworkError.apiError(message: "Device server error")
             default:
-                Self.logger.error("PATCH \(url.absoluteString, privacy: .public) failed: Unexpected status code \(httpResponse.statusCode).")
+                Self.logger.error("PATCH \(endpoint) failed: Unexpected status code \(httpResponse.statusCode).")
                 throw NetworkError.apiError(
                     message: "Unexpected response: \(httpResponse.statusCode)"
                 )
@@ -275,7 +275,7 @@ actor NetworkService {
         } catch let error as NetworkError {
             throw error
         } catch {
-             Self.logger.error("PATCH \(url.absoluteString, privacy: .public) request failed: \(error.localizedDescription)")
+             Self.logger.error("PATCH \(endpoint) request failed: \(error.localizedDescription)")
             throw NetworkError.requestFailed(error)
         }
     }

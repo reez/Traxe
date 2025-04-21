@@ -111,7 +111,7 @@ final class OnboardingViewModel: ObservableObject {
 
     private func checkAPMode() async -> Bool {
         let apIP = "192.168.4.254"
-        Logger.onboarding.info("Checking for device in AP mode at \(apIP, privacy: .public)")
+        Logger.onboarding.info("Checking for device in AP mode.")
         // Try HTTP first (BitAxe doesn't support HTTPS)
         let urlString = "http://\(apIP)/api/system/info"
         guard let url = URL(string: urlString) else {
@@ -152,38 +152,38 @@ final class OnboardingViewModel: ObservableObject {
                                 if !discoveredDevices.contains(where: { $0.ip == apIP }) {
                                     discoveredDevices.append(device)
                                     scanStatus = ""
-                                    Logger.onboarding.info("Found BitAxe in AP mode: \(systemInfo.hostname) at \(apIP, privacy: .public)")
+                                    Logger.onboarding.info("Found BitAxe in AP mode: \(systemInfo.hostname).")
                                 }
                             }
                             return true
                         } else {
-                            Logger.onboarding.warning("AP mode check attempt \(attempt): Device at \(apIP, privacy: .public) responded but doesn't seem to be a BitAxe.")
+                            Logger.onboarding.warning("AP mode check attempt \(attempt): Device responded but doesn't seem to be a BitAxe.")
                         }
                     } catch {
-                        Logger.onboarding.warning("AP mode check attempt \(attempt): Failed to decode response from \(apIP, privacy: .public): \(error.localizedDescription)")
+                        Logger.onboarding.warning("AP mode check attempt \(attempt): Failed to decode response: \(error.localizedDescription)")
                     }
                 case 404:
-                    Logger.onboarding.debug("AP mode check attempt \(attempt): Got 404 from \(apIP, privacy: .public).")
+                    Logger.onboarding.debug("AP mode check attempt \(attempt): Got 404.")
                     return false // 404 means no device here
                 default:
-                    Logger.onboarding.warning("AP mode check attempt \(attempt): Received unexpected status code \(httpResponse.statusCode) from \(apIP, privacy: .public).")
+                    Logger.onboarding.warning("AP mode check attempt \(attempt): Received unexpected status code \(httpResponse.statusCode).")
                     return false // Treat other statuses as failure for this check
                 }
             } catch {
                 if let urlError = error as? URLError {
                     switch urlError.code {
                     case .timedOut:
-                         Logger.onboarding.debug("AP mode check attempt \(attempt): Timed out connecting to \(apIP, privacy: .public).")
+                         Logger.onboarding.debug("AP mode check attempt \(attempt): Timed out connecting.")
                     case .cannotConnectToHost:
-                         Logger.onboarding.debug("AP mode check attempt \(attempt): Cannot connect to host \(apIP, privacy: .public).")
+                         Logger.onboarding.debug("AP mode check attempt \(attempt): Cannot connect to host.")
                     case .notConnectedToInternet:
                          Logger.onboarding.warning("AP mode check attempt \(attempt): Failed - Not connected to internet.")
                          return false // Can't proceed without internet
                     default:
-                         Logger.onboarding.warning("AP mode check attempt \(attempt): URLError connecting to \(apIP, privacy: .public): \(urlError.localizedDescription)")
+                         Logger.onboarding.warning("AP mode check attempt \(attempt): URLError connecting: \(urlError.localizedDescription)")
                     }
                 } else {
-                    Logger.onboarding.error("AP mode check attempt \(attempt): Unexpected error connecting to \(apIP, privacy: .public): \(error.localizedDescription)")
+                    Logger.onboarding.error("AP mode check attempt \(attempt): Unexpected error connecting: \(error.localizedDescription)")
                 }
                  // Don't return false immediately on recoverable errors, let it retry
             }
@@ -227,7 +227,7 @@ final class OnboardingViewModel: ObservableObject {
         if let interfaces = getNetworkInterfaces(),
             let localNetwork = interfaces.first(where: { !$0.contains("192.168.4.") })
         {
-             Logger.onboarding.info("AP mode check failed. Scanning local network: \(localNetwork, privacy: .public)...")
+             Logger.onboarding.info("AP mode check failed. Scanning local network...")
             // We're on a regular network, scan it
             let baseIP = localNetwork.split(separator: ".").dropLast().joined(separator: ".")
 
@@ -238,7 +238,7 @@ final class OnboardingViewModel: ObservableObject {
 
             // Only scan a few likely IP addresses to avoid flooding
             let likelyIPs = [1, 100, 150, 200, 250, 254]
-            Logger.onboarding.debug("Scanning likely IPs: \(likelyIPs.map { "\(baseIP).\($0)" }.joined(separator: ", "), privacy: .public)")
+            Logger.onboarding.debug("Scanning likely local IPs.")
             for i in likelyIPs {
                 let ip = "\(baseIP).\(i)"
                 Task { [weak self] in
@@ -289,10 +289,10 @@ final class OnboardingViewModel: ObservableObject {
     private func checkAddress(_ ip: String) async {
         let urlString = "http://\(ip)/api/system/info"
         guard let url = URL(string: urlString) else {
-            Logger.onboarding.error("Failed to create URL for checking address: \(ip, privacy: .public)")
+            Logger.onboarding.error("Failed to create URL for checking address.")
             return
         }
-        Logger.onboarding.debug("Checking address: \(ip, privacy: .public)")
+        Logger.onboarding.debug("Checking address...")
 
         do {
             var request = URLRequest(url: url)
@@ -301,7 +301,7 @@ final class OnboardingViewModel: ObservableObject {
             let (data, response) = try await URLSession.shared.data(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse else {
-                Logger.onboarding.warning("Invalid HTTP response from \(ip, privacy: .public).")
+                Logger.onboarding.warning("Invalid HTTP response from address.")
                 return
             }
 
@@ -325,20 +325,20 @@ final class OnboardingViewModel: ObservableObject {
                             if !discoveredDevices.contains(where: { $0.ip == ip }) {
                                 discoveredDevices.append(device)
                                 scanStatus = "Found \(discoveredDevices.count) device(s)..."
-                                Logger.onboarding.info("Found BitAxe: \(systemInfo.hostname) at \(ip, privacy: .public)")
+                                Logger.onboarding.info("Found BitAxe: \(systemInfo.hostname) at scanned address.")
                             }
                         }
                     } else {
-                        Logger.onboarding.debug("Device at \(ip, privacy: .public) responded but doesn't seem to be a BitAxe.")
+                        Logger.onboarding.debug("Device at scanned address responded but doesn't seem to be a BitAxe.")
                     }
                 } else {
-                     Logger.onboarding.warning("Failed to decode response from \(ip, privacy: .public) as BitAxe SystemInfo.")
+                     Logger.onboarding.warning("Failed to decode response from scanned address as BitAxe SystemInfo.")
                 }
             case 404:
-                 Logger.onboarding.debug("Got 404 from \(ip, privacy: .public).")
+                 Logger.onboarding.debug("Got 404 from scanned address.")
                 return
             default:
-                 Logger.onboarding.warning("Received unexpected status code \(httpResponse.statusCode) from \(ip, privacy: .public).")
+                 Logger.onboarding.warning("Received unexpected status code \(httpResponse.statusCode) from scanned address.")
                 return
             }
         } catch {
@@ -346,20 +346,20 @@ final class OnboardingViewModel: ObservableObject {
                 // Log only specific, potentially interesting errors at debug level
                 switch urlError.code {
                 case .timedOut, .cannotConnectToHost, .networkConnectionLost:
-                    Logger.onboarding.debug("URLError checking \(ip, privacy: .public): \(urlError.code.rawValue)")
+                    Logger.onboarding.debug("URLError checking scanned address: \(urlError.code.rawValue)")
                 case .notConnectedToInternet:
-                     Logger.onboarding.warning("Cannot check \(ip, privacy: .public): Not connected to internet.")
+                     Logger.onboarding.warning("Cannot check scanned address: Not connected to internet.")
                 default:
-                    Logger.onboarding.warning("Unexpected URLError checking \(ip, privacy: .public): \(urlError.localizedDescription)")
+                    Logger.onboarding.warning("Unexpected URLError checking scanned address: \(urlError.localizedDescription)")
                 }
             } else {
-                 Logger.onboarding.error("Unexpected error checking \(ip, privacy: .public): \(error.localizedDescription)")
+                 Logger.onboarding.error("Unexpected error checking scanned address: \(error.localizedDescription)")
             }
         }
     }
 
     func selectDevice(_ device: DiscoveredDevice) {
-        Logger.onboarding.info("Device selected: \(device.name) at \(device.ip, privacy: .public)")
+        Logger.onboarding.info("Device selected: \(device.name).")
         // Keep writing to standard defaults for the main app
         UserDefaults.standard.set(device.ip, forKey: "bitaxeIPAddress")
 
@@ -376,13 +376,13 @@ final class OnboardingViewModel: ObservableObject {
     // Modified to return Bool indicating success
     func connectManually() async -> Bool {
         let ip = manualIPAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        Logger.onboarding.info("Attempting manual connection to IP: \(ip, privacy: .public)")
+        Logger.onboarding.info("Attempting manual connection.")
 
         // Validate IP format
         let ipRegex =
             #"^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"#
         guard ip.range(of: ipRegex, options: .regularExpression) != nil else {
-            Logger.onboarding.warning("Manual connection failed: Invalid IP format entered ('\(ip, privacy: .public)').")
+            Logger.onboarding.warning("Manual connection failed: Invalid IP format entered.")
             handleError("Please enter a valid IP address (e.g., 192.168.1.100)")
             // Return false on validation failure
             return false
@@ -393,14 +393,14 @@ final class OnboardingViewModel: ObservableObject {
 
         // Now check if the device was added by checkAddress
         if let device = discoveredDevices.first(where: { $0.ip == ip }) {
-            Logger.onboarding.info("Manual connection successful to device: \(device.name) at \(ip, privacy: .public)")
+            Logger.onboarding.info("Manual connection successful to device: \(device.name).")
             selectDevice(device)  // Save IP to UserDefaults
             // Return true on success
             return true
         } else {
-            Logger.onboarding.warning("Manual connection failed: Could not verify BitAxe device at \(ip, privacy: .public) after check.")
+            Logger.onboarding.warning("Manual connection failed: Could not verify BitAxe device at the provided address after check.")
             handleError(
-                "Could not connect to BitAxe at \(ip). Please verify the IP address and ensure the device is powered on."
+                "Could not connect to BitAxe at the entered address. Please verify the IP address and ensure the device is powered on."
             )
             // Return false if device not found after check
             return false
@@ -451,7 +451,7 @@ final class OnboardingViewModel: ObservableObject {
              Logger.onboarding.warning("Could not find suitable network interface.")
              return nil
         }
-        Logger.onboarding.debug("Found network interfaces: \(addresses.joined(separator: ", "), privacy: .public)")
+        Logger.onboarding.debug("Found network interfaces.")
         return addresses
     }
 

@@ -168,6 +168,15 @@ struct SettingsView: View {
                     }
                 }
 
+                // New Support Section
+                Section {
+                    Text("If you encounter issues, you can provide diagnostic logs to help troubleshoot.")
+                        .font(.footnote)
+                    Text("Please connect your iPhone to a Mac and use the Console app to view and save 'Traxe' logs.")
+                        .font(.footnote)
+                } header: { Text("Support & Troubleshooting") }
+                // End New Support Section
+
                 Section("Reset") {
                     Button("Reset Connection & Clear Data", role: .destructive) {
                         viewModel.requestResetConfirmation()
