@@ -43,7 +43,7 @@ enum NetworkError: Error, LocalizedError {
 actor NetworkService {
     private let session: URLSession
     private let decoder: JSONDecoder
-    private static let logger = Logger.networking // Static logger instance
+    private static let logger = Logger.networking  // Static logger instance
 
     init(session: URLSession = .shared) {
         self.session = session
@@ -113,7 +113,7 @@ actor NetworkService {
             let (data, response) = try await session.data(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse else {
-                 Self.logger.error("GET \(endpoint) failed: Invalid HTTP response.")
+                Self.logger.error("GET \(endpoint) failed: Invalid HTTP response.")
                 throw NetworkError.invalidResponse
             }
             Self.logger.debug("GET \(endpoint) received status: \(httpResponse.statusCode)")
@@ -123,7 +123,9 @@ actor NetworkService {
                 do {
                     return try decoder.decode(T.self, from: data)
                 } catch {
-                    Self.logger.error("GET \(endpoint) decoding error: \(error.localizedDescription)")
+                    Self.logger.error(
+                        "GET \(endpoint) decoding error: \(error.localizedDescription)"
+                    )
                     throw NetworkError.decodingError(error)
                 }
             case 404:
@@ -133,13 +135,15 @@ actor NetworkService {
                 Self.logger.error("GET \(endpoint) failed: 500 Server Error.")
                 throw NetworkError.apiError(message: "Device server error")
             default:
-                Self.logger.error("GET \(endpoint) failed: Unexpected status code \(httpResponse.statusCode).")
+                Self.logger.error(
+                    "GET \(endpoint) failed: Unexpected status code \(httpResponse.statusCode)."
+                )
                 throw NetworkError.apiError(
                     message: "Unexpected response: \(httpResponse.statusCode)"
                 )
             }
         } catch let error as NetworkError {
-             // Already logged in specific cases or will be logged below
+            // Already logged in specific cases or will be logged below
             throw error
         } catch {
             Self.logger.error("GET \(endpoint) request failed: \(error.localizedDescription)")
@@ -149,8 +153,10 @@ actor NetworkService {
                     // These specific cases are handled by NetworkError localization
                     throw NetworkError.requestFailed(error)
                 default:
-                     // Log other URL errors more verbosely here
-                    Self.logger.error("GET \(endpoint) detailed URLError: \(String(describing: urlError))")
+                    // Log other URL errors more verbosely here
+                    Self.logger.error(
+                        "GET \(endpoint) detailed URLError: \(String(describing: urlError))"
+                    )
                     throw NetworkError.requestFailed(error)
                 }
             }
@@ -186,23 +192,25 @@ actor NetworkService {
             let (_, response) = try await session.data(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse else {
-                 Self.logger.error("POST \(endpoint) failed: Invalid HTTP response.")
+                Self.logger.error("POST \(endpoint) failed: Invalid HTTP response.")
                 throw NetworkError.invalidResponse
             }
-             Self.logger.debug("POST \(endpoint) received status: \(httpResponse.statusCode)")
+            Self.logger.debug("POST \(endpoint) received status: \(httpResponse.statusCode)")
 
             switch httpResponse.statusCode {
             case 200, 202:
                 Self.logger.debug("POST \(endpoint) successful.")
                 return  // Success
             case 404:
-                 Self.logger.warning("POST \(endpoint) failed: 404 Not Found.")
+                Self.logger.warning("POST \(endpoint) failed: 404 Not Found.")
                 throw NetworkError.apiError(message: "Endpoint not found")
             case 500:
-                 Self.logger.error("POST \(endpoint) failed: 500 Server Error.")
+                Self.logger.error("POST \(endpoint) failed: 500 Server Error.")
                 throw NetworkError.apiError(message: "Device server error")
             default:
-                 Self.logger.error("POST \(endpoint) failed: Unexpected status code \(httpResponse.statusCode).")
+                Self.logger.error(
+                    "POST \(endpoint) failed: Unexpected status code \(httpResponse.statusCode)."
+                )
                 throw NetworkError.apiError(
                     message: "Unexpected response: \(httpResponse.statusCode)"
                 )
@@ -239,10 +247,12 @@ actor NetworkService {
 
         let encoder = JSONEncoder()
         do {
-             request.httpBody = try encoder.encode(body)
-             Self.logger.debug("PATCH \(endpoint) request body encoded.")
+            request.httpBody = try encoder.encode(body)
+            Self.logger.debug("PATCH \(endpoint) request body encoded.")
         } catch {
-            Self.logger.error("PATCH \(endpoint) failed to encode body: \(error.localizedDescription)")
+            Self.logger.error(
+                "PATCH \(endpoint) failed to encode body: \(error.localizedDescription)"
+            )
             // Throw a specific error or rethrow? Rethrowing seems appropriate.
             throw error
         }
@@ -267,7 +277,9 @@ actor NetworkService {
                 Self.logger.error("PATCH \(endpoint) failed: 500 Server Error.")
                 throw NetworkError.apiError(message: "Device server error")
             default:
-                Self.logger.error("PATCH \(endpoint) failed: Unexpected status code \(httpResponse.statusCode).")
+                Self.logger.error(
+                    "PATCH \(endpoint) failed: Unexpected status code \(httpResponse.statusCode)."
+                )
                 throw NetworkError.apiError(
                     message: "Unexpected response: \(httpResponse.statusCode)"
                 )
@@ -275,7 +287,7 @@ actor NetworkService {
         } catch let error as NetworkError {
             throw error
         } catch {
-             Self.logger.error("PATCH \(endpoint) request failed: \(error.localizedDescription)")
+            Self.logger.error("PATCH \(endpoint) request failed: \(error.localizedDescription)")
             throw NetworkError.requestFailed(error)
         }
     }

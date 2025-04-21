@@ -1,5 +1,5 @@
-import os.log
 import Foundation
+import os.log
 
 extension Logger {
     private static var subsystem = Bundle.main.bundleIdentifier!
@@ -15,4 +15,4 @@ extension Logger {
 
     /// Logs onboarding-related activities.
     static let onboarding = Logger(subsystem: subsystem, category: "onboarding")
-} 
+}

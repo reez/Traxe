@@ -20,6 +20,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var isAutoFan: Bool = true
     @Published var isUpdatingFan: Bool = false
     @Published var isConnected: Bool = false
+    @Published var showingLogsSheet = false
 
     // Access UserDefaults directly or via a dedicated service
     private let userDefaults: UserDefaults

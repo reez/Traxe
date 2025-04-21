@@ -131,8 +131,8 @@ final class DashboardViewModel: ObservableObject {
                         try await Task.sleep(nanoseconds: 5_000_000_000)
                     } catch {
                         if error is CancellationError {
-                           Logger.dashboard.info("Polling cancelled.")
-                           throw error
+                            Logger.dashboard.info("Polling cancelled.")
+                            throw error
                         }
 
                         // --- New Error Handling Logic ---
@@ -143,7 +143,9 @@ final class DashboardViewModel: ObservableObject {
                             currentState == .connected
                         {
                             // Likely the transient UserDefaults sync issue right after connecting.
-                            Logger.dashboard.warning("Polling encountered transient invalidURL error, likely UserDefaults sync. Retrying.")
+                            Logger.dashboard.warning(
+                                "Polling encountered transient invalidURL error, likely UserDefaults sync. Retrying."
+                            )
                             // Add a small delay before the next poll attempt just in case
                             try? await Task.sleep(nanoseconds: 1_000_000_000)
                             // Continue to the next iteration of the loop
@@ -163,7 +165,9 @@ final class DashboardViewModel: ObservableObject {
                     Logger.dashboard.info("Polling task cancelled externally.")
                     return
                 }
-                Logger.dashboard.fault("Unhandled error in polling task: \(error.localizedDescription)")
+                Logger.dashboard.fault(
+                    "Unhandled error in polling task: \(error.localizedDescription)"
+                )
                 handleError(error)
                 await MainActor.run {
                     self.connectionState = .disconnected
@@ -280,7 +284,9 @@ final class DashboardViewModel: ObservableObject {
                 let oldPoints = try modelContext.fetch(descriptor)
                 oldPoints.forEach { modelContext.delete($0) }
             } catch {
-                 Logger.dashboard.error("Failed to delete old historical data: \(error.localizedDescription)")
+                Logger.dashboard.error(
+                    "Failed to delete old historical data: \(error.localizedDescription)"
+                )
             }
         }
     }
@@ -302,13 +308,15 @@ final class DashboardViewModel: ObservableObject {
             Logger.dashboard.error("Handling general error: \(message)")
         }
 
-        DispatchQueue.main.async { [weak self] in // Use weak self
+        DispatchQueue.main.async { [weak self] in  // Use weak self
             guard let self else { return }
             if shouldDisconnect {
-                 if self.connectionState != .disconnected { // Only log if state actually changes
-                    Logger.dashboard.notice("Setting connection state to disconnected due to error.")
+                if self.connectionState != .disconnected {  // Only log if state actually changes
+                    Logger.dashboard.notice(
+                        "Setting connection state to disconnected due to error."
+                    )
                     self.connectionState = .disconnected
-                    self.pollingTask?.cancel() // Ensure polling stops
+                    self.pollingTask?.cancel()  // Ensure polling stops
                 }
             }
             self.errorMessage = message

@@ -168,19 +168,19 @@ struct SettingsView: View {
                     }
                 }
 
-                // New Support Section
-                Section {
-                    Text("If you encounter issues, you can provide diagnostic logs to help troubleshoot.")
-                        .font(.footnote)
-                    Text("Please connect your iPhone to a Mac and use the Console app to view and save 'Traxe' logs.")
-                        .font(.footnote)
-                } header: { Text("Support & Troubleshooting") }
-                // End New Support Section
-
                 Section("Reset") {
                     Button("Reset Connection & Clear Data", role: .destructive) {
                         viewModel.requestResetConfirmation()
                     }
+                }
+
+                Section {
+                    Button("View Logs") {
+                        viewModel.showingLogsSheet = true
+                    }
+                    .foregroundColor(.traxeGold)
+                } header: {
+                    Text("Support & Troubleshooting")
                 }
 
                 Section {
@@ -211,6 +211,9 @@ struct SettingsView: View {
                 Text(
                     "This will clear the saved IP address, alert settings, and delete all historical data. Are you sure?"
                 )
+            }
+            .sheet(isPresented: $viewModel.showingLogsSheet) {
+                LogsView()
             }
         }
     }

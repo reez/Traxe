@@ -59,6 +59,7 @@
 			membershipExceptions = (
 				Data/Models/SystemInfoDTO.swift,
 				Infrastructure/Networking/NetworkService.swift,
+				"Utilities/Logger+Extensions.swift",
 			);
 			target = AE45E1EB2DB577960096A497 /* TraxeWidgetExtension */;
 		};
