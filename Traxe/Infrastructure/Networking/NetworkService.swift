@@ -1,4 +1,5 @@
 import Foundation
+import os.log
 
 // Custom Error type for networking
 enum NetworkError: Error, LocalizedError {
@@ -42,6 +43,7 @@ enum NetworkError: Error, LocalizedError {
 actor NetworkService {
     private let session: URLSession
     private let decoder: JSONDecoder
+    private static let logger = Logger.networking // Static logger instance
 
     init(session: URLSession = .shared) {
         self.session = session
@@ -61,6 +63,7 @@ actor NetworkService {
         guard let ipAddress = sharedDefaults.string(forKey: "bitaxeIPAddress"),
             !ipAddress.isEmpty
         else {
+            Self.logger.info("Bitaxe IP address not found or empty in shared UserDefaults.")
             return nil  // Return nil instead of throwing
         }
 
@@ -82,61 +85,72 @@ actor NetworkService {
         let ipRegex =
             #"^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"#
         guard cleanIP.range(of: ipRegex, options: .regularExpression) != nil else {
+            Self.logger.warning("Invalid IP address format found in UserDefaults: '\(cleanIP, privacy: .public)'")
             return nil  // Return nil for invalid format
         }
 
         // Construct URL
         guard let url = URL(string: "http://\(cleanIP)") else {
+            Self.logger.error("Failed to construct URL from valid IP: '\(cleanIP, privacy: .public)'")
             return nil  // Return nil if URL construction fails
         }
-
+        Self.logger.debug("Base URL constructed: \(url.absoluteString, privacy: .public)")
         return url
     }
 
     // Generic GET request function
     func performGET<T: Codable>(endpoint: String) async throws -> T {
         guard let baseURL = getBaseURL() else {
+            Self.logger.error("GET \(endpoint) failed: Base URL not configured.")
             throw NetworkError.configurationMissing
         }
         let url = baseURL.appendingPathComponent(endpoint)
         var request = URLRequest(url: url)
         request.timeoutInterval = 5.0  // Increased timeout to 5 seconds
+        Self.logger.info("GET \(url.absoluteString, privacy: .public)")
 
         do {
             let (data, response) = try await session.data(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse else {
+                 Self.logger.error("GET \(url.absoluteString, privacy: .public) failed: Invalid HTTP response.")
                 throw NetworkError.invalidResponse
             }
+            Self.logger.debug("GET \(url.absoluteString, privacy: .public) received status: \(httpResponse.statusCode)")
 
             switch httpResponse.statusCode {
             case 200:
                 do {
                     return try decoder.decode(T.self, from: data)
                 } catch {
+                    Self.logger.error("GET \(url.absoluteString, privacy: .public) decoding error: \(error.localizedDescription)")
                     throw NetworkError.decodingError(error)
                 }
             case 404:
+                Self.logger.warning("GET \(url.absoluteString, privacy: .public) failed: 404 Not Found.")
                 throw NetworkError.apiError(message: "Device not found at the specified IP address")
             case 500:
+                Self.logger.error("GET \(url.absoluteString, privacy: .public) failed: 500 Server Error.")
                 throw NetworkError.apiError(message: "Device server error")
             default:
+                Self.logger.error("GET \(url.absoluteString, privacy: .public) failed: Unexpected status code \(httpResponse.statusCode).")
                 throw NetworkError.apiError(
                     message: "Unexpected response: \(httpResponse.statusCode)"
                 )
             }
         } catch let error as NetworkError {
+             // Already logged in specific cases or will be logged below
             throw error
         } catch {
+            Self.logger.error("GET \(url.absoluteString, privacy: .public) request failed: \(error.localizedDescription)")
             if let urlError = error as? URLError {
                 switch urlError.code {
-                case .notConnectedToInternet:
-                    throw NetworkError.requestFailed(error)
-                case .cannotConnectToHost:
-                    throw NetworkError.requestFailed(error)
-                case .timedOut:
+                case .notConnectedToInternet, .cannotConnectToHost, .timedOut:
+                    // These specific cases are handled by NetworkError localization
                     throw NetworkError.requestFailed(error)
                 default:
+                     // Log other URL errors more verbosely here
+                    Self.logger.error("GET \(url.absoluteString, privacy: .public) detailed URLError: \(String(describing: urlError))")
                     throw NetworkError.requestFailed(error)
                 }
             }
@@ -159,28 +173,36 @@ actor NetworkService {
     // Generic POST request function
     func performPOST(endpoint: String) async throws {
         guard let baseURL = getBaseURL() else {
+            Self.logger.error("POST \(endpoint) failed: Base URL not configured.")
             throw NetworkError.configurationMissing
         }
         let url = baseURL.appendingPathComponent(endpoint)
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = 30.0  // Longer timeout for firmware updates
+        Self.logger.info("POST \(url.absoluteString, privacy: .public)")
 
         do {
             let (_, response) = try await session.data(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse else {
+                 Self.logger.error("POST \(url.absoluteString, privacy: .public) failed: Invalid HTTP response.")
                 throw NetworkError.invalidResponse
             }
+             Self.logger.debug("POST \(url.absoluteString, privacy: .public) received status: \(httpResponse.statusCode)")
 
             switch httpResponse.statusCode {
             case 200, 202:
+                Self.logger.debug("POST \(url.absoluteString, privacy: .public) successful.")
                 return  // Success
             case 404:
+                 Self.logger.warning("POST \(url.absoluteString, privacy: .public) failed: 404 Not Found.")
                 throw NetworkError.apiError(message: "Endpoint not found")
             case 500:
+                 Self.logger.error("POST \(url.absoluteString, privacy: .public) failed: 500 Server Error.")
                 throw NetworkError.apiError(message: "Device server error")
             default:
+                 Self.logger.error("POST \(url.absoluteString, privacy: .public) failed: Unexpected status code \(httpResponse.statusCode).")
                 throw NetworkError.apiError(
                     message: "Unexpected response: \(httpResponse.statusCode)"
                 )
@@ -188,6 +210,7 @@ actor NetworkService {
         } catch let error as NetworkError {
             throw error
         } catch {
+            Self.logger.error("POST \(url.absoluteString, privacy: .public) request failed: \(error.localizedDescription)")
             throw NetworkError.requestFailed(error)
         }
     }
@@ -204,6 +227,7 @@ actor NetworkService {
     // Generic PATCH request function
     private func performPATCH<T: Encodable>(endpoint: String, body: T) async throws {
         guard let baseURL = getBaseURL() else {
+            Self.logger.error("PATCH \(endpoint) failed: Base URL not configured.")
             throw NetworkError.configurationMissing
         }
         let url = baseURL.appendingPathComponent(endpoint)
@@ -211,25 +235,39 @@ actor NetworkService {
         request.httpMethod = "PATCH"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 5.0
+        Self.logger.info("PATCH \(url.absoluteString, privacy: .public)")
 
         let encoder = JSONEncoder()
-        request.httpBody = try encoder.encode(body)
+        do {
+             request.httpBody = try encoder.encode(body)
+             Self.logger.debug("PATCH \(url.absoluteString, privacy: .public) request body encoded.")
+        } catch {
+            Self.logger.error("PATCH \(url.absoluteString, privacy: .public) failed to encode body: \(error.localizedDescription)")
+            // Throw a specific error or rethrow? Rethrowing seems appropriate.
+            throw error
+        }
 
         do {
             let (_, response) = try await session.data(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse else {
+                Self.logger.error("PATCH \(url.absoluteString, privacy: .public) failed: Invalid HTTP response.")
                 throw NetworkError.invalidResponse
             }
+            Self.logger.debug("PATCH \(url.absoluteString, privacy: .public) received status: \(httpResponse.statusCode)")
 
             switch httpResponse.statusCode {
             case 200, 202:
+                Self.logger.debug("PATCH \(url.absoluteString, privacy: .public) successful.")
                 return  // Success
             case 404:
+                Self.logger.warning("PATCH \(url.absoluteString, privacy: .public) failed: 404 Not Found.")
                 throw NetworkError.apiError(message: "Endpoint not found")
             case 500:
+                Self.logger.error("PATCH \(url.absoluteString, privacy: .public) failed: 500 Server Error.")
                 throw NetworkError.apiError(message: "Device server error")
             default:
+                Self.logger.error("PATCH \(url.absoluteString, privacy: .public) failed: Unexpected status code \(httpResponse.statusCode).")
                 throw NetworkError.apiError(
                     message: "Unexpected response: \(httpResponse.statusCode)"
                 )
@@ -237,6 +275,7 @@ actor NetworkService {
         } catch let error as NetworkError {
             throw error
         } catch {
+             Self.logger.error("PATCH \(url.absoluteString, privacy: .public) request failed: \(error.localizedDescription)")
             throw NetworkError.requestFailed(error)
         }
     }
