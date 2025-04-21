@@ -3,6 +3,7 @@ import Foundation
 import Network
 import SwiftUI  // For @MainActor
 import WidgetKit  // Import WidgetKit
+import os.log
 
 struct DiscoveredDevice: Identifiable {
     let id = UUID()
@@ -50,8 +51,8 @@ final class OnboardingViewModel: ObservableObject {
     init() {
         // Trigger permission check immediately
         Task {
-            _ = await checkLocalNetworkPermission()
-            await checkAndUpdatePermission()
+            _ = await checkLocalNetworkPermission() // Initial check
+            await checkAndUpdatePermission()        // Update state and potentially log
         }
 
         // Listen for app becoming active to recheck permission
@@ -67,8 +68,10 @@ final class OnboardingViewModel: ObservableObject {
     private func checkAndUpdatePermission() async {
         hasLocalNetworkPermission = await checkLocalNetworkPermission()
         if !hasLocalNetworkPermission {
+            Logger.onboarding.warning("Local network permission check failed or was denied.")
             scanStatus = "Please allow local network access in Settings to scan for devices"
         } else {
+            Logger.onboarding.info("Local network permission granted.")
             scanStatus = ""
         }
     }
@@ -80,33 +83,44 @@ final class OnboardingViewModel: ObservableObject {
 
         do {
             let (_, _) = try await URLSession.shared.data(for: request)
+            Logger.onboarding.debug("Local network permission check succeeded (via dummy request).")
             return true
         } catch {
             if let urlError = error as? URLError {
                 switch urlError.code {
                 case .notConnectedToInternet:
+                    Logger.onboarding.warning("Local network permission check failed: Not connected to internet.")
                     return false
                 case .cannotConnectToHost:
-                    return true  // Permission granted but host not available
+                    // This case implies permission might be granted, but the dummy host isn't reachable.
+                    // It's not a definitive 'granted' state, but doesn't mean 'denied'.
+                    Logger.onboarding.debug("Local network permission check: Cannot connect to dummy host (may still have permission).")
+                    return true
                 case .networkConnectionLost:
-                    return true  // Permission granted but connection lost
+                     Logger.onboarding.debug("Local network permission check: Network connection lost (may still have permission).")
+                    return true
                 default:
+                    Logger.onboarding.error("Local network permission check failed with unexpected URLError: \(urlError.localizedDescription)")
                     return false
                 }
             }
+            Logger.onboarding.error("Local network permission check failed with unexpected error: \(error.localizedDescription)")
             return false
         }
     }
 
     private func checkAPMode() async -> Bool {
         let apIP = "192.168.4.254"
-
+        Logger.onboarding.info("Checking for device in AP mode at \(apIP, privacy: .public)")
         // Try HTTP first (BitAxe doesn't support HTTPS)
         let urlString = "http://\(apIP)/api/system/info"
-        guard let url = URL(string: urlString) else { return false }
+        guard let url = URL(string: urlString) else {
+            Logger.onboarding.error("Failed to create URL for AP mode check.")
+            return false
+        }
 
         for attempt in 1...3 {
-
+            Logger.onboarding.debug("AP mode check attempt \(attempt)...")
             do {
                 var request = URLRequest(url: url)
                 request.timeoutInterval = 5.0  // Longer timeout for AP mode
@@ -114,6 +128,7 @@ final class OnboardingViewModel: ObservableObject {
                 let (data, response) = try await URLSession.shared.data(for: request)
 
                 guard let httpResponse = response as? HTTPURLResponse else {
+                    Logger.onboarding.warning("AP mode check attempt \(attempt): Invalid HTTP response.")
                     continue
                 }
 
@@ -137,33 +152,40 @@ final class OnboardingViewModel: ObservableObject {
                                 if !discoveredDevices.contains(where: { $0.ip == apIP }) {
                                     discoveredDevices.append(device)
                                     scanStatus = ""
+                                    Logger.onboarding.info("Found BitAxe in AP mode: \(systemInfo.hostname) at \(apIP, privacy: .public)")
                                 }
                             }
                             return true
                         } else {
+                            Logger.onboarding.warning("AP mode check attempt \(attempt): Device at \(apIP, privacy: .public) responded but doesn't seem to be a BitAxe.")
                         }
                     } catch {
+                        Logger.onboarding.warning("AP mode check attempt \(attempt): Failed to decode response from \(apIP, privacy: .public): \(error.localizedDescription)")
                     }
                 case 404:
-                    return false
+                    Logger.onboarding.debug("AP mode check attempt \(attempt): Got 404 from \(apIP, privacy: .public).")
+                    return false // 404 means no device here
                 default:
-                    return false
+                    Logger.onboarding.warning("AP mode check attempt \(attempt): Received unexpected status code \(httpResponse.statusCode) from \(apIP, privacy: .public).")
+                    return false // Treat other statuses as failure for this check
                 }
             } catch {
                 if let urlError = error as? URLError {
                     switch urlError.code {
                     case .timedOut:
-                        return false
+                         Logger.onboarding.debug("AP mode check attempt \(attempt): Timed out connecting to \(apIP, privacy: .public).")
                     case .cannotConnectToHost:
-                        return false
+                         Logger.onboarding.debug("AP mode check attempt \(attempt): Cannot connect to host \(apIP, privacy: .public).")
                     case .notConnectedToInternet:
-                        return false
+                         Logger.onboarding.warning("AP mode check attempt \(attempt): Failed - Not connected to internet.")
+                         return false // Can't proceed without internet
                     default:
-                        return false
+                         Logger.onboarding.warning("AP mode check attempt \(attempt): URLError connecting to \(apIP, privacy: .public): \(urlError.localizedDescription)")
                     }
                 } else {
-                    return false
+                    Logger.onboarding.error("AP mode check attempt \(attempt): Unexpected error connecting to \(apIP, privacy: .public): \(error.localizedDescription)")
                 }
+                 // Don't return false immediately on recoverable errors, let it retry
             }
 
             // Wait before retry
@@ -171,11 +193,19 @@ final class OnboardingViewModel: ObservableObject {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)  // 1 second delay
             }
         }
-
+        Logger.onboarding.info("AP mode check completed after 3 attempts, device not found.")
         return false
     }
 
     func startScan() async {
+        guard hasLocalNetworkPermission else {
+            Logger.onboarding.warning("Scan aborted: Local network permission not granted.")
+            scanStatus = "Please allow local network access in Settings to scan for devices"
+            isScanning = false // Ensure scanning is marked as stopped
+            hasScanned = true // Mark as scanned (attempted)
+            return
+        }
+
         guard !isScanning else { return }
 
         isScanning = true
@@ -183,9 +213,11 @@ final class OnboardingViewModel: ObservableObject {
         discoveredDevices.removeAll()
         showErrorAlert = false
         hasScanned = false
+        Logger.onboarding.info("Starting device scan.")
 
         // First try AP mode
         if await checkAPMode() {
+            Logger.onboarding.info("Scan finished: Found device in AP mode.")
             isScanning = false
             hasScanned = true
             return
@@ -195,6 +227,7 @@ final class OnboardingViewModel: ObservableObject {
         if let interfaces = getNetworkInterfaces(),
             let localNetwork = interfaces.first(where: { !$0.contains("192.168.4.") })
         {
+             Logger.onboarding.info("AP mode check failed. Scanning local network: \(localNetwork, privacy: .public)...")
             // We're on a regular network, scan it
             let baseIP = localNetwork.split(separator: ".").dropLast().joined(separator: ".")
 
@@ -205,6 +238,7 @@ final class OnboardingViewModel: ObservableObject {
 
             // Only scan a few likely IP addresses to avoid flooding
             let likelyIPs = [1, 100, 150, 200, 250, 254]
+            Logger.onboarding.debug("Scanning likely IPs: \(likelyIPs.map { "\(baseIP).\($0)" }.joined(separator: ", "), privacy: .public)")
             for i in likelyIPs {
                 let ip = "\(baseIP).\(i)"
                 Task { [weak self] in
@@ -213,6 +247,7 @@ final class OnboardingViewModel: ObservableObject {
                 }
             }
         } else {
+            Logger.onboarding.warning("Could not determine local network interface or only connected to AP mode network.")
             handleError(
                 """
                 Could not connect to BitAxe in AP mode. Please ensure:
@@ -228,7 +263,11 @@ final class OnboardingViewModel: ObservableObject {
         // Set a timeout for local network scan
         DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
             guard let self = self, self.isScanning else { return }
+            Task { [weak self] in // Ensure cancellation happens
+                 await self?.scanState.cancelAll()
+            }
             if self.discoveredDevices.isEmpty {
+                Logger.onboarding.warning("Scan timed out after 10 seconds. No devices found.")
                 self.handleError(
                     """
                     No BitAxe devices found. Please ensure:
@@ -239,10 +278,8 @@ final class OnboardingViewModel: ObservableObject {
                     """
                 )
             } else {
+                Logger.onboarding.info("Scan complete. Found \(self.discoveredDevices.count) device(s).")
                 self.scanStatus = "Scan complete. Found \(self.discoveredDevices.count) device(s)."
-            }
-            Task { [weak self] in
-                await self?.scanState.cancelAll()
             }
             self.isScanning = false
             self.hasScanned = true
@@ -251,7 +288,11 @@ final class OnboardingViewModel: ObservableObject {
 
     private func checkAddress(_ ip: String) async {
         let urlString = "http://\(ip)/api/system/info"
-        guard let url = URL(string: urlString) else { return }
+        guard let url = URL(string: urlString) else {
+            Logger.onboarding.error("Failed to create URL for checking address: \(ip, privacy: .public)")
+            return
+        }
+        Logger.onboarding.debug("Checking address: \(ip, privacy: .public)")
 
         do {
             var request = URLRequest(url: url)
@@ -259,7 +300,10 @@ final class OnboardingViewModel: ObservableObject {
 
             let (data, response) = try await URLSession.shared.data(for: request)
 
-            guard let httpResponse = response as? HTTPURLResponse else { return }
+            guard let httpResponse = response as? HTTPURLResponse else {
+                Logger.onboarding.warning("Invalid HTTP response from \(ip, privacy: .public).")
+                return
+            }
 
             switch httpResponse.statusCode {
             case 200:
@@ -281,34 +325,41 @@ final class OnboardingViewModel: ObservableObject {
                             if !discoveredDevices.contains(where: { $0.ip == ip }) {
                                 discoveredDevices.append(device)
                                 scanStatus = "Found \(discoveredDevices.count) device(s)..."
+                                Logger.onboarding.info("Found BitAxe: \(systemInfo.hostname) at \(ip, privacy: .public)")
                             }
                         }
+                    } else {
+                        Logger.onboarding.debug("Device at \(ip, privacy: .public) responded but doesn't seem to be a BitAxe.")
                     }
+                } else {
+                     Logger.onboarding.warning("Failed to decode response from \(ip, privacy: .public) as BitAxe SystemInfo.")
                 }
             case 404:
+                 Logger.onboarding.debug("Got 404 from \(ip, privacy: .public).")
                 return
             default:
+                 Logger.onboarding.warning("Received unexpected status code \(httpResponse.statusCode) from \(ip, privacy: .public).")
                 return
             }
         } catch {
             if let urlError = error as? URLError {
+                // Log only specific, potentially interesting errors at debug level
                 switch urlError.code {
-                case .timedOut:
-                    return
-                case .cannotConnectToHost:
-                    return
+                case .timedOut, .cannotConnectToHost, .networkConnectionLost:
+                    Logger.onboarding.debug("URLError checking \(ip, privacy: .public): \(urlError.code.rawValue)")
                 case .notConnectedToInternet:
-                    return
+                     Logger.onboarding.warning("Cannot check \(ip, privacy: .public): Not connected to internet.")
                 default:
-                    return
+                    Logger.onboarding.warning("Unexpected URLError checking \(ip, privacy: .public): \(urlError.localizedDescription)")
                 }
             } else {
-                return
+                 Logger.onboarding.error("Unexpected error checking \(ip, privacy: .public): \(error.localizedDescription)")
             }
         }
     }
 
     func selectDevice(_ device: DiscoveredDevice) {
+        Logger.onboarding.info("Device selected: \(device.name) at \(device.ip, privacy: .public)")
         // Keep writing to standard defaults for the main app
         UserDefaults.standard.set(device.ip, forKey: "bitaxeIPAddress")
 
@@ -318,17 +369,20 @@ final class OnboardingViewModel: ObservableObject {
             // Reload widget timeline
             WidgetCenter.shared.reloadTimelines(ofKind: "TraxeWidget")
         } else {
+            Logger.onboarding.error("Failed to access shared UserDefaults group when selecting device.")
         }
     }
 
     // Modified to return Bool indicating success
     func connectManually() async -> Bool {
         let ip = manualIPAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        Logger.onboarding.info("Attempting manual connection to IP: \(ip, privacy: .public)")
 
         // Validate IP format
         let ipRegex =
             #"^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"#
         guard ip.range(of: ipRegex, options: .regularExpression) != nil else {
+            Logger.onboarding.warning("Manual connection failed: Invalid IP format entered ('\(ip, privacy: .public)').")
             handleError("Please enter a valid IP address (e.g., 192.168.1.100)")
             // Return false on validation failure
             return false
@@ -339,10 +393,12 @@ final class OnboardingViewModel: ObservableObject {
 
         // Now check if the device was added by checkAddress
         if let device = discoveredDevices.first(where: { $0.ip == ip }) {
+            Logger.onboarding.info("Manual connection successful to device: \(device.name) at \(ip, privacy: .public)")
             selectDevice(device)  // Save IP to UserDefaults
             // Return true on success
             return true
         } else {
+            Logger.onboarding.warning("Manual connection failed: Could not verify BitAxe device at \(ip, privacy: .public) after check.")
             handleError(
                 "Could not connect to BitAxe at \(ip). Please verify the IP address and ensure the device is powered on."
             )
@@ -355,7 +411,10 @@ final class OnboardingViewModel: ObservableObject {
         var addresses: [String] = []
         var ifaddr: UnsafeMutablePointer<ifaddrs>?
 
-        guard getifaddrs(&ifaddr) == 0 else { return nil }
+        guard getifaddrs(&ifaddr) == 0 else {
+             Logger.onboarding.error("Failed to get network interfaces: getifaddrs returned error.")
+             return nil
+        }
         defer { freeifaddrs(ifaddr) }
 
         var ptr = ifaddr
@@ -365,11 +424,11 @@ final class OnboardingViewModel: ObservableObject {
             let interface = ptr?.pointee
             let addrFamily = interface?.ifa_addr.pointee.sa_family
 
-            if addrFamily == UInt8(AF_INET) {
+            if addrFamily == UInt8(AF_INET) { // IPv4
                 let name = String(cString: (interface?.ifa_name)!)
-                if name == "en0" || name == "en1" {
+                if name == "en0" || name == "en1" { // WiFi or Ethernet
                     var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-                    getnameinfo(
+                    if getnameinfo(
                         interface?.ifa_addr,
                         socklen_t((interface?.ifa_addr.pointee.sa_len)!),
                         &hostname,
@@ -377,24 +436,48 @@ final class OnboardingViewModel: ObservableObject {
                         nil,
                         0,
                         NI_NUMERICHOST
-                    )
-                    if let address = String(cString: hostname, encoding: .utf8) {
-                        addresses.append(address)
+                    ) == 0 {
+                        if let address = String(cString: hostname, encoding: .utf8) {
+                            addresses.append(address)
+                        }
+                    } else {
+                        Logger.onboarding.warning("Failed to get IP address string for interface \(name).")
                     }
                 }
             }
         }
 
-        return addresses.isEmpty ? nil : addresses
+        if addresses.isEmpty {
+             Logger.onboarding.warning("Could not find suitable network interface.")
+             return nil
+        }
+        Logger.onboarding.debug("Found network interfaces: \(addresses.joined(separator: ", "), privacy: .public)")
+        return addresses
     }
 
+    // Helper to log all interface names for debugging
+    private func getAllInterfaceNames(_ ifaddr: UnsafeMutablePointer<ifaddrs>?) -> [String] {
+        var names: [String] = []
+        var ptr = ifaddr
+        while ptr != nil {
+            defer { ptr = ptr?.pointee.ifa_next }
+            if let name = ptr?.pointee.ifa_name {
+                 names.append(String(cString: name))
+            }
+        }
+        return names.sorted()
+    }
+
+
     private func handleError(_ message: String) {
+        Logger.onboarding.error("Error handled: \(message)")
         errorMessage = message
         showErrorAlert = true
         scanStatus = "Scan failed"
     }
 
     deinit {
+        Logger.onboarding.info("OnboardingViewModel deinitialized.")
         Task { [weak self] in
             await self?.scanState.cancelAll()
         }

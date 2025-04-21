@@ -1,4 +1,5 @@
 import os.log
+import Foundation
 
 extension Logger {
     private static var subsystem = Bundle.main.bundleIdentifier!
