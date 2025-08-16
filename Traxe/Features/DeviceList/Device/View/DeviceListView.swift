@@ -5,6 +5,7 @@ import WidgetKit
 
 struct DeviceListView: View {
     @Environment(\.dismiss) var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var viewModel: DeviceListViewModel
     @StateObject var dashboardViewModel: DashboardViewModel
     @Binding var navigateToDeviceList: Bool
@@ -33,82 +34,142 @@ struct DeviceListView: View {
     @State private var showingPaywallSheet = false
     @State private var showingSubscriptionExpiredAlert = false
     @State private var customerInfo: CustomerInfo? = nil
-    @State private var currentIndex = 0
-    @State private var scrolledID: AnyHashable? = nil
-    @Namespace private var heroNamespace
 
-    private var totalItemCount: Int {
-        viewModel.savedDevices.count + (viewModel.savedDevices.count > 1 ? 1 : 0)
-    }
+    private var deviceGridView: some View {
+        LazyVStack(spacing: 40) {
+            // Add some top spacing to allow for proper scroll detection
+            Spacer().frame(height: 10)
 
-    private var deviceScrollView: some View {
-        GeometryReader { geometry in
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 0) {
-                    if viewModel.savedDevices.count > 1 {
-                        AggregatedStatsHeader(viewModel: viewModel)
-                            .frame(width: geometry.size.width)
-                            .id("total")
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                if let firstDevice = viewModel.savedDevices.first {
-                                    withAnimation(.spring()) {
-                                        scrolledID = firstDevice.id
-                                    }
-                                }
-                            }
-                    }
+            if viewModel.savedDevices.count > 1 {
+                AggregatedStatsHeader(viewModel: viewModel)
+            }
 
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Miners")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                    .padding(.horizontal)
+
+                LazyVGrid(
+                    columns: [
+                        GridItem(.flexible(), spacing: 12),
+                        GridItem(.flexible(), spacing: 12),
+                    ],
+                    spacing: 12
+                ) {
                     ForEach(Array(viewModel.savedDevices.enumerated()), id: \.element.id) {
                         index,
                         device in
-                        deviceRowView(for: device, at: index)
-                            .frame(width: geometry.size.width, height: geometry.size.height)
-                            .background(Color.clear)
+                        deviceCardView(for: device, at: index)
                     }
                 }
-                .scrollTargetLayout()
+                .padding(.horizontal)
             }
         }
-        .scrollTargetBehavior(.viewAligned)
-        .scrollPosition(id: $scrolledID)
-        .onChange(of: scrolledID) { _, newID in
-            updateCurrentIndex(from: newID)
-        }
-        .refreshable {
-            viewModel.loadDevices()
-        }
+        .padding(.bottom, 40)
     }
 
-    private func deviceRowView(for device: SavedDevice, at index: Int) -> some View {
+    private func deviceCardView(for device: SavedDevice, at index: Int) -> some View {
         let proIsActive = self.customerInfo?.entitlements["Pro"]?.isActive == true
         let miners5IsActive = self.customerInfo?.entitlements["Miners_5"]?.isActive == true
         let isAccessible =
             proIsActive || (miners5IsActive && index < 5)
             || (!proIsActive && !miners5IsActive && index == 0)
 
-        return DeviceRow(
-            device: device,
-            isAccessible: isAccessible,
-            deviceMetrics: viewModel.deviceMetrics[device.ipAddress]
+        let metrics = viewModel.deviceMetrics[device.ipAddress]
+        let hashRate = metrics?.hashrate ?? 0.0
+        let displayValue = hashRate >= 1000 ? hashRate / 1000 : hashRate
+        let displayUnit = hashRate >= 1000 ? "TH/s" : "GH/s"
+        // While refreshing, keep devices styled as reachable.
+        // After refresh completes, gray only devices that did not respond (not in reachableIPs).
+        let isReachable =
+            viewModel.isLoadingAggregatedStats
+            || viewModel.reachableIPs.contains(device.ipAddress)
+            // In previews we seed cached metrics only; treat those as reachable for styling
+            || (ProcessInfo.isPreview && metrics != nil)
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(metrics?.hostname ?? device.name)
+                        .font(.caption)
+                        .bold()
+                        .lineLimit(1)
+                        .foregroundStyle(isReachable ? .primary : .secondary)
+
+                    Text(device.ipAddress)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                // Only show lock icon if we have data AND subscription info loaded AND user doesn't have access
+                // Don't show lock when: data loading, subscription loading, or user has access
+                if !isAccessible && metrics != nil && customerInfo != nil {
+                    Image(systemName: "lock.fill")
+                        .foregroundStyle(.secondary)
+                        .font(.caption)
+                }
+            }
+
+            Spacer()
+
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(metrics != nil ? String(format: "%.1f", displayValue) : "---")
+                        .font(.title)
+                        .fontWeight(.bold)
+                        .fontDesign(.rounded)
+                        .redacted(reason: metrics == nil ? .placeholder : [])
+                        .foregroundStyle(isReachable ? .primary : .secondary)
+
+                    Text(displayUnit)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+            }
+        }
+        .padding()
+        //        .background(Color(.secondarySystemBackground))
+        //        .background(
+        //            LinearGradient(
+        //                colors: [
+        //                    Color(.tertiarySystemBackground),
+        //                    Color(.secondarySystemBackground)
+        //                ],
+        //                startPoint: .bottom,
+        //                endPoint: .top
+        //            )
+        //        )
+        .background(Color(.secondarySystemBackground))
+        //        .background(
+        //            LinearGradient(
+        //                colors: [
+        //                    Color(.tertiarySystemBackground),
+        //                    Color(.secondarySystemBackground)
+        //                ],
+        //                startPoint: .top,
+        //                endPoint: .bottom
+        //            )
+        //        )
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                //                .stroke(Color.secondary.opacity(0.25), lineWidth: 0.5)
+                .stroke(Color.primary.opacity(0.1), lineWidth: 0.5)
         )
-        .padding(.vertical, 8)
-        .padding(.horizontal)
+        .shadow(
+            color: Color.primary.opacity(0.08),
+            radius: 8,
+            x: 0,
+            y: 4
+        )
         .contentShape(Rectangle())
-        .id(device.id)
-        .matchedTransitionSource(id: device.ipAddress, in: heroNamespace)
         .onTapGesture {
             handleDeviceTap(device: device, isAccessible: isAccessible)
-        }
-        .contextMenu {
-            Button(role: .destructive) {
-                if let idx = viewModel.savedDevices.firstIndex(of: device) {
-                    indexSetToDelete = IndexSet(integer: idx)
-                    showingDeleteConfirmation = true
-                }
-            } label: {
-                Label("Delete", systemImage: "trash")
-            }
         }
     }
 
@@ -127,91 +188,6 @@ struct DeviceListView: View {
         }
     }
 
-    private func updateCurrentIndex(from newID: AnyHashable?) {
-        guard let id = newID else { return }
-
-        if id as? String == "total" {
-            currentIndex = 0
-        } else if let deviceID = id as? UUID,
-            let deviceIndex = viewModel.savedDevices.firstIndex(where: { $0.id == deviceID })
-        {
-            currentIndex = viewModel.savedDevices.count > 1 ? deviceIndex + 1 : deviceIndex
-        }
-    }
-
-    private var visibleDotRange: Range<Int> {
-        let maxDots = 6
-        let halfRange = maxDots / 2
-
-        if totalItemCount <= maxDots {
-            return 0..<totalItemCount
-        }
-
-        let start = max(0, currentIndex - halfRange)
-        let end = min(totalItemCount, start + maxDots)
-        let adjustedStart = max(0, end - maxDots)
-
-        return adjustedStart..<end
-    }
-
-    private var pageIndicator: some View {
-        Group {
-            if totalItemCount > 1 {
-                VStack(spacing: 4) {
-                    HStack(spacing: 8) {
-                        ForEach(visibleDotRange, id: \.self) { index in
-                            Circle()
-                                .fill(
-                                    index == currentIndex
-                                        ? Color.primary : Color.primary.opacity(0.3)
-                                )
-                                .frame(width: 6, height: 6)
-                                .animation(.easeInOut(duration: 0.2), value: currentIndex)
-                                .frame(width: 20, height: 20)
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    withAnimation(.spring()) {
-                                        jumpToPage(index)
-                                    }
-                                }
-                        }
-                    }
-                    .animation(.easeInOut(duration: 0.3), value: visibleDotRange)
-
-                    Text(devicePositionText)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
-            }
-        }
-    }
-
-    private var devicePositionText: String {
-        if currentIndex == 0 && viewModel.savedDevices.count > 1 {
-            // On aggregated stats page
-            return "\(viewModel.savedDevices.count)"
-        } else {
-            // On individual device page
-            let deviceIndex = viewModel.savedDevices.count > 1 ? currentIndex : currentIndex + 1
-            return "\(deviceIndex)/\(viewModel.savedDevices.count)"
-        }
-    }
-
-    private func jumpToPage(_ index: Int) {
-        if index == 0 && viewModel.savedDevices.count > 1 {
-            // Jump to aggregated stats
-            scrolledID = "total"
-        } else {
-            // Jump to specific device
-            let deviceIndex = viewModel.savedDevices.count > 1 ? index - 1 : index
-            if deviceIndex < viewModel.savedDevices.count {
-                scrolledID = viewModel.savedDevices[deviceIndex].id
-            }
-        }
-    }
-    
     private func editModeRow(for device: SavedDevice, at index: Int) -> some View {
         HStack(alignment: .center) {
             Text("\(index + 1)")
@@ -219,7 +195,7 @@ struct DeviceListView: View {
                 .fontWeight(.semibold)
                 .foregroundStyle(index < 9 ? .primary : .secondary)
                 .frame(width: 30)
-            
+
             VStack(alignment: .leading) {
                 Text(viewModel.deviceMetrics[device.ipAddress]?.hostname ?? device.name)
                     .font(.headline)
@@ -227,36 +203,41 @@ struct DeviceListView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if let metrics = viewModel.deviceMetrics[device.ipAddress] {
-                    Text("\(String(format: "%.1f", metrics.hashrate >= 1000 ? metrics.hashrate / 1000 : metrics.hashrate)) \(metrics.hashrate >= 1000 ? "TH/s" : "GH/s")")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Text(
+                        "\(String(format: "%.1f", metrics.hashrate >= 1000 ? metrics.hashrate / 1000 : metrics.hashrate)) \(metrics.hashrate >= 1000 ? "TH/s" : "GH/s")"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
             }
-            
+
             Spacer()
-            
+
             Image(systemName: "line.3.horizontal")
                 .foregroundStyle(.secondary)
                 .font(.title2)
         }
         .padding(.vertical, 8)
     }
-    
+
     private var editModeOverlay: some View {
         VStack {
-            HStack {
-                Text("Drag to reorder")
-                    .italic()
-                    .padding(.leading)
-                Spacer()
-            }
-            .padding(.top)
-            
+            //            HStack {
+            //                Text("Drag to reorder")
+            //                    .italic()
+            //                    .padding(.leading)
+            //                Spacer()
+            //            }
+            //            .padding(.top)
+
             List {
-                ForEach(Array(viewModel.savedDevices.enumerated()), id: \.element.id) { index, device in
+                ForEach(Array(viewModel.savedDevices.enumerated()), id: \.element.id) {
+                    index,
+                    device in
                     editModeRow(for: device, at: index)
                 }
                 .onMove(perform: viewModel.reorderDevices)
+                .onDelete(perform: viewModel.deleteDevice)
             }
             .scrollContentBackground(.hidden)
         }
@@ -267,18 +248,32 @@ struct DeviceListView: View {
 
     var body: some View {
         ZStack {
-            VStack(spacing: 0) {
-                deviceScrollView
-                pageIndicator
+            LinearGradient(
+                colors: [
+                    Color(.tertiarySystemBackground),
+                    Color(.secondarySystemBackground),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
+            ScrollView {
+                VStack(spacing: 0) {
+                    deviceGridView
+                }
+            }
+            .refreshable {
+                await viewModel.updateAggregatedStats()
             }
             .allowsHitTesting(!viewModel.isEditMode)
-            
+
             if viewModel.isEditMode {
                 editModeOverlay
             }
         }
-        .padding(.all, 5)
         .navigationTitle("Traxe")
+        .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 if !viewModel.savedDevices.isEmpty {
@@ -289,7 +284,7 @@ struct DeviceListView: View {
                     }
                 }
             }
-            
+
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
                     let proIsActive = self.customerInfo?.entitlements["Pro"]?.isActive == true
@@ -313,11 +308,18 @@ struct DeviceListView: View {
                     }
                 } label: {
                     Image(systemName: "plus")
+                        .foregroundStyle(Color.traxeGold)
                 }
             }
         }
         .onAppear {
-            viewModel.loadDevices()
+        }
+        .onChange(of: scenePhase) { oldPhase, newPhase in
+            if newPhase == .active {
+                Task {
+                    await viewModel.updateAggregatedStats()
+                }
+            }
         }
         .onChange(of: viewModel.savedDevices.isEmpty) { _, isEmptyNow in
             if isEmptyNow {
@@ -343,8 +345,12 @@ struct DeviceListView: View {
         }
         .navigationDestination(isPresented: $navigateToSummary) {
             if let device = selectedDevice {
-                DeviceSummaryView(dashboardViewModel: dashboardViewModel, deviceName: device.name)
-                    .navigationTransition(.zoom(sourceID: device.ipAddress, in: heroNamespace))
+                DeviceSummaryView(
+                    dashboardViewModel: dashboardViewModel,
+                    deviceName: viewModel.deviceMetrics[device.ipAddress]?.hostname ?? device.name,
+                    deviceIP: device.ipAddress,
+                    poolName: viewModel.deviceMetrics[device.ipAddress]?.poolURL
+                )
             } else {
                 Text("Error: No device selected")
             }
@@ -395,6 +401,8 @@ struct DeviceListView: View {
         await dashboardViewModel.connect()
 
         if dashboardViewModel.connectionState == .connected {
+            // Preload a larger historical window so device summary has trend context immediately
+            dashboardViewModel.preloadHistoricalData()
             navigateToSummary = true
         } else {
             // Always use the dashboard error message if available, even if empty
@@ -415,55 +423,47 @@ struct DeviceListView: View {
     let container = try! ModelContainer(for: HistoricalDataPoint.self, configurations: config)
     let previewDashboardVM = DashboardViewModel(modelContext: container.mainContext)
 
-    // Create mock UserDefaults with devices
-    let mockDefaults = UserDefaults(suiteName: "preview")!
-    let mockDevices = [
-        SavedDevice(name: "Living Room", ipAddress: "192.168.1.101"),
-        SavedDevice(name: "Office", ipAddress: "192.168.1.102"),
-        SavedDevice(name: "Bedroom", ipAddress: "192.168.1.103"),
-        SavedDevice(name: "Kitchen", ipAddress: "192.168.1.104"),
-        SavedDevice(name: "Garage", ipAddress: "192.168.1.105"),
-        SavedDevice(name: "Basement", ipAddress: "192.168.1.106"),
-        SavedDevice(name: "Attic", ipAddress: "192.168.1.107"),
-        SavedDevice(name: "Porch", ipAddress: "192.168.1.108"),
-        SavedDevice(name: "Shed", ipAddress: "192.168.1.109"),
-        SavedDevice(name: "Workshop", ipAddress: "192.168.1.110"),
-        SavedDevice(name: "Server Room", ipAddress: "192.168.1.111"),
-        SavedDevice(name: "Lab", ipAddress: "192.168.1.112"),
-        SavedDevice(name: "Studio", ipAddress: "192.168.1.113"),
-        SavedDevice(name: "Closet", ipAddress: "192.168.1.114"),
-        SavedDevice(name: "Pantry", ipAddress: "192.168.1.115"),
-        SavedDevice(name: "Balcony", ipAddress: "192.168.1.116"),
-        SavedDevice(name: "Deck", ipAddress: "192.168.1.117"),
-        SavedDevice(name: "Patio", ipAddress: "192.168.1.118"),
-        SavedDevice(name: "Laundry", ipAddress: "192.168.1.119"),
-        SavedDevice(name: "Mudroom", ipAddress: "192.168.1.120"),
+    // Use the app group defaults so the view model and cache read the same store
+    let groupDefaults = UserDefaults(suiteName: "group.matthewramsden.traxe")!
+
+    // Seed devices
+    let devices = [
+        SavedDevice(name: "nerdqaxe++", ipAddress: "192.168.1.101"),
+        SavedDevice(name: "bitaxe", ipAddress: "192.168.1.102"),
+        SavedDevice(name: "octaxe", ipAddress: "192.168.1.103"),
+        SavedDevice(name: "lucky", ipAddress: "192.168.1.104"),
     ]
-    let encoder = JSONEncoder()
-    if let data = try? encoder.encode(mockDevices) {
-        mockDefaults.set(data, forKey: "savedDevices")
-    }
+    let devEncoder = JSONEncoder()
+    groupDefaults.set(try! devEncoder.encode(devices), forKey: "savedDevices")
+
+    // Enable AI features for previews
+    UserDefaults.standard.set(true, forKey: "ai_enabled")
+
+    // Seed cached device metrics so cards and totals are populated (hashrate in GH/s)
+    let cached: [String: CachedDeviceMetrics] = [
+        "192.168.1.101": CachedDeviceMetrics(from: DeviceMetrics(hashrate: 5100, temperature: 61, power: 600, hostname: "nerdqaxe++")),
+        "192.168.1.102": CachedDeviceMetrics(from: DeviceMetrics(hashrate: 721, temperature: 65, power: 620, hostname: "bitaxe")),
+        "192.168.1.103": CachedDeviceMetrics(from: DeviceMetrics(hashrate: 450, temperature: 68, power: 610, hostname: "octaxe")),
+        "192.168.1.104": CachedDeviceMetrics(from: DeviceMetrics(hashrate: 3800, temperature: 72, power: 620, hostname: "lucky")),
+    ]
+    let cacheEncoder = JSONEncoder(); cacheEncoder.dateEncodingStrategy = .iso8601
+    groupDefaults.set(try! cacheEncoder.encode(cached), forKey: "cachedDeviceMetricsV1")
+
+    // Seed a cached fleet AI summary so the preview doesn't need networking
+    struct _FleetSummaryCacheEntry: Codable { let content: String; let generatedAt: Date; let deviceCount: Int }
+    let summaryContent = "\(devices.count) devices producing a total of 10.1 TH/s, with a temperature range of 61-72°C, and consuming 2450W of power."
+    let summaryEncoder = JSONEncoder(); summaryEncoder.dateEncodingStrategy = .iso8601
+    groupDefaults.set(
+        try! summaryEncoder.encode(_FleetSummaryCacheEntry(content: summaryContent, generatedAt: Date(), deviceCount: devices.count)),
+        forKey: "cachedFleetAISummaryV1"
+    )
 
     return NavigationView {
+        // Important: do not pass mockUserDefaults; use app group store
         DeviceListView(
             dashboardViewModel: previewDashboardVM,
-            navigateToDeviceList: .constant(true),
-            mockUserDefaults: mockDefaults
+            navigateToDeviceList: .constant(true)
         )
     }
     .modelContainer(container)
-}
-
-#Preview("Accessible Device") {
-    DeviceRow(
-        device: SavedDevice(name: "device", ipAddress: "1.1.1.1"),
-        isAccessible: true
-    )
-}
-
-#Preview("Locked Device") {
-    DeviceRow(
-        device: SavedDevice(name: "device", ipAddress: "1.1.1.1"),
-        isAccessible: false
-    )
 }

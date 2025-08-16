@@ -10,7 +10,7 @@ struct StatItem: View {
     var onRefresh: (() async -> Void)? = nil
 
     private var formattedValue: String {
-        if isLoading {
+        if value == 0.0 {
             return "---"
         }
 
@@ -35,22 +35,13 @@ struct StatItem: View {
             Text(formattedValue)
                 .fontDesign(.rounded)
                 .font(.system(size: 64, weight: .bold))
+                .contentTransition(.numericText())
                 .animation(.default, value: formattedValue)
-                .foregroundColor(isLoading ? .secondary : .primary)
-                .redacted(reason: isLoading ? .placeholder : [])
+                .foregroundColor(.primary)
+                .redacted(reason: value == 0.0 ? .placeholder : [])
 
             HStack(spacing: 6) {
-                Text("TOTAL")
-                    .fontDesign(.rounded)
-                    .font(.system(size: 20))
-                    .foregroundStyle(.secondary)
-
-                Text(label.uppercased())
-                    .fontDesign(.rounded)
-                    .font(.system(size: 20))
-                    .foregroundStyle(.secondary)
-
-                Text("(\(displayUnit.uppercased()))")
+                Text(displayUnit.uppercased())
                     .fontDesign(.rounded)
                     .font(.system(size: 18))
                     .foregroundStyle(.secondary)
@@ -63,16 +54,16 @@ struct StatItem: View {
                         ProgressView()
                             .scaleEffect(0.8)
                     } else {
-                        Button {
-                            Task {
-                                await onRefresh()
-                            }
-                        } label: {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 16))
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
+                        //                        Button {
+                        //                            Task {
+                        //                                await onRefresh()
+                        //                            }
+                        //                        } label: {
+                        //                            Image(systemName: "arrow.clockwise")
+                        //                                .font(.system(size: 16))
+                        //                                .foregroundStyle(.secondary)
+                        //                        }
+                        //                        .buttonStyle(.plain)
                     }
                 }
             }

@@ -5,18 +5,30 @@ struct AdvancedSettingsView: View {
     @State private var showingRestartConfirmation = false
 
     var body: some View {
-        Form {
-            FanControlSection(viewModel: viewModel)
-                .safeAreaPadding(.bottom, 10)
-            Section("Network Configuration") {
-                NavigationLink("Pool Configuration") {
-                    PoolConfigurationView(viewModel: viewModel)
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(.tertiarySystemBackground),
+                    Color(.secondarySystemBackground),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
+            Form {
+                FanControlSection(viewModel: viewModel)
+                    .safeAreaPadding(.bottom, 10)
+                Section("Network Configuration") {
+                    NavigationLink("Pool Configuration") {
+                        PoolConfigurationView(viewModel: viewModel)
+                    }
                 }
-            }
-            
-            Section("Device Configuration") {
-                NavigationLink("Hostname") {
-                    HostnameConfigurationView(viewModel: viewModel)
+
+                Section("Device Configuration") {
+                    NavigationLink("Hostname") {
+                        HostnameConfigurationView(viewModel: viewModel)
+                    }
                 }
             }
         }

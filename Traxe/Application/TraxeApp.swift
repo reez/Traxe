@@ -29,6 +29,11 @@ struct TraxeApp: App {
     @StateObject private var dashboardViewModel: DashboardViewModel
 
     init() {
+        // Register default settings
+        UserDefaults.standard.register(defaults: [
+            "ai_enabled": true
+        ])
+
         Purchases.logLevel = .error
         Purchases.configure(withAPIKey: "appl_qmpDjLonGDKmmzmItMjeuLZLYLj")
 

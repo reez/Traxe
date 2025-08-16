@@ -21,25 +21,25 @@ struct FanControlSection: View {
 
             HStack {
                 Text("Fan Speed")
-                    .foregroundColor(viewModel.isAutoFan ? .gray : .primary)
+                    .foregroundColor(viewModel.isAutoFan ? .secondary : .primary)
                 Spacer()
 
                 Button(action: { Task { await viewModel.adjustFanSpeed(by: -5) } }) {
                     Image(systemName: "minus.circle.fill")
                         .foregroundColor(
-                            isControlDisabled || viewModel.fanSpeed <= 0 ? .gray : .traxeGold
+                            isControlDisabled || viewModel.fanSpeed <= 0 ? .secondary : .traxeGold
                         )
                 }
                 .disabled(isControlDisabled || viewModel.fanSpeed <= 0)
 
                 Text("\(viewModel.fanSpeed)%")
-                    .foregroundColor(viewModel.isAutoFan ? .gray : .secondary)
+                    .foregroundColor(viewModel.isAutoFan ? .secondary : .traxeGold)
                     .frame(width: 50)
 
                 Button(action: { Task { await viewModel.adjustFanSpeed(by: 5) } }) {
                     Image(systemName: "plus.circle.fill")
                         .foregroundColor(
-                            isControlDisabled || viewModel.fanSpeed >= 100 ? .gray : .traxeGold
+                            isControlDisabled || viewModel.fanSpeed >= 100 ? .secondary : .traxeGold
                         )
                 }
                 .disabled(isControlDisabled || viewModel.fanSpeed >= 100)

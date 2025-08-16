@@ -57,7 +57,10 @@ struct HostnameConfigurationView: View {
         .alert("Save Error", isPresented: $showErrorAlert) {
             Button("OK") {}
         } message: {
-            Text(viewModel.hostnameConfigurationError ?? "An unknown error occurred. Please try again.")
+            Text(
+                viewModel.hostnameConfigurationError
+                    ?? "An unknown error occurred. Please try again."
+            )
         }
     }
 }

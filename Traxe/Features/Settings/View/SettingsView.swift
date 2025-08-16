@@ -4,60 +4,90 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var viewModel: SettingsViewModel
     @State private var showingRestartConfirmation = false
+    @State private var isAIEnabled = UserDefaults.standard.bool(forKey: "ai_enabled")
 
     @Environment(\.dismiss) var dismiss
 
     var body: some View {
-        NavigationView {
-            Form {
-                ConnectionSection(
-                    ipAddress: $viewModel.bitaxeIPAddress,
-                    onSubmit: viewModel.saveSettings,
-                    isConnected: viewModel.isConnected
-                )
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(.tertiarySystemBackground),
+                    Color(.secondarySystemBackground),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
 
-                Section("Firmware") {
-                    HStack {
-                        Text("Firmware Version")
-                        Spacer()
-                        if viewModel.currentVersion != "Unknown" {
-                            Text(viewModel.currentVersion)
-                                .foregroundColor(.secondary)
-                        } else {
-                            ProgressView()
-                                .controlSize(.small)
+            NavigationView {
+                Form {
+                    ConnectionSection(
+                        ipAddress: $viewModel.bitaxeIPAddress,
+                        onSubmit: viewModel.saveSettings,
+                        isConnected: viewModel.isConnected
+                    )
+
+                    Section("Firmware") {
+                        HStack {
+                            Text("Firmware Version")
+                            Spacer()
+                            if viewModel.currentVersion != "Unknown" {
+                                Text(viewModel.currentVersion)
+                                    .foregroundColor(.secondary)
+                                    .animation(nil, value: viewModel.currentVersion)
+                            } else {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
+                        }
+                    }
+
+                    DangerZoneSection(onRestart: { showingRestartConfirmation = true })
+
+                    if #available(iOS 18.0, macOS 15.0, *) {
+                        Section {
+                            Toggle("Summaries", isOn: $isAIEnabled)
+                                .tint(.accentColor)
+                                .onChange(of: isAIEnabled) { _, newValue in
+                                    UserDefaults.standard.set(newValue, forKey: "ai_enabled")
+                                }
+                        } header: {
+                            Text("Features")
+                        } footer: {
+                            Text(
+                                "Uses [Apple Intelligence](https://www.apple.com/apple-intelligence/)."
+                            )
+                        }
+                    }
+
+                    Section {
+                        NavigationLink("Advanced Settings") {
+                            AdvancedSettingsView(viewModel: viewModel)
                         }
                     }
                 }
-
-                DangerZoneSection(onRestart: { showingRestartConfirmation = true })
-
-                Section {
-                    NavigationLink("Advanced Settings") {
-                        AdvancedSettingsView(viewModel: viewModel)
+                .navigationTitle("Settings")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Done") {
+                            viewModel.saveSettings()
+                            dismiss()
+                        }
+                        //                    .foregroundColor(.traxeGold)
                     }
                 }
-            }
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        viewModel.saveSettings()
-                        dismiss()
+                .alert("Restart Device", isPresented: $showingRestartConfirmation) {
+                    Button("Cancel", role: .cancel) {}
+                    Button("Restart", role: .destructive) {
+                        Task { await viewModel.restartDevice() }
                     }
-                    .foregroundColor(.traxeGold)
+                } message: {
+                    Text(
+                        "Are you sure you want to restart the device? This will temporarily stop mining operations."
+                    )
                 }
-            }
-            .alert("Restart Device", isPresented: $showingRestartConfirmation) {
-                Button("Cancel", role: .cancel) {}
-                Button("Restart", role: .destructive) {
-                    Task { await viewModel.restartDevice() }
-                }
-            } message: {
-                Text(
-                    "Are you sure you want to restart the device? This will temporarily stop mining operations."
-                )
             }
         }
         .onAppear {
