@@ -35,6 +35,7 @@ final class OnboardingViewModel: ObservableObject {
     @Published var hasScanned: Bool = false
     @Published var showManualEntry: Bool = false
     @Published var hasLocalNetworkPermission: Bool = false
+    @Published var detectedNetworkInfo: String = ""
 
     private var browser: NWBrowser?
     private var cancellables = Set<AnyCancellable>()
@@ -330,6 +331,10 @@ final class OnboardingViewModel: ObservableObject {
                 let detectedBaseIP = localNetwork.split(separator: ".").dropLast().joined(
                     separator: "."
                 )
+
+                await MainActor.run {
+                    self.detectedNetworkInfo = "Scanning network: \(detectedBaseIP)"
+                }
 
                 let subnetsToScan: Set<String> = [detectedBaseIP]
 

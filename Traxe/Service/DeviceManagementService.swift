@@ -12,11 +12,29 @@ struct DeviceManagementService {
         }
 
         var request = URLRequest(url: url)
-        request.timeoutInterval = 2.0
+        // Slightly higher timeout to reduce -1001 churn on local devices
+        request.timeoutInterval = 5.0
+
+        // One-time retry on timeout for resiliency
+        func fetchOnce() async throws -> (Data, URLResponse) {
+            try await session.data(for: request)
+        }
+
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await fetchOnce()
+        } catch let error as URLError {
+            if error.code == .timedOut {
+                // Retry once on timeout
+                (data, response) = try await fetchOnce()
+            } else {
+                throw error
+            }
+        } catch {
+            throw error
+        }
 
         do {
-            let (data, response) = try await session.data(for: request)
-
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw DeviceCheckError.invalidResponse
             }
@@ -35,8 +53,10 @@ struct DeviceManagementService {
                         // NerdAxe variants (NerdAxe, NerdQAxe, NerdQAxePlus, etc.)
                         || lowercasedHostname.contains("nerd")
                         // ESP-Miner variants
-                        || lowercasedHostname.contains("esp-miner") || lowercasedVersion.contains("esp-miner")
-                        || lowercasedHostname.contains("miner") || lowercasedVersion.contains("miner")
+                        || lowercasedHostname.contains("esp-miner")
+                        || lowercasedVersion.contains("esp-miner")
+                        || lowercasedHostname.contains("miner")
+                        || lowercasedVersion.contains("miner")
                         // Lucky Miner / LVXX variants
                         || lowercasedHostname.contains("lucky") || lowercasedHostname.contains("lv")
                         // QAxe variants

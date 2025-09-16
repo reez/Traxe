@@ -11,15 +11,34 @@ final class DeviceListViewModel: ObservableObject {
     @Published var isLoadingAggregatedStats = false
     @Published var deviceMetrics: [String: DeviceMetrics] = [:]
     @Published var isEditMode = false
+    @Published var fleetAISummary: AISummary?
+    @Published var lastDataUpdate: Date = Date()
+    @Published var reachableIPs: Set<String> = []
 
     private let defaults: UserDefaults
+    private var aiAnalysisService: AIAnalysisService?
+    private let metricsCache = DeviceMetricsCache()
+
+    // Minimal cached fleet summary entry for instant display on launch
+    private struct FleetSummaryCacheEntry: Codable {
+        let content: String
+        let generatedAt: Date
+        let deviceCount: Int
+    }
 
     init(
         defaults: UserDefaults = UserDefaults(suiteName: "group.matthewramsden.traxe") ?? .standard
     ) {
         self.defaults = defaults
+        if #available(iOS 18.0, macOS 15.0, *) {
+            self.aiAnalysisService = AIAnalysisService()
+        }
         loadDevices()
-        saveIPsAndReloadWidget()
+        loadCacheAndComputeTotals()
+        // If a cached fleet summary exists (e.g., in previews), surface it immediately
+        if let cached = loadCachedFleetSummary() {
+            self.fleetAISummary = cached
+        }
     }
 
     func loadDevices() {
@@ -42,6 +61,62 @@ final class DeviceListViewModel: ObservableObject {
         }
     }
 
+    func loadCacheAndComputeTotals() {
+        // Load cached metrics
+        let cachedMetrics = metricsCache.loadAll()
+        let totalCachedHashrate = cachedMetrics.values.reduce(0.0) { $0 + $1.hashrate }
+
+        // Prune cache to only include current devices
+        let currentIPs = savedDevices.map { $0.ipAddress }
+        metricsCache.prune(ips: currentIPs)
+        let currentIPSet = Set(currentIPs)
+        let prunedMetrics = cachedMetrics.filter { currentIPSet.contains($0.key) }
+
+        // Apply pruned cache to current devices (merge defensively, avoid zeroing temps)
+        for device in savedDevices {
+            if let cached = prunedMetrics[device.ipAddress] {
+                var merged = DeviceMetrics(from: cached)
+                if let existing = deviceMetrics[device.ipAddress] {
+                    // If cached temp is missing/zero but we have a non-zero in-memory temp, keep it
+                    if (cached.temperature ?? 0.0) == 0.0, existing.temperature > 0.0 {
+                        merged.temperature = existing.temperature
+                    }
+                }
+                deviceMetrics[device.ipAddress] = merged
+            }
+        }
+
+        // Compute totals from cached metrics
+        computeTotals()
+
+    }
+
+    private func computeTotals() {
+        var currentTotalHashRate: Double = 0.0
+        var currentTotalPower: Double = 0.0
+        var currentBestDiff: Double = 0.0
+
+        for metrics in deviceMetrics.values {
+            currentTotalHashRate += metrics.hashrate
+            currentTotalPower += metrics.power
+            currentBestDiff = max(currentBestDiff, metrics.bestDifficulty)
+        }
+
+        totalHashRate = currentTotalHashRate
+        totalPower = currentTotalPower
+        bestOverallDiff = currentBestDiff
+        lastDataUpdate = Date()
+
+        // Keep fleet summary in lockstep with totals based on the same snapshot
+        if AIFeatureFlags.isAvailable,
+            AIFeatureFlags.isEnabledByUser,
+            savedDevices.count > 1,
+            let summary = buildFleetSummaryFromMetrics(Array(deviceMetrics.values))
+        {
+            self.fleetAISummary = summary
+        }
+    }
+
     func deleteDevice(at offsets: IndexSet) {
         let devicesToDelete = offsets.map { savedDevices[$0] }
 
@@ -49,63 +124,118 @@ final class DeviceListViewModel: ObservableObject {
             do {
                 try DeviceManagementService.deleteDevice(ipAddressToDelete: device.ipAddress)
                 savedDevices.removeAll { $0.id == device.id }
+                deviceMetrics.removeValue(forKey: device.ipAddress)
                 saveIPsAndReloadWidget()
             } catch {
             }
         }
+
+        // Prune cache and recompute totals
+        let currentIPs = savedDevices.map { $0.ipAddress }
+        metricsCache.prune(ips: currentIPs)
+        computeTotals()
+
         Task { await updateAggregatedStats() }
     }
 
     func updateAggregatedStats() async {
+        // Prevent overlapping refreshes
+        if isLoadingAggregatedStats { return }
+        // Keep existing fleet AI summary visible during refresh
+
         isLoadingAggregatedStats = true
-        var currentTotalHashRate: Double = 0.0
-        var currentTotalPower: Double = 0.0
-        var currentBestDiff: Double = 0.0
-        var currentDeviceMetrics: [String: DeviceMetrics] = [:]
 
-        await withTaskGroup(of: (String, DeviceMetrics?).self) { group in
-            for device in savedDevices {
-                group.addTask {
-                    do {
-                        let discoveredDevice = try await DeviceManagementService.checkDevice(
-                            ip: device.ipAddress
-                        )
+        // Capture current IPs to avoid touching actor state off the main actor
+        let devicesSnapshot = savedDevices
 
-                        let parsedDifficulty = await self.parseDifficultyString(
-                            discoveredDevice.bestDiff
-                        )
+        // Perform network fetches off the main actor, then apply results on main
+        let fetchedResults: [(String, DeviceMetrics?)] = await Task.detached(
+            priority: .userInitiated
+        ) {
+            await withTaskGroup(of: (String, DeviceMetrics?).self) { group in
+                for device in devicesSnapshot {
+                    group.addTask {
+                        do {
+                            let discoveredDevice = try await DeviceManagementService.checkDevice(
+                                ip: device.ipAddress
+                            )
+                            // Inline parse to avoid touching main-actor method
+                            let parsedDifficulty: Double = {
+                                let multipliers: [Character: Double] = [
+                                    "K": 1_000,
+                                    "M": 1_000_000,
+                                    "G": 1_000_000_000,
+                                    "T": 1_000_000_000_000,
+                                    "P": 1_000_000_000_000_000,
+                                ]
+                                let trimmed = discoveredDevice.bestDiff.trimmingCharacters(
+                                    in: .whitespacesAndNewlines
+                                )
+                                guard !trimmed.isEmpty else { return 0.0 }
+                                let lastChar = trimmed.last!
+                                var numeric = trimmed
+                                var mult: Double = 1.0
+                                if let m = multipliers[lastChar.uppercased().first!] {
+                                    mult = m
+                                    numeric = String(trimmed.dropLast())
+                                } else if lastChar.isLetter {
+                                    return 0.0
+                                }
+                                let cleaned = numeric.replacingOccurrences(of: ",", with: "")
+                                guard let value = Double(cleaned) else { return 0.0 }
+                                return value / 1_000_000.0 * mult
+                            }()
 
-                        let metrics = DeviceMetrics(
-                            hashrate: discoveredDevice.hashrate,
-                            temperature: discoveredDevice.temperature,
-                            power: discoveredDevice.power,
-                            bestDifficulty: parsedDifficulty,
-                            poolURL: discoveredDevice.poolURL,
-                            hostname: discoveredDevice.name
-                        )
-
-                        return (device.ipAddress, metrics)
-                    } catch {
-                        return (device.ipAddress, nil)
+                            let metrics = DeviceMetrics(
+                                hashrate: discoveredDevice.hashrate,
+                                temperature: discoveredDevice.temperature,
+                                power: discoveredDevice.power,
+                                bestDifficulty: parsedDifficulty,
+                                poolURL: discoveredDevice.poolURL,
+                                hostname: discoveredDevice.name
+                            )
+                            return (device.ipAddress, metrics)
+                        } catch {
+                            return (device.ipAddress, nil)
+                        }
                     }
                 }
-            }
 
-            for await (ipAddress, metrics) in group {
-                if let metrics = metrics {
-                    currentTotalHashRate += metrics.hashrate
-                    currentTotalPower += metrics.power
-                    currentBestDiff = max(currentBestDiff, metrics.bestDifficulty)
-                    currentDeviceMetrics[ipAddress] = metrics
-                }
+                var results: [(String, DeviceMetrics?)] = []
+                for await item in group { results.append(item) }
+                return results
+            }
+        }.value
+
+        // Apply fetched results on main actor
+        var newReachables: Set<String> = []
+        for (ipAddress, metrics) in fetchedResults {
+            if let metrics = metrics {
+                deviceMetrics[ipAddress] = metrics
+                newReachables.insert(ipAddress)
             }
         }
+        // Atomically update reachable set to avoid mid-refresh greying
+        reachableIPs = newReachables
+        computeTotals()
 
-        totalHashRate = currentTotalHashRate
-        totalPower = currentTotalPower
-        bestOverallDiff = currentBestDiff
-        deviceMetrics = currentDeviceMetrics
         isLoadingAggregatedStats = false
+
+        // Save all current metrics to cache
+        saveCacheFromCurrentMetrics()
+        let totalFreshHashrate = deviceMetrics.values.reduce(0.0) { $0 + $1.hashrate }
+
+        // No need to regenerate summary here; computeTotals() already keeps it in sync
+    }
+
+    private func saveCacheFromCurrentMetrics() {
+        var cacheMetrics: [String: CachedDeviceMetrics] = [:]
+
+        for (ipAddress, metrics) in deviceMetrics {
+            cacheMetrics[ipAddress] = CachedDeviceMetrics(from: metrics)
+        }
+
+        metricsCache.saveAll(cacheMetrics)
     }
 
     private func parseDifficultyString(_ diffString: String) -> Double {
@@ -149,10 +279,10 @@ final class DeviceListViewModel: ObservableObject {
         defaults.set(ipAddresses, forKey: "savedDeviceIPs")
         WidgetCenter.shared.reloadTimelines(ofKind: "TraxeWidget")
     }
-    
+
     func reorderDevices(from source: IndexSet, to destination: Int) {
         savedDevices.move(fromOffsets: source, toOffset: destination)
-        
+
         do {
             try DeviceManagementService.reorderDevices(savedDevices)
         } catch {
@@ -160,4 +290,56 @@ final class DeviceListViewModel: ObservableObject {
             loadDevices()
         }
     }
+
+    // MARK: - Fleet AI Analysis (consolidated)
+
+    private func buildFleetSummaryFromMetrics(_ metrics: [DeviceMetrics]) -> AISummary? {
+        AISummaryFormatter.fleetSummary(from: metrics)
+    }
+
+    @available(iOS 18.0, macOS 15.0, *)
+    func generateFleetAISummary() async {
+        guard savedDevices.count > 1 else { return }
+
+        // Build from cached metrics (simple and immediate)
+        let metrics = Array(deviceMetrics.values)
+        if let summary = buildFleetSummaryFromMetrics(metrics) {
+            await MainActor.run { self.fleetAISummary = summary }
+            saveCachedFleetSummary(summary)
+        }
+    }
+
+    // MARK: - Fleet AI summary cache (simple, app-group backed)
+    private func loadCachedFleetSummary() -> AISummary? {
+        // Only show cached summary when device count matches to avoid obvious mismatch
+        guard savedDevices.count > 1,
+            let data = defaults.data(forKey: "cachedFleetAISummaryV1")
+        else { return nil }
+        do {
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let entry = try decoder.decode(FleetSummaryCacheEntry.self, from: data)
+            guard entry.deviceCount == savedDevices.count else { return nil }
+            return AISummary(content: entry.content)
+        } catch {
+            return nil
+        }
+    }
+
+    private func saveCachedFleetSummary(_ summary: AISummary) {
+        let entry = FleetSummaryCacheEntry(
+            content: summary.content,
+            generatedAt: Date(),
+            deviceCount: savedDevices.count
+        )
+        do {
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            let data = try encoder.encode(entry)
+            defaults.set(data, forKey: "cachedFleetAISummaryV1")
+        } catch {
+            // Best-effort cache; ignore errors
+        }
+    }
+
 }

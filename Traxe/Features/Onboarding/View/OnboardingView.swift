@@ -12,84 +12,96 @@ struct OnboardingView: View {
     @State private var isConnecting = false
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 20) {
-                Spacer()
-                Spacer().frame(height: 20)
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(.tertiarySystemBackground),
+                    Color(.secondarySystemBackground),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
 
-                onboardingHeaderAndScanButton()
+            NavigationStack {
+                VStack(spacing: 20) {
+                    Spacer()
+                    Spacer().frame(height: 20)
 
-                if !viewModel.discoveredDevices.isEmpty {
-                    List(viewModel.discoveredDevices) { device in
-                        deviceRow(device)
+                    onboardingHeaderAndScanButton()
+
+                    if !viewModel.discoveredDevices.isEmpty {
+                        List(viewModel.discoveredDevices) { device in
+                            deviceRow(device)
+                        }
+                        .listStyle(.plain)
+                        .frame(height: CGFloat(viewModel.discoveredDevices.count) * 80)
                     }
-                    .listStyle(.plain)
-                    .frame(height: CGFloat(viewModel.discoveredDevices.count) * 80)
-                }
 
-                manualEntrySection()
+                    manualEntrySection()
 
-                Spacer()
+                    Spacer()
 
-                HStack(spacing: 4) {
-                    Link(
-                        "Privacy Policy",
-                        destination: URL(string: "https://matthewramsden.com/privacy")!
-                    )
-                    Text("•")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Link(
-                        "Terms of Use",
-                        destination: URL(
-                            string:
-                                "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/"
-                        )!
-                    )
-                }
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-
-            }
-            .padding()
-            .animation(.easeInOut, value: viewModel.isScanning)
-            .navigationTitle("Welcome")
-            .navigationBarHidden(true)
-            .alert("Scan Error", isPresented: $viewModel.showErrorAlert) {
-                Button("OK") {}
-            } message: {
-                var message = viewModel.errorMessage
-                if !viewModel.deviceInfo.isEmpty {
-                    message += "\n\n\(viewModel.deviceInfo)"
-                }
-                if !viewModel.problemField.isEmpty {
-                    message += "\n\(viewModel.problemField)"
-                }
-                return Text(message)
-            }
-            .alert("Local Network Access Required", isPresented: $showSettingsAlert) {
-                Button("Cancel", role: .cancel) {}
-                Button("Open Settings") {
-                    if let url = URL(string: UIApplication.openSettingsURLString) {
-                        UIApplication.shared.open(url)
+                    HStack(spacing: 4) {
+                        Link(
+                            "Privacy Policy",
+                            destination: URL(string: "https://matthewramsden.com/privacy")!
+                        )
+                        Text("•")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Link(
+                            "Terms of Use",
+                            destination: URL(
+                                string:
+                                    "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/"
+                            )!
+                        )
                     }
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+
                 }
-            } message: {
-                Text(
-                    "Traxe needs access to your local network to find devices. Please enable it in Settings."
-                )
-            }
-            .alert("Connection Error", isPresented: $showConnectionError) {
-                Button("OK") {}
-            } message: {
-                Text(connectionError)
-            }
-            .navigationDestination(isPresented: $navigateToDeviceList) {
-                DeviceListView(
-                    dashboardViewModel: dashboardViewModel,
-                    navigateToDeviceList: $navigateToDeviceList
-                )
+                .padding()
+                .animation(.easeInOut, value: viewModel.isScanning)
+                .navigationTitle("Welcome")
+                .navigationBarHidden(true)
+                .alert("Scan Error", isPresented: $viewModel.showErrorAlert) {
+                    Button("OK") {}
+                } message: {
+                    var message = viewModel.errorMessage
+                    if !viewModel.deviceInfo.isEmpty {
+                        message += "\n\n\(viewModel.deviceInfo)"
+                    }
+                    if !viewModel.problemField.isEmpty {
+                        message += "\n\(viewModel.problemField)"
+                    }
+                    return Text(message)
+                }
+                .alert("Local Network Access Required", isPresented: $showSettingsAlert) {
+                    Button("Cancel", role: .cancel) {}
+                    Button("Open Settings") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+                    }
+                } message: {
+                    Text(
+                        "Traxe needs access to your local network to find devices. Please enable it in Settings."
+                    )
+                }
+                .alert("Connection Error", isPresented: $showConnectionError) {
+                    Button("OK") {}
+                } message: {
+                    Text(connectionError)
+                }
+                .navigationDestination(isPresented: $navigateToDeviceList) {
+                    DeviceListView(
+                        dashboardViewModel: dashboardViewModel,
+                        navigateToDeviceList: $navigateToDeviceList
+                    )
+                }
             }
         }
     }
@@ -159,17 +171,45 @@ struct OnboardingView: View {
         if viewModel.isScanning {
             ProgressView()
         } else {
-            Button("Scan Network") {
-                Task {
-                    let result = await viewModel.startScan()
-                    if result == .permissionDenied {
-                        self.showSettingsAlert = true
+
+            if #available(iOS 26.0, *) {
+                Button("Scan Network") {
+                    Task {
+                        let result = await viewModel.startScan()
+                        if result == .permissionDenied {
+                            self.showSettingsAlert = true
+                        }
                     }
                 }
+                .buttonStyle(.glassProminent)
+                .tint(Color.traxeGold)
+                .disabled(viewModel.isScanning)
+            } else {
+                Button("Scan Network") {
+                    Task {
+                        let result = await viewModel.startScan()
+                        if result == .permissionDenied {
+                            self.showSettingsAlert = true
+                        }
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.traxeGold)
+                .disabled(viewModel.isScanning)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(Color.traxeGold)
-            .disabled(viewModel.isScanning)
+
+        }
+
+        if !viewModel.detectedNetworkInfo.isEmpty {
+            HStack(spacing: 4) {
+                Image(systemName: "network")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Text(viewModel.detectedNetworkInfo)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.top, 8)
         }
     }
 
@@ -211,28 +251,49 @@ struct OnboardingView: View {
                                     .autocapitalization(.none)
                             }
                             .padding()
-                            .background(Color(.systemGray6))
+                            .background(.secondary)
                             .cornerRadius(10)
                             .padding(.horizontal)
 
-                            Button(action: {
-                                guard !isConnecting else { return }
-                                isConnecting = true
-                                Task {
-                                    if await viewModel.connectManually() {
-                                        navigateToDeviceList = true
+                            if #available(iOS 26.0, *) {
+                                Button(action: {
+                                    guard !isConnecting else { return }
+                                    isConnecting = true
+                                    Task {
+                                        if await viewModel.connectManually() {
+                                            navigateToDeviceList = true
+                                        }
+                                        isConnecting = false
                                     }
-                                    isConnecting = false
+                                }) {
+                                    HStack {
+                                        Text("Connect Manually")
+                                        Image(systemName: "arrow.right")
+                                    }
                                 }
-                            }) {
-                                HStack {
-                                    Text("Connect Manually")
-                                    Image(systemName: "arrow.right")
+                                .buttonStyle(.glassProminent)
+                                .tint(Color.traxeGold)
+                                .disabled(viewModel.manualIPAddress.isEmpty)
+                            } else {
+                                Button(action: {
+                                    guard !isConnecting else { return }
+                                    isConnecting = true
+                                    Task {
+                                        if await viewModel.connectManually() {
+                                            navigateToDeviceList = true
+                                        }
+                                        isConnecting = false
+                                    }
+                                }) {
+                                    HStack {
+                                        Text("Connect Manually")
+                                        Image(systemName: "arrow.right")
+                                    }
                                 }
+                                .buttonStyle(.borderedProminent)
+                                .tint(Color.traxeGold)
+                                .disabled(viewModel.manualIPAddress.isEmpty)
                             }
-                            .buttonStyle(.borderedProminent)
-                            .tint(Color.traxeGold)
-                            .disabled(viewModel.manualIPAddress.isEmpty)
                         }
                         .transition(.opacity)
                     }

@@ -39,6 +39,63 @@ struct DeviceMetrics {
         return formatter.string(from: uptime) ?? "N/A"
     }
 
+    init(
+        hashrate: Double = 0.0,
+        expectedHashrate: Double = 0.0,
+        temperature: Double = 0.0,
+        power: Double = 0.0,
+        uptime: TimeInterval = 0,
+        fanSpeedPercent: Int = 0,
+        timestamp: Date = Date(),
+        bestDifficulty: Double = 0.0,
+        inputVoltage: Double = 0.0,
+        asicVoltage: Double = 0.0,
+        measuredVoltage: Double = 0.0,
+        frequency: Double = 0.0,
+        sharesAccepted: Int = 0,
+        sharesRejected: Int = 0,
+        poolURL: String? = nil,
+        hostname: String? = nil
+    ) {
+        self.hashrate = hashrate
+        self.expectedHashrate = expectedHashrate
+        self.temperature = temperature
+        self.power = power
+        self.uptime = uptime
+        self.fanSpeedPercent = fanSpeedPercent
+        self.timestamp = timestamp
+        self.bestDifficulty = bestDifficulty
+        self.inputVoltage = inputVoltage
+        self.asicVoltage = asicVoltage
+        self.measuredVoltage = measuredVoltage
+        self.frequency = frequency
+        self.sharesAccepted = sharesAccepted
+        self.sharesRejected = sharesRejected
+        self.poolURL = poolURL
+        self.hostname = hostname
+    }
+
+    init(from systemInfo: SystemInfoDTO) {
+        self.init(
+            hashrate: systemInfo.hashRate ?? 0.0,
+            expectedHashrate: 0.0,
+            temperature: systemInfo.temp ?? 0.0,
+            power: systemInfo.power ?? 0.0,
+            uptime: TimeInterval(systemInfo.uptimeSeconds ?? 0),
+            fanSpeedPercent: systemInfo.fanspeed ?? 0,
+            timestamp: Date(),
+            bestDifficulty: DeviceMetrics.parseBestDifficultyInMillions(systemInfo.bestDiff),
+            inputVoltage: systemInfo.voltage ?? 0.0,
+            asicVoltage: Double(systemInfo.coreVoltageActual ?? 0),
+            measuredVoltage: systemInfo.voltage ?? 0.0,
+            frequency: Double(systemInfo.frequency ?? 0),
+            sharesAccepted: systemInfo.sharesAccepted ?? 0,
+            sharesRejected: systemInfo.sharesRejected ?? 0,
+            poolURL: systemInfo.stratumURL,
+            hostname: systemInfo.hostname
+        )
+    }
+
     static var placeholder: DeviceMetrics {
         DeviceMetrics(
             hashrate: 580.5,
@@ -48,5 +105,35 @@ struct DeviceMetrics {
             uptime: 86400 * 3 + 3600 * 5,
             fanSpeedPercent: 85
         )
+    }
+}
+
+// MARK: - Utilities
+extension DeviceMetrics {
+    // Converts strings like "598.7M", "2.3G", "4,070,000 T" to a Double representing millions (M)
+    fileprivate static func parseBestDifficultyInMillions(_ diffString: String) -> Double {
+        let trimmed = diffString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return 0.0 }
+
+        // Map suffix to multiplier in terms of M (millions)
+        let multipliersInM: [Character: Double] = [
+            "K": 0.001,
+            "M": 1.0,
+            "G": 1_000.0,
+            "T": 1_000_000.0,
+            "P": 1_000_000_000.0,
+        ]
+
+        var numericPart = trimmed
+        var multiplier: Double = 1.0
+
+        if let last = trimmed.last, let mult = multipliersInM[last.uppercased().first ?? last] {
+            multiplier = mult
+            numericPart = String(trimmed.dropLast())
+        }
+
+        let cleaned = numericPart.replacingOccurrences(of: ",", with: "")
+        guard let value = Double(cleaned) else { return 0.0 }
+        return value * multiplier
     }
 }

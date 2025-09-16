@@ -7,7 +7,6 @@ import SwiftUI
 @MainActor
 final class DashboardViewModel: ObservableObject {
     @Published private(set) var currentMetrics = DeviceMetrics()
-    @Published private(set) var isLoading = false
     @Published var showErrorAlert = false
     @Published var errorMessage = ""
     @Published var errorDeviceInfo = ""
@@ -43,9 +42,9 @@ final class DashboardViewModel: ObservableObject {
         formatter.unitsStyle = .abbreviated
 
         let timeInterval = max(0, currentMetrics.uptime)
-        
+
         let formattedString = formatter.string(from: TimeInterval(timeInterval)) ?? "0m"
-                
+
         return formattedString
     }
 
@@ -85,13 +84,32 @@ final class DashboardViewModel: ObservableObject {
                     }
                 } else {
                     await MainActor.run {
-                        self.pollingTask?.cancel()
                         self.connectionState = .disconnected
                     }
                 }
             }
         }
-        networkMonitor?.start(queue: DispatchQueue.global(qos: .background))
+        networkMonitor?.start(queue: DispatchQueue.global())
+    }
+
+    private func initializeDeviceTracking() {
+        // Subscribe to changes in the selected IP address
+        NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                Task { await self.handleDeviceChange() }
+            }
+            .store(in: &cancellables)
+    }
+
+    private func handleDeviceChange() async {
+        let sharedDefaults = UserDefaults(suiteName: "group.matthewramsden.traxe")
+        let newDeviceId = sharedDefaults?.string(forKey: "bitaxeIPAddress")
+
+        if newDeviceId != currentDeviceId {
+            currentDeviceId = newDeviceId
+            await connect()
+        }
     }
 
     func connect() async {
@@ -99,223 +117,102 @@ final class DashboardViewModel: ObservableObject {
         isConnecting = true
         await MainActor.run {
             self.connectionState = .connecting
-            self.isLoading = true
         }
 
-        // Check for device changes
-        let suiteName = "group.matthewramsden.traxe"
-        if let sharedDefaults = UserDefaults(suiteName: suiteName),
-            let deviceId = sharedDefaults.string(forKey: "bitaxeIPAddress"),
-            deviceId != currentDeviceId
-        {
-            startDeviceSession(deviceId: deviceId)
+        let sharedDefaults = UserDefaults(suiteName: "group.matthewramsden.traxe")
+        currentDeviceId = sharedDefaults?.string(forKey: "bitaxeIPAddress")
+
+        guard let deviceId = currentDeviceId, !deviceId.isEmpty else {
+            await MainActor.run {
+                self.connectionState = .disconnected
+                self.errorMessage = "No device IP address configured"
+            }
+            isConnecting = false
+            return
         }
 
         do {
-            let systemInfo = try await networkService.fetchSystemInfo()
+            let info = try await networkService.fetchSystemInfo(ipAddressOverride: deviceId)
+            let metrics = DeviceMetrics(from: info)
 
-            try? await Task.sleep(nanoseconds: 200_000_000)
-
-            updateMetricsFromSystemInfo(systemInfo)
             await MainActor.run {
-                self.initialFetchComplete = true
+                self.currentMetrics = metrics
+                self.errorMessage = ""
+                self.errorDeviceInfo = ""
                 self.connectionState = .connected
                 self.startPolling()
             }
         } catch {
-            handleError(error)
+            let (message, deviceInfo) = handleConnectionError(error, deviceId: deviceId)
             await MainActor.run {
                 self.connectionState = .disconnected
+                self.errorMessage = message
+                self.errorDeviceInfo = deviceInfo
+                self.showErrorAlert = true
             }
         }
 
-        await MainActor.run {
-            self.isLoading = false
-            self.isConnecting = false
-        }
+        isConnecting = false
     }
 
-    func stopPolling() {
+    private func handleConnectionError(_ error: Error, deviceId: String) -> (
+        message: String, deviceInfo: String
+    ) {
+        let message =
+            "Failed to connect to device at \(deviceId). Please check the IP address and network connection."
+        let deviceInfo = "Device: \(deviceId)\nError: \(error.localizedDescription)"
+        return (message, deviceInfo)
+    }
+
+    func disconnect() {
+        connectionState = .disconnected
         pollingTask?.cancel()
         pollingTask = nil
-    }
-
-    func startPollingIfConnected() {
-        if connectionState == .connected {
-            startPolling()
-        }
     }
 
     private func startPolling() {
         pollingTask?.cancel()
         pollingTask = Task {
-            do {
-                while !Task.isCancelled {
-                    do {
-                        let systemInfo = try await networkService.fetchSystemInfo()
-                        updateMetricsFromSystemInfo(systemInfo)
-                        fetchHistoricalData(timeRange: .lastHour)
-                        try await Task.sleep(nanoseconds: 5_000_000_000)
-                    } catch {
-                        if error is CancellationError {
-                            throw error
-                        }
+            while !Task.isCancelled && connectionState == .connected {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)  // 5 seconds
 
-                        let currentState = await MainActor.run { self.connectionState }
-                        if let networkError = error as? NetworkError,
-                            case .invalidURL = networkError,
-                            currentState == .connected
-                        {
-                            try? await Task.sleep(nanoseconds: 1_000_000_000)
-                            continue
-                        } else {
-                            handleError(error)
-                            await MainActor.run { self.connectionState = .disconnected }
-                            return
+                guard !Task.isCancelled else { continue }
+
+                let deviceId = await MainActor.run { self.currentDeviceId }
+                guard let deviceId = deviceId, !deviceId.isEmpty else { continue }
+
+                do {
+                    let info = try await networkService.fetchSystemInfo(ipAddressOverride: deviceId)
+                    let metrics = DeviceMetrics(from: info)
+
+                    await MainActor.run {
+                        self.currentMetrics = metrics
+                        self.errorMessage = ""
+                        self.errorDeviceInfo = ""
+
+                        if !self.initialFetchComplete {
+                            self.initialFetchComplete = true
+                        }
+                    }
+
+                    await storeSystemInfo(info)
+
+                } catch {
+                    if !Task.isCancelled {
+                        let (message, deviceInfo) = handleConnectionError(error, deviceId: deviceId)
+                        await MainActor.run {
+                            self.errorMessage = message
+                            self.errorDeviceInfo = deviceInfo
+                            self.connectionState = .disconnected
                         }
                     }
                 }
-            } catch {
-                if error is CancellationError {
-                    return
-                }
-                handleError(error)
-                await MainActor.run {
-                    self.connectionState = .disconnected
-                }
             }
         }
     }
 
-    @MainActor
-    func connectIfNeeded() async {
-        if connectionState == .disconnected {
-            await connect()
-        }
-    }
-
-    func refreshData() async {
-        pollingTask?.cancel()
-        pollingTask = nil
-
-        await fetchInitialData()
-        fetchHistoricalData(timeRange: .lastHour)
-
-        if connectionState == .connected {
-            startPolling()
-        }
-    }
-
-    func fetchHistoricalData(timeRange: TimeRange) {
-        Task {
-            do {
-                guard let deviceId = currentDeviceId else {
-                    await MainActor.run { historicalData = [] }
-                    return
-                }
-
-                let startTime = timeRange.dateRange
-                let ranges = getDeviceTimeRanges().filter { $0.deviceId == deviceId }
-
-                let descriptor = FetchDescriptor<HistoricalDataPoint>(
-                    predicate: #Predicate<HistoricalDataPoint> { $0.timestamp >= startTime },
-                    sortBy: [SortDescriptor(\HistoricalDataPoint.timestamp)]
-                )
-                let allData = try modelContext.fetch(descriptor)
-
-                // Filter by device time ranges
-                let filteredData = allData.filter { dataPoint in
-                    ranges.contains { range in range.contains(dataPoint.timestamp) }
-                }
-
-                await MainActor.run { historicalData = filteredData }
-            } catch {
-                handleError(error)
-            }
-        }
-    }
-
-    private func fetchInitialData() async {
-        guard !isLoading else { return }
-
-        isLoading = true
-        if !initialFetchComplete {
-        }
-
-        do {
-            let systemInfo = try await networkService.fetchSystemInfo()
-            updateMetricsFromSystemInfo(systemInfo)
-            initialFetchComplete = true
-            if !initialFetchComplete {
-            }
-        } catch {
-            handleError(error)
-            if !initialFetchComplete {
-                await MainActor.run {
-                    self.connectionState = .disconnected
-                }
-            }
-        }
-
-        isLoading = false
-    }
-
-    private func updateMetricsFromSystemInfo(_ info: SystemInfoDTO) {
-        let bestDiffString = info.bestDiff.trimmingCharacters(in: .whitespacesAndNewlines)
-        var rawBestDiffValue: Double = 0.0
-
-        if !bestDiffString.isEmpty {
-            let lastChar = bestDiffString.last!
-            var numericPartString = bestDiffString
-            var multiplier: Double = 1.0
-
-            if lastChar.isLetter {
-                numericPartString = String(bestDiffString.dropLast())
-                switch lastChar.uppercased() {
-                case "K": multiplier = 1_000.0
-                case "M": multiplier = 1_000_000.0
-                case "G": multiplier = 1_000_000_000.0
-                case "T": multiplier = 1_000_000_000_000.0
-                case "P": multiplier = 1_000_000_000_000_000.0
-                default:
-                    numericPartString = bestDiffString
-                    multiplier = 1.0
-                }
-            }
-
-            // Remove commas from numeric part before parsing
-            let cleanedNumericString = numericPartString.replacingOccurrences(of: ",", with: "")
-            if let numericValue = Double(cleanedNumericString) {
-                // Convert the raw display value to the actual base value
-                // E.g., "4,070,000 T" should become 4.07 (in millions base unit)
-                rawBestDiffValue = numericValue / 1_000_000.0 * multiplier
-            } else {
-            }
-        } else {
-        }
-
-        let bestDiffValueInM = rawBestDiffValue
-
-        let uptimeFromAPI = info.uptime ?? 0
-        let uptimeSecondsFromAPI = info.uptimeSeconds ?? 0
-        
-        let metrics = DeviceMetrics(
-            hashrate: info.hashrate ?? 0.0,
-            expectedHashrate: info.expectedHashrate ?? 0.0,
-            temperature: info.temperature ?? 0.0,
-            power: info.power ?? 0.0,
-            uptime: TimeInterval(info.uptime ?? 0),
-            fanSpeedPercent: info.fanPercent ?? 0,
-            bestDifficulty: bestDiffValueInM,
-            inputVoltage: (info.voltage ?? 0.0) / 1000.0,
-            asicVoltage: Double(info.coreVoltage ?? 0) / 1000.0,
-            measuredVoltage: Double(info.coreVoltageActual ?? 0) / 1000.0,
-            frequency: Double(info.frequency ?? 0),
-            sharesAccepted: info.sharesAccepted ?? 0,
-            sharesRejected: info.sharesRejected ?? 0
-        )
-
-        currentMetrics = metrics
+    private func storeSystemInfo(_ info: SystemInfoDTO) async {
+        let metrics = DeviceMetrics(from: info)
         saveHistoricalData(metrics: metrics)
     }
 
@@ -323,132 +220,72 @@ final class DashboardViewModel: ObservableObject {
         let dataPoint = HistoricalDataPoint(
             timestamp: Date(),
             hashrate: metrics.hashrate,
-            temperature: metrics.temperature
+            temperature: metrics.temperature,
+            deviceId: currentDeviceId
         )
         modelContext.insert(dataPoint)
 
         Task {
             do {
-                let oldDate = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
-                let descriptor = FetchDescriptor<HistoricalDataPoint>(
-                    predicate: #Predicate<HistoricalDataPoint> { $0.timestamp < oldDate }
-                )
-                let oldPoints = try modelContext.fetch(descriptor)
-                oldPoints.forEach { modelContext.delete($0) }
+                try modelContext.save()
             } catch {
+            }
+        }
 
+        // Update in-memory series for the current device so charts refresh immediately
+        let device = currentDeviceId
+        Task { @MainActor in
+            guard device == self.currentDeviceId else { return }
+            // Ensure ascending order; append if newer than last, otherwise insert in order
+            if let last = self.historicalData.last, last.timestamp <= dataPoint.timestamp {
+                self.historicalData.append(dataPoint)
+            } else {
+                let insertIndex =
+                    self.historicalData.firstIndex { $0.timestamp > dataPoint.timestamp }
+                    ?? self.historicalData.count
+                self.historicalData.insert(dataPoint, at: insertIndex)
+            }
+            // Keep only the most recent 100 points
+            if self.historicalData.count > 100 {
+                let overflow = self.historicalData.count - 100
+                self.historicalData.removeFirst(overflow)
             }
         }
     }
 
-    private func handleError(_ error: Error) {
-        if error is CancellationError {
-            return
-        }
+    func loadHistoricalData() {
+        let device = currentDeviceId
+        let descriptor = FetchDescriptor<HistoricalDataPoint>(
+            predicate: #Predicate<HistoricalDataPoint> { $0.deviceId == device },
+            // Ascending chronological order (oldest -> newest) for chart correctness
+            sortBy: [SortDescriptor(\.timestamp)]
+        )
 
-        // For initial connection errors, we want to process them even if connecting/loading
-        let isInitialConnectionError = connectionState == .connecting && !initialFetchComplete
-
-        let shouldDisconnect = true
-        let message: String
-        var deviceInfo = ""
-
-        if let networkError = error as? NetworkError {
-            message = networkError.localizedDescription
-
-            // Extract device info from decoding errors
-            if case .decodingError(let decodingError, let jsonData) = networkError,
-                let data = jsonData,
-                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-            {
-
-                // Extract device info
-                let deviceModel =
-                    json["deviceModel"] as? String ?? json["hostname"] as? String
-                    ?? "Unknown Device"
-                let version = json["version"] as? String ?? "Unknown Version"
-                deviceInfo = "Device: \(deviceModel) \(version)"
-
-                // Don't try to analyze problem fields - it gives false positives
-            }
-        } else {
-            message = error.localizedDescription
-        }
-
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.errorDeviceInfo = deviceInfo
-            if shouldDisconnect {
-                if self.connectionState != .disconnected {
-                    self.connectionState = .disconnected
-                    self.pollingTask?.cancel()
-                }
-            }
-            self.errorMessage = message
-            self.showErrorAlert = true
+        do {
+            let allData = try modelContext.fetch(descriptor)
+            // Keep only the most recent 100 while preserving ascending order
+            historicalData = Array(allData.suffix(100))
+        } catch {
         }
     }
 
-    private func initializeDeviceTracking() {
-        let suiteName = "group.matthewramsden.traxe"
-        guard let sharedDefaults = UserDefaults(suiteName: suiteName),
-            let deviceId = sharedDefaults.string(forKey: "bitaxeIPAddress")
-        else { return }
-
-        currentDeviceId = deviceId
-        startDeviceSession(deviceId: deviceId)
-    }
-
-    private func startDeviceSession(deviceId: String) {
-        let suiteName = "group.matthewramsden.traxe"
-        guard let sharedDefaults = UserDefaults(suiteName: suiteName) else { return }
-
-        // Close current session if different device
-        if let currentId = currentDeviceId, currentId != deviceId {
-            endCurrentDeviceSession()
+    // Preload a larger window for first-render trend context
+    func preloadHistoricalData() {
+        let now = Date()
+        let dayAgo = Calendar.current.date(byAdding: .day, value: -1, to: now) ?? now
+        let device = currentDeviceId
+        let predicate = #Predicate<HistoricalDataPoint> { data in
+            data.timestamp >= dayAgo && data.deviceId == device
         }
-
-        currentDeviceId = deviceId
-
-        // Start new session for this device
-        var ranges = getDeviceTimeRanges()
-        ranges.append(DeviceTimeRange(deviceId: deviceId, startTime: Date(), endTime: nil))
-        saveDeviceTimeRanges(ranges)
-    }
-
-    private func endCurrentDeviceSession() {
-        guard let deviceId = currentDeviceId else { return }
-
-        var ranges = getDeviceTimeRanges()
-        if let lastIndex = ranges.lastIndex(where: { $0.deviceId == deviceId && $0.endTime == nil })
-        {
-            ranges[lastIndex] = DeviceTimeRange(
-                deviceId: deviceId,
-                startTime: ranges[lastIndex].startTime,
-                endTime: Date()
-            )
-            saveDeviceTimeRanges(ranges)
+        let descriptor = FetchDescriptor<HistoricalDataPoint>(
+            predicate: predicate,
+            sortBy: [SortDescriptor(\.timestamp)]
+        )
+        do {
+            let points = try modelContext.fetch(descriptor)
+            historicalData = points
+        } catch {
         }
-    }
-
-    private func getDeviceTimeRanges() -> [DeviceTimeRange] {
-        let suiteName = "group.matthewramsden.traxe"
-        guard let sharedDefaults = UserDefaults(suiteName: suiteName),
-            let data = sharedDefaults.data(forKey: "deviceTimeRanges"),
-            let ranges = try? JSONDecoder().decode([DeviceTimeRange].self, from: data)
-        else {
-            return []
-        }
-        return ranges
-    }
-
-    private func saveDeviceTimeRanges(_ ranges: [DeviceTimeRange]) {
-        let suiteName = "group.matthewramsden.traxe"
-        guard let sharedDefaults = UserDefaults(suiteName: suiteName),
-            let data = try? JSONEncoder().encode(ranges)
-        else { return }
-
-        sharedDefaults.set(data, forKey: "deviceTimeRanges")
     }
 
     deinit {
@@ -456,8 +293,14 @@ final class DashboardViewModel: ObservableObject {
         networkMonitor?.cancel()
     }
 
-    func setError(_ message: String) {
-        errorMessage = message
-        showErrorAlert = true
+#if DEBUG
+    // Preview helper: seed internal state without networking
+    func seedPreviewData(deviceId: String, metrics: DeviceMetrics, historical: [HistoricalDataPoint]) {
+        self.currentDeviceId = deviceId
+        self.currentMetrics = metrics
+        self.historicalData = historical
+        self.connectionState = .connected
+        self.initialFetchComplete = true
     }
+#endif
 }

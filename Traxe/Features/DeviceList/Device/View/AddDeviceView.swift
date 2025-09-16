@@ -19,77 +19,89 @@ struct AddDeviceView: View {
     }
 
     var body: some View {
-        NavigationView {
-            VStack(spacing: 20) {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(.tertiarySystemBackground),
+                    Color(.secondarySystemBackground),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
 
-                manualEntrySection()
-                    .padding(.top, 8)
+            NavigationView {
+                VStack(spacing: 20) {
 
-                HStack {
-                    VStack { Divider() }
-                    Text("Or".uppercased())
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 12)
-                        .font(.caption)
-                    VStack { Divider() }
+                    manualEntrySection()
+                        .padding(.top, 8)
+
+                    HStack {
+                        VStack { Divider() }
+                        Text("Or".uppercased())
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 12)
+                            .font(.caption)
+                        VStack { Divider() }
+                    }
+                    .padding(.vertical, 8)
+
+                    scanSection()
+
+                    if !viewModel.discoveredDevices.isEmpty {
+                        discoveredDevicesSection()
+                    }
+
+                    Spacer()
                 }
-                .padding(.vertical, 8)
-
-                scanSection()
-
-                if !viewModel.discoveredDevices.isEmpty {
-                    discoveredDevicesSection()
+                .padding()
+                .onTapGesture {
+                    UIApplication.shared.sendAction(
+                        #selector(UIResponder.resignFirstResponder),
+                        to: nil,
+                        from: nil,
+                        for: nil
+                    )
                 }
-
-                Spacer()
-            }
-            .padding()
-            .onTapGesture {
-                UIApplication.shared.sendAction(
-                    #selector(UIResponder.resignFirstResponder),
-                    to: nil,
-                    from: nil,
-                    for: nil
-                )
-            }
-            .navigationTitle("Add Device")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
+                .navigationTitle("Add Device")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button("Cancel") {
+                            dismiss()
+                        }
+                    }
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        if isSaving {
+                            ProgressView()
+                        } else {
+                            Button("Add", action: addDevice)
+                                .disabled(!canAddDevice)
+                        }
                     }
                 }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    if isSaving {
-                        ProgressView()
-                    } else {
-                        Button("Add", action: addDevice)
-                            .disabled(!canAddDevice)
-                    }
+                .alert("Error Adding Device", isPresented: $showingErrorAlert) {
+                    Button("OK") {}
+                } message: {
+                    Text(errorMessage)
                 }
-            }
-            .alert("Error Adding Device", isPresented: $showingErrorAlert) {
-                Button("OK") {}
-            } message: {
-                Text(errorMessage)
-            }
-            .alert("Scan Error", isPresented: $viewModel.showErrorAlert) {
-                Button("OK") {}
-            } message: {
-                Text(viewModel.errorMessage)
-            }
-            .alert("Local Network Access Required", isPresented: $showSettingsAlert) {
-                Button("Cancel", role: .cancel) {}
-                Button("Open Settings") {
-                    if let url = URL(string: UIApplication.openSettingsURLString) {
-                        UIApplication.shared.open(url)
-                    }
+                .alert("Scan Error", isPresented: $viewModel.showErrorAlert) {
+                    Button("OK") {}
+                } message: {
+                    Text(viewModel.errorMessage)
                 }
-            } message: {
-                Text(
-                    "Traxe needs access to your local network to find devices. Please enable it in Settings."
-                )
+                .alert("Local Network Access Required", isPresented: $showSettingsAlert) {
+                    Button("Cancel", role: .cancel) {}
+                    Button("Open Settings") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+                    }
+                } message: {
+                    Text(
+                        "Traxe needs access to your local network to find devices. Please enable it in Settings."
+                    )
+                }
             }
         }
     }
@@ -108,23 +120,47 @@ struct AddDeviceView: View {
             if viewModel.isScanning {
                 ProgressView()
             } else {
-                Button("Scan Network") {
-                    UIApplication.shared.sendAction(
-                        #selector(UIResponder.resignFirstResponder),
-                        to: nil,
-                        from: nil,
-                        for: nil
-                    )
-                    Task {
-                        let result = await viewModel.startScan()
-                        if result == .permissionDenied {
-                            self.showSettingsAlert = true
+
+                if #available(iOS 26.0, *) {
+                    Button("Scan Network") {
+                        UIApplication.shared.sendAction(
+                            #selector(UIResponder.resignFirstResponder),
+                            to: nil,
+                            from: nil,
+                            for: nil
+                        )
+                        Task {
+                            let result = await viewModel.startScan()
+                            if result == .permissionDenied {
+                                self.showSettingsAlert = true
+                            }
                         }
                     }
+                    .buttonStyle(.glassProminent)
+                    .tint(Color.traxeGold)
+                    .disabled(viewModel.isScanning)
+
+                } else {
+                    Button("Scan Network") {
+                        UIApplication.shared.sendAction(
+                            #selector(UIResponder.resignFirstResponder),
+                            to: nil,
+                            from: nil,
+                            for: nil
+                        )
+                        Task {
+                            let result = await viewModel.startScan()
+                            if result == .permissionDenied {
+                                self.showSettingsAlert = true
+                            }
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.traxeGold)
+                    .disabled(viewModel.isScanning)
+
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(Color.traxeGold)
-                .disabled(viewModel.isScanning)
+
             }
         }
     }
@@ -214,7 +250,7 @@ struct AddDeviceView: View {
                     }
             }
             .padding()
-            .background(Color(.systemGray6))
+            .background(.secondary)
             .cornerRadius(10)
         }
     }

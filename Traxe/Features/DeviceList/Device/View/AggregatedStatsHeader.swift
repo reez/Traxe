@@ -4,51 +4,119 @@ struct AggregatedStatsHeader: View {
     @ObservedObject var viewModel: DeviceListViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 40) {
-            StatItem(
-                label: "Hash Rate",
-                value: viewModel.totalHashRate,
-                unit: "TH/s",
-                isLoading: viewModel.isLoadingAggregatedStats || viewModel.totalHashRate == 0.0,
-                name: "bolt.fill",
-                onRefresh: {
-                    await viewModel.updateAggregatedStats()
-                }
-            )
+        VStack(alignment: .leading, spacing: 0) {
+            // AI Summary (plain text)
+            if AIFeatureFlags.isAvailable,
+                AIFeatureFlags.isEnabledByUser,
+                viewModel.savedDevices.count > 1
+            {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Summary")
+                        .font(.title2)
+                        .fontWeight(.semibold)
 
-            LazyVGrid(
-                columns: Array(
-                    repeating: GridItem(.flexible(), spacing: 0, alignment: .leading),
-                    count: 3
-                ),
-                alignment: .leading,
-                spacing: 40
-            ) {
-                ForEach(Array(viewModel.savedDevices.prefix(9).enumerated()), id: \.element.id) {
-                    index,
-                    device in
-                    let metrics = viewModel.deviceMetrics[device.ipAddress]
-                    let hashRate = metrics?.hashrate ?? 0.0
-                    let displayValue = hashRate >= 1000 ? hashRate / 1000 : hashRate
-                    let unit = hashRate >= 1000 ? "TH/S" : "GH/S"
-
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(metrics != nil ? String(format: "%.1f", displayValue) : "---")
-                            .font(.system(size: 32, weight: .semibold))
-                            .fontDesign(.rounded)
-                            .redacted(
-                                reason: viewModel.isLoadingAggregatedStats || metrics == nil
-                                    ? .placeholder : []
-                            )
-
-                        Text("\(unit)")
-                            .font(.caption)
+                    // Generate from cached metrics if not yet present
+                    if let fleetSummary = viewModel.fleetAISummary {
+                        // Highlight value tokens (hash rate, temps, watts, percents)
+                        let highlighted = fleetSummary.content.highlightingValues(color: .traxeGold)
+                        Text(highlighted)
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .contentTransition(.interpolate)
+                            .animation(.easeInOut(duration: 0.4), value: fleetSummary.content)
+                    } else {
+                        // Placeholder text to avoid layout jump on first load
+                        Text("Generating insights for your miners…")
+                            .font(.body)
+                            .multilineTextAlignment(.leading)
                             .foregroundStyle(.secondary)
                     }
                 }
+                .padding(.bottom, 50)
             }
+
+            Text("Total Hash Rate")
+                .font(.title2)
+                .fontWeight(.semibold)
+                .padding(.bottom, 16)
+
+            VStack(alignment: .leading, spacing: 8) {
+                // Keep the UI calm during refresh: no inline spinner here.
+                StatItem(
+                    label: "Hash Rate",
+                    value: viewModel.totalHashRate,
+                    unit: "TH/s",
+                    isLoading: false,
+                    name: "bolt.fill"
+                )
+
+                //                Text("Updated: \(viewModel.lastDataUpdate, style: .time)")
+                //                    .font(.caption2)
+                //                    .foregroundStyle(.tertiary)
+                //                    .padding(.leading, 16)
+            }
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                if #available(iOS 26.0, *) {
+                    ConcentricRectangle(corners: .concentric(minimum: 20))
+                        .fill(Color(.secondarySystemBackground))
+                    //                        .fill(
+                    //                            LinearGradient(
+                    //                                colors: [
+                    //                                    Color(.tertiarySystemBackground),
+                    //                                    Color(.secondarySystemBackground)
+                    //                                ],
+                    //                                startPoint: .bottom,
+                    //                                endPoint: .top
+                    //                            )
+                    //                        )
+                    //                        .overlay(
+                    //                            ConcentricRectangle(corners: .concentric(minimum: 20))
+                    //                                .fill(
+                    //                                    LinearGradient(
+                    //                                        colors: [
+                    //                                            Color.traxeGold.opacity(0.08),
+                    //                                            Color.clear
+                    //                                        ],
+                    //                                        startPoint: .bottom,
+                    //                                        endPoint: .top
+                    //                                    )
+                    //                                )
+                    //                        )
+                } else {
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(Color(.secondarySystemBackground))
+                    //                        .fill(
+                    //                            LinearGradient(
+                    //                                colors: [
+                    //                                    Color(.tertiarySystemBackground),
+                    //                                    Color(.secondarySystemBackground)
+                    //                                ],
+                    //                                startPoint: .bottom,
+                    //                                endPoint: .top
+                    //                            )
+                    //                        )
+                    //                        .overlay(
+                    //                            RoundedRectangle(cornerRadius: 20)
+                    //                                .fill(
+                    //                                    LinearGradient(
+                    //                                        colors: [
+                    //                                            Color.traxeGold.opacity(0.08),
+                    //                                            Color.clear
+                    //                                        ],
+                    //                                        startPoint: .bottom,
+                    //                                        endPoint: .top
+                    //                                    )
+                    //                                )
+                    //                        )
+                }
+            }
+
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
     }
 }
