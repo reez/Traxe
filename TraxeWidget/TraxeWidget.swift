@@ -472,11 +472,12 @@ struct TraxeWidget: Widget {
                                     Color(.systemBackground),
                                 ]
                                 : [
-                                    Color(.systemBackground),
+//                                    Color(.systemBackground),
                                     Color(.systemGray3),
+                                    Color(.systemBackground),
                                 ],
-                            startPoint: .top,
-                            endPoint: .bottom
+                            startPoint: .bottom,
+                            endPoint: .top
                         )
                     }
             } else {
@@ -490,11 +491,12 @@ struct TraxeWidget: Widget {
                                     Color(.systemBackground),
                                 ]
                                 : [
-                                    Color(.systemBackground),
+//                                    Color(.systemBackground),
                                     Color(.systemGray3),
+                                    Color(.systemBackground),
                                 ],
-                            startPoint: .top,
-                            endPoint: .bottom
+                            startPoint: .bottom,
+                            endPoint: .top
                         )
                     )
             }
