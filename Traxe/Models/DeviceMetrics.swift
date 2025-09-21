@@ -76,6 +76,25 @@ struct DeviceMetrics {
     }
 
     init(from systemInfo: SystemInfoDTO) {
+        let inputVoltage = Self.normalizeVoltage(
+            systemInfo.voltage ?? 0.0,
+            threshold: 1_000.0  // allow higher-voltage rigs to report in volts
+        )
+        let asicVoltage = Self.normalizeVoltage(
+            Double(systemInfo.coreVoltage ?? systemInfo.coreVoltageActual ?? 0),
+            threshold: 200.0  // core voltages are typically ~1,000 mV
+        )
+        let measuredVoltage = {
+            let rawMeasured = Double(systemInfo.coreVoltageActual ?? 0)
+            if rawMeasured > 0 {
+                return Self.normalizeVoltage(rawMeasured, threshold: 200.0)
+            }
+            if asicVoltage > 0 {
+                return asicVoltage
+            }
+            return inputVoltage
+        }()
+
         self.init(
             hashrate: systemInfo.hashRate ?? 0.0,
             expectedHashrate: 0.0,
@@ -85,9 +104,9 @@ struct DeviceMetrics {
             fanSpeedPercent: systemInfo.fanspeed ?? 0,
             timestamp: Date(),
             bestDifficulty: DeviceMetrics.parseBestDifficultyInMillions(systemInfo.bestDiff),
-            inputVoltage: systemInfo.voltage ?? 0.0,
-            asicVoltage: Double(systemInfo.coreVoltageActual ?? 0),
-            measuredVoltage: systemInfo.voltage ?? 0.0,
+            inputVoltage: inputVoltage,
+            asicVoltage: asicVoltage,
+            measuredVoltage: measuredVoltage,
             frequency: Double(systemInfo.frequency ?? 0),
             sharesAccepted: systemInfo.sharesAccepted ?? 0,
             sharesRejected: systemInfo.sharesRejected ?? 0,
@@ -110,6 +129,16 @@ struct DeviceMetrics {
 
 // MARK: - Utilities
 extension DeviceMetrics {
+    private static func normalizeVoltage(
+        _ rawValue: Double,
+        threshold: Double = 250.0
+    ) -> Double {
+        guard rawValue != 0 else { return 0 }
+        // Anything this high is assumed to still be in mV; tweak per data source if needed
+        let divisor = rawValue >= threshold ? 1000.0 : 1.0
+        return rawValue / divisor
+    }
+
     // Converts strings like "598.7M", "2.3G", "4,070,000 T" to a Double representing millions (M)
     fileprivate static func parseBestDifficultyInMillions(_ diffString: String) -> Double {
         let trimmed = diffString.trimmingCharacters(in: .whitespacesAndNewlines)

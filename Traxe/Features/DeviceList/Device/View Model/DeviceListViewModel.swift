@@ -35,8 +35,9 @@ final class DeviceListViewModel: ObservableObject {
         }
         loadDevices()
         loadCacheAndComputeTotals()
-        // If a cached fleet summary exists (e.g., in previews), surface it immediately
-        if let cached = loadCachedFleetSummary() {
+        // If we couldn't build a summary from cached metrics (e.g., cache is empty),
+        // fall back to the last persisted fleet summary so the section still has content.
+        if fleetAISummary == nil, let cached = loadCachedFleetSummary() {
             self.fleetAISummary = cached
         }
     }

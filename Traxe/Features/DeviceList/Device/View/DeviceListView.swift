@@ -121,6 +121,8 @@ struct DeviceListView: View {
                         .font(.title)
                         .fontWeight(.bold)
                         .fontDesign(.rounded)
+                        .contentTransition(.numericText())
+                        .animation(.spring, value: hashRate)
                         .redacted(reason: metrics == nil ? .placeholder : [])
                         .foregroundStyle(isReachable ? .primary : .secondary)
 
@@ -316,6 +318,13 @@ struct DeviceListView: View {
         }
         .onChange(of: scenePhase) { oldPhase, newPhase in
             if newPhase == .active {
+                Task {
+                    await viewModel.updateAggregatedStats()
+                }
+            }
+        }
+        .onChange(of: navigateToSummary) { wasNavigating, isNavigating in
+            if wasNavigating && !isNavigating {
                 Task {
                     await viewModel.updateAggregatedStats()
                 }
