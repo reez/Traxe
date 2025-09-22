@@ -250,7 +250,7 @@ struct AddDeviceView: View {
                     }
             }
             .padding()
-            .background(.secondary)
+            .background(Color(uiColor: .systemGray6))
             .cornerRadius(10)
         }
     }

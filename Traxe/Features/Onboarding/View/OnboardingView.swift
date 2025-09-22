@@ -251,7 +251,7 @@ struct OnboardingView: View {
                                     .autocapitalization(.none)
                             }
                             .padding()
-                            .background(.secondary)
+                            .background(Color(uiColor: .systemGray6))
                             .cornerRadius(10)
                             .padding(.horizontal)
 

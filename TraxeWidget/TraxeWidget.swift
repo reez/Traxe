@@ -1,6 +1,11 @@
 import SwiftUI
 import WidgetKit
 
+// Color extension for widget target
+extension Color {
+    static let traxeGold = Color(red: 218 / 255, green: 165 / 255, blue: 32 / 255)
+}
+
 // Minimal copy of the app's cached device metrics structure for the widget target
 // Stored under the same app group key so both app and widget stay in sync.
 private struct CachedDeviceMetrics: Codable {
@@ -351,7 +356,7 @@ struct TraxeWidgetEntryView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("HASH RATE".uppercased())
                         .font(.caption2)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Color.traxeGold)
                         .fontDesign(.rounded)
 
                     let (valueText, unitText) = Self.formatHashrate(entry.hashrate)
@@ -393,7 +398,7 @@ struct TraxeWidgetEntryView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("HASH RATE".uppercased())
                         .font(.caption2)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Color.traxeGold)
                         .fontDesign(.rounded)
 
                     let (valueText, unitText) = Self.formatHashrate(entry.hashrate)
@@ -465,39 +470,67 @@ struct TraxeWidget: Widget {
             if #available(iOS 17.0, *) {
                 TraxeWidgetEntryView(entry: entry)
                     .containerBackground(for: .widget) {
-                        LinearGradient(
-                            colors: colorScheme == .dark
-                                ? [
-                                    Color(.systemGray3),
-                                    Color(.systemBackground),
-                                ]
-                                : [
-//                                    Color(.systemBackground),
-                                    Color(.systemGray3),
-                                    Color(.systemBackground),
-                                ],
-                            startPoint: .bottom,
-                            endPoint: .top
-                        )
+//                        ZStack {
+//                            // Base layer - solid background
+//                            RoundedRectangle(cornerRadius: 20)
+//                                .fill(
+                                    LinearGradient(
+                                        colors: colorScheme == .dark
+                                            ? [
+                                                Color(.systemGray6),
+                                                Color(.systemGray5)
+                                            ]
+                                            : [
+                                                Color(.systemGray5),
+                                                Color(.systemGray4)
+                                            ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+//                                )
+//                                .shadow(color: .black.opac/*ity(0.1), radius: 8, x: 0, y: 4)*/
+                            
+                            // Simple glass layer on top
+//                            RoundedRectangle(cornerRadius: 20)
+//                                .fill(.ultraThinMaterial)
+//                                .overlay(
+//                                    RoundedRectangle(cornerRadius: 20)
+//                                        .stroke(.white.opacity(0.3), lineWidth: 1)
+//                                )
+//                        }
                     }
             } else {
                 TraxeWidgetEntryView(entry: entry)
                     .padding()
                     .background(
-                        LinearGradient(
-                            colors: colorScheme == .dark
-                                ? [
-                                    Color(.systemGray3),
-                                    Color(.systemBackground),
-                                ]
-                                : [
-//                                    Color(.systemBackground),
-                                    Color(.systemGray3),
-                                    Color(.systemBackground),
-                                ],
-                            startPoint: .bottom,
-                            endPoint: .top
-                        )
+                        ZStack {
+                            // Base layer - solid background
+                            RoundedRectangle(cornerRadius: 20)
+                                .fill(
+                                    LinearGradient(
+                                        colors: colorScheme == .dark
+                                            ? [
+                                                Color(.systemGray6),
+                                                Color(.systemGray5)
+                                            ]
+                                            : [
+                                                Color(.systemGray5),
+                                                Color(.systemGray4)
+                                            ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
+                            
+                            // Simple glass layer on top
+                            RoundedRectangle(cornerRadius: 20)
+                                .fill(.ultraThinMaterial)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 20)
+                                        .stroke(.white.opacity(0.3), lineWidth: 1)
+                                )
+                        }
                     )
             }
         }
