@@ -210,10 +210,12 @@ final class DeviceListViewModel: ObservableObject {
 
         // Apply fetched results on main actor
         var newReachables: Set<String> = []
+        var successfulFetchCount = 0
         for (ipAddress, metrics) in fetchedResults {
             if let metrics = metrics {
                 deviceMetrics[ipAddress] = metrics
                 newReachables.insert(ipAddress)
+                successfulFetchCount += 1
             }
         }
         // Atomically update reachable set to avoid mid-refresh greying
@@ -224,9 +226,11 @@ final class DeviceListViewModel: ObservableObject {
 
         // Save all current metrics to cache
         saveCacheFromCurrentMetrics()
-        let totalFreshHashrate = deviceMetrics.values.reduce(0.0) { $0 + $1.hashrate }
-
         // No need to regenerate summary here; computeTotals() already keeps it in sync
+
+        if successfulFetchCount > 0 {
+            WidgetCenter.shared.reloadTimelines(ofKind: "TraxeWidget")
+        }
     }
 
     private func saveCacheFromCurrentMetrics() {

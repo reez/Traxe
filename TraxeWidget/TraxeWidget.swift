@@ -121,7 +121,7 @@ struct Provider: TimelineProvider {
             }
 
             let currentDate = Date()
-            let refreshDate = Calendar.current.date(byAdding: .minute, value: 5, to: currentDate)!
+            let refreshDate = Calendar.current.date(byAdding: .minute, value: 10, to: currentDate)!
             let networkService = getNetworkService()
             // Load existing per-device cache (shared with the app)
             var perDeviceCache = loadDeviceMetricsCache()

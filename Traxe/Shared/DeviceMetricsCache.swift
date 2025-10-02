@@ -1,14 +1,14 @@
 import Foundation
 
 struct CachedDeviceMetrics: Codable {
-    let hashrate: Double
-    let power: Double?
-    let bestDifficulty: Double?
-    let hostname: String?
-    let poolURL: String?
+    var hashrate: Double
+    var power: Double?
+    var bestDifficulty: Double?
+    var hostname: String?
+    var poolURL: String?
     // Added: cache temperature (optional for backward compatibility)
-    let temperature: Double?
-    let lastUpdated: Date
+    var temperature: Double?
+    var lastUpdated: Date
 
     init(from metrics: DeviceMetrics) {
         self.hashrate = metrics.hashrate
