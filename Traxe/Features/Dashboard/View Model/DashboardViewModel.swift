@@ -61,6 +61,8 @@ final class DashboardViewModel: ObservableObject {
     private(set) var initialFetchComplete = false
     private var isConnecting = false
     private var currentDeviceId: String?
+    // Persist a rolling 30-day window per device so mining history covers roughly a month while staying bounded
+    private let historicalDataRetentionInterval: TimeInterval = 60 * 60 * 24 * 30
 
     init(
         networkService: NetworkService? = nil,
@@ -225,8 +227,11 @@ final class DashboardViewModel: ObservableObject {
         )
         modelContext.insert(dataPoint)
 
+        let selectedDeviceId = currentDeviceId
+        let retentionCutoff = Date(timeIntervalSinceNow: -historicalDataRetentionInterval)
         Task {
             do {
+                try pruneHistoricalData(for: selectedDeviceId, olderThan: retentionCutoff)
                 try modelContext.save()
             } catch {
             }
@@ -269,6 +274,29 @@ final class DashboardViewModel: ObservableObject {
         }
     }
 
+    private func pruneHistoricalData(for deviceId: String?, olderThan cutoff: Date) throws {
+        let predicate: Predicate<HistoricalDataPoint>
+
+        if let deviceId {
+            predicate = #Predicate<HistoricalDataPoint> { data in
+                data.deviceId == deviceId && data.timestamp < cutoff
+            }
+        } else {
+            predicate = #Predicate<HistoricalDataPoint> { data in
+                data.deviceId == nil && data.timestamp < cutoff
+            }
+        }
+
+        let descriptor = FetchDescriptor<HistoricalDataPoint>(predicate: predicate)
+        let staleEntries = try modelContext.fetch(descriptor)
+
+        guard !staleEntries.isEmpty else { return }
+
+        for entry in staleEntries {
+            modelContext.delete(entry)
+        }
+    }
+
     // Preload a larger window for first-render trend context
     func preloadHistoricalData() {
         let now = Date()
@@ -293,14 +321,18 @@ final class DashboardViewModel: ObservableObject {
         networkMonitor?.cancel()
     }
 
-#if DEBUG
-    // Preview helper: seed internal state without networking
-    func seedPreviewData(deviceId: String, metrics: DeviceMetrics, historical: [HistoricalDataPoint]) {
-        self.currentDeviceId = deviceId
-        self.currentMetrics = metrics
-        self.historicalData = historical
-        self.connectionState = .connected
-        self.initialFetchComplete = true
-    }
-#endif
+    #if DEBUG
+        // Preview helper: seed internal state without networking
+        func seedPreviewData(
+            deviceId: String,
+            metrics: DeviceMetrics,
+            historical: [HistoricalDataPoint]
+        ) {
+            self.currentDeviceId = deviceId
+            self.currentMetrics = metrics
+            self.historicalData = historical
+            self.connectionState = .connected
+            self.initialFetchComplete = true
+        }
+    #endif
 }
