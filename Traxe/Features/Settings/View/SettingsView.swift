@@ -68,9 +68,11 @@ struct SettingsView: View {
                     }
 
                     Section {
-                        NavigationLink("Advanced Settings") {
+                        NavigationLink("Configuration") {
                             AdvancedSettingsView(viewModel: viewModel)
                         }
+                    } header: {
+                        Text("Advanced")
                     }
 
                     Section {
