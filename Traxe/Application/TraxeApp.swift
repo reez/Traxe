@@ -36,6 +36,13 @@ struct TraxeApp: App {
 
         Purchases.logLevel = .error
         Purchases.configure(withAPIKey: "appl_qmpDjLonGDKmmzmItMjeuLZLYLj")
+        Task {
+            do {
+                try await Purchases.shared.syncPurchases()
+            } catch {
+                // Log and continue—syncPurchases failures aren’t fatal but help with debugging
+            }
+        }
 
         let modelContext = sharedModelContainer.mainContext
         _dashboardViewModel = StateObject(
