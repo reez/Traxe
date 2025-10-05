@@ -209,9 +209,18 @@ final class DeviceListViewModel: ObservableObject {
         }.value
 
         // Apply fetched results on main actor
+        let activeIPs = Set(savedDevices.map(\.ipAddress))
+        // Drop any cached metrics for devices that were removed mid-refresh so totals stay accurate
+        let orphanedIPs = deviceMetrics.keys.filter { !activeIPs.contains($0) }
+        for ip in orphanedIPs {
+            deviceMetrics.removeValue(forKey: ip)
+        }
+
         var newReachables: Set<String> = []
         var successfulFetchCount = 0
         for (ipAddress, metrics) in fetchedResults {
+            guard activeIPs.contains(ipAddress) else { continue }
+
             if let metrics = metrics {
                 deviceMetrics[ipAddress] = metrics
                 newReachables.insert(ipAddress)
