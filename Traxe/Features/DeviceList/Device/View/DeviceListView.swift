@@ -72,9 +72,19 @@ struct DeviceListView: View {
     private func deviceCardView(for device: SavedDevice, at index: Int) -> some View {
         let proIsActive = self.customerInfo?.entitlements["Pro"]?.isActive == true
         let miners5IsActive = self.customerInfo?.entitlements["Miners_5"]?.isActive == true
-        let isAccessible =
-            proIsActive || (miners5IsActive && index < 5)
-            || (!proIsActive && !miners5IsActive && index == 0)
+        let hasLoadedCustomerInfo = customerInfo != nil
+        let isAccessible: Bool
+
+        if !hasLoadedCustomerInfo {
+            // Until RevenueCat responds, leave devices reachable instead of showing a premature lock
+            isAccessible = true
+        } else if proIsActive {
+            isAccessible = true
+        } else if miners5IsActive {
+            isAccessible = index < 5
+        } else {
+            isAccessible = index == 0
+        }
 
         let metrics = viewModel.deviceMetrics[device.ipAddress]
         let hashRate = metrics?.hashrate ?? 0.0
@@ -450,20 +460,41 @@ struct DeviceListView: View {
 
     // Seed cached device metrics so cards and totals are populated (hashrate in GH/s)
     let cached: [String: CachedDeviceMetrics] = [
-        "192.168.1.101": CachedDeviceMetrics(from: DeviceMetrics(hashrate: 5100, temperature: 61, power: 600, hostname: "nerdqaxe++")),
-        "192.168.1.102": CachedDeviceMetrics(from: DeviceMetrics(hashrate: 721, temperature: 65, power: 620, hostname: "bitaxe")),
-        "192.168.1.103": CachedDeviceMetrics(from: DeviceMetrics(hashrate: 450, temperature: 68, power: 610, hostname: "octaxe")),
-        "192.168.1.104": CachedDeviceMetrics(from: DeviceMetrics(hashrate: 3800, temperature: 72, power: 620, hostname: "lucky")),
+        "192.168.1.101": CachedDeviceMetrics(
+            from: DeviceMetrics(hashrate: 5100, temperature: 61, power: 600, hostname: "nerdqaxe++")
+        ),
+        "192.168.1.102": CachedDeviceMetrics(
+            from: DeviceMetrics(hashrate: 721, temperature: 65, power: 620, hostname: "bitaxe")
+        ),
+        "192.168.1.103": CachedDeviceMetrics(
+            from: DeviceMetrics(hashrate: 450, temperature: 68, power: 610, hostname: "octaxe")
+        ),
+        "192.168.1.104": CachedDeviceMetrics(
+            from: DeviceMetrics(hashrate: 3800, temperature: 72, power: 620, hostname: "lucky")
+        ),
     ]
-    let cacheEncoder = JSONEncoder(); cacheEncoder.dateEncodingStrategy = .iso8601
+    let cacheEncoder = JSONEncoder()
+    cacheEncoder.dateEncodingStrategy = .iso8601
     groupDefaults.set(try! cacheEncoder.encode(cached), forKey: "cachedDeviceMetricsV1")
 
     // Seed a cached fleet AI summary so the preview doesn't need networking
-    struct _FleetSummaryCacheEntry: Codable { let content: String; let generatedAt: Date; let deviceCount: Int }
-    let summaryContent = "\(devices.count) devices producing a total of 10.1 TH/s, with a temperature range of 61-72°C, and consuming 2450W of power."
-    let summaryEncoder = JSONEncoder(); summaryEncoder.dateEncodingStrategy = .iso8601
+    struct _FleetSummaryCacheEntry: Codable {
+        let content: String
+        let generatedAt: Date
+        let deviceCount: Int
+    }
+    let summaryContent =
+        "\(devices.count) devices producing a total of 10.1 TH/s, with a temperature range of 61-72°C, and consuming 2450W of power."
+    let summaryEncoder = JSONEncoder()
+    summaryEncoder.dateEncodingStrategy = .iso8601
     groupDefaults.set(
-        try! summaryEncoder.encode(_FleetSummaryCacheEntry(content: summaryContent, generatedAt: Date(), deviceCount: devices.count)),
+        try! summaryEncoder.encode(
+            _FleetSummaryCacheEntry(
+                content: summaryContent,
+                generatedAt: Date(),
+                deviceCount: devices.count
+            )
+        ),
         forKey: "cachedFleetAISummaryV1"
     )
 

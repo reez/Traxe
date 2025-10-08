@@ -1,5 +1,10 @@
+import StoreKit
 import SwiftData
 import SwiftUI
+
+#if canImport(UIKit)
+    import UIKit
+#endif
 
 struct SettingsView: View {
     @ObservedObject var viewModel: SettingsViewModel
@@ -7,6 +12,7 @@ struct SettingsView: View {
     @State private var isAIEnabled = UserDefaults.standard.bool(forKey: "ai_enabled")
 
     @Environment(\.dismiss) var dismiss
+    @Environment(\.requestReview) var requestReview
 
     var body: some View {
         ZStack {
@@ -62,9 +68,56 @@ struct SettingsView: View {
                     }
 
                     Section {
-                        NavigationLink("Advanced Settings") {
+                        NavigationLink("Configuration") {
                             AdvancedSettingsView(viewModel: viewModel)
                         }
+                    } header: {
+                        Text("Advanced")
+                    }
+
+                    Section {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Loving the app? A nice review would make my day!")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+
+                            Button {
+                                requestReview()
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "heart.fill")
+                                        .foregroundStyle(.pink)
+                                    Text("Leave a Review")
+                                        .foregroundStyle(.primary)
+                                }
+                            }
+                        }
+                        .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Having issues? Reach out and I'll make it right.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+
+                            Button {
+                                if let url = supportEmailURL {
+                                    UIApplication.shared.open(url)
+                                }
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "envelope.fill")
+                                        .foregroundStyle(.secondary)
+                                    Text("Email Support")
+                                        .foregroundStyle(.primary)
+                                }
+                            }
+                            .tint(.secondary)
+                        }
+                        .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                    } header: {
+                        Text("Feedback")
                     }
                 }
                 .navigationTitle("Settings")
@@ -117,4 +170,16 @@ struct SettingsView: View {
 
     SettingsView(viewModel: previewViewModel)
         .modelContainer(previewContainer)
+}
+
+extension SettingsView {
+    fileprivate var supportEmailURL: URL? {
+        var components = URLComponents()
+        components.scheme = "mailto"
+        components.path = "ramsden.matthew@gmail.com"
+        components.queryItems = [
+            URLQueryItem(name: "subject", value: "Traxe - Support Issue")
+        ]
+        return components.url
+    }
 }
