@@ -521,7 +521,7 @@ final class OnboardingViewModel: ObservableObject {
 
         } catch let error as DeviceCheckError {
             // Try to extract device info if it's a decoding error
-            if case .decodingError(let fieldName, _, let jsonData) = error, let data = jsonData {
+            if case .decodingError(_, _, let jsonData) = error, let data = jsonData {
                 if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                     let deviceModel = json["deviceModel"] as? String ?? "Unknown Device"
                     let version = json["version"] as? String ?? "Unknown Version"
