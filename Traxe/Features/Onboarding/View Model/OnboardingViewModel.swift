@@ -366,7 +366,7 @@ final class OnboardingViewModel: ObservableObject {
                                 }
                             } catch let error as DeviceCheckError {
                                 // Handle decoding errors from network scan
-                                if case .decodingError(let fieldName, _, let jsonData) = error,
+                                if case .decodingError(_, _, let jsonData) = error,
                                     let data = jsonData
                                 {
                                     if let json = try? JSONSerialization.jsonObject(with: data)
