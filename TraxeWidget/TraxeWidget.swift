@@ -124,7 +124,7 @@ struct Provider: TimelineProvider {
             let refreshDate = Calendar.current.date(byAdding: .minute, value: 10, to: currentDate)!
             let networkService = getNetworkService()
             // Load existing per-device cache (shared with the app)
-            var perDeviceCache = loadDeviceMetricsCache()
+            let perDeviceCache = loadDeviceMetricsCache()
 
             // Fetch per-device hashrates in parallel and merge with cache
             var fetchedHashrates: [String: Double] = [:]
@@ -470,34 +470,34 @@ struct TraxeWidget: Widget {
             if #available(iOS 17.0, *) {
                 TraxeWidgetEntryView(entry: entry)
                     .containerBackground(for: .widget) {
-//                        ZStack {
-//                            // Base layer - solid background
-//                            RoundedRectangle(cornerRadius: 20)
-//                                .fill(
-                                    LinearGradient(
-                                        colors: colorScheme == .dark
-                                            ? [
-                                                Color(.systemGray6),
-                                                Color(.systemGray5)
-                                            ]
-                                            : [
-                                                Color(.systemGray5),
-                                                Color(.systemGray4)
-                                            ],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-//                                )
-//                                .shadow(color: .black.opac/*ity(0.1), radius: 8, x: 0, y: 4)*/
-                            
-                            // Simple glass layer on top
-//                            RoundedRectangle(cornerRadius: 20)
-//                                .fill(.ultraThinMaterial)
-//                                .overlay(
-//                                    RoundedRectangle(cornerRadius: 20)
-//                                        .stroke(.white.opacity(0.3), lineWidth: 1)
-//                                )
-//                        }
+                        //                        ZStack {
+                        //                            // Base layer - solid background
+                        //                            RoundedRectangle(cornerRadius: 20)
+                        //                                .fill(
+                        LinearGradient(
+                            colors: colorScheme == .dark
+                                ? [
+                                    Color(.systemGray6),
+                                    Color(.systemGray5),
+                                ]
+                                : [
+                                    Color(.systemGray5),
+                                    Color(.systemGray4),
+                                ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                        //                                )
+                        //                                .shadow(color: .black.opac/*ity(0.1), radius: 8, x: 0, y: 4)*/
+
+                        // Simple glass layer on top
+                        //                            RoundedRectangle(cornerRadius: 20)
+                        //                                .fill(.ultraThinMaterial)
+                        //                                .overlay(
+                        //                                    RoundedRectangle(cornerRadius: 20)
+                        //                                        .stroke(.white.opacity(0.3), lineWidth: 1)
+                        //                                )
+                        //                        }
                     }
             } else {
                 TraxeWidgetEntryView(entry: entry)
@@ -511,18 +511,18 @@ struct TraxeWidget: Widget {
                                         colors: colorScheme == .dark
                                             ? [
                                                 Color(.systemGray6),
-                                                Color(.systemGray5)
+                                                Color(.systemGray5),
                                             ]
                                             : [
                                                 Color(.systemGray5),
-                                                Color(.systemGray4)
+                                                Color(.systemGray4),
                                             ],
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
                                 )
                                 .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
-                            
+
                             // Simple glass layer on top
                             RoundedRectangle(cornerRadius: 20)
                                 .fill(.ultraThinMaterial)
