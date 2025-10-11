@@ -281,7 +281,7 @@ final class OnboardingViewModel: ObservableObject {
                     }
                     return false
                 }
-            } catch let _ as URLError {
+            } catch is URLError {
                 // Network-level errors (timeout, cannot connect, etc.)
                 // Don't show alerts for expected network failures during AP mode check
                 return false
