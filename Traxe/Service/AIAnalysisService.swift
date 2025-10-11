@@ -29,22 +29,17 @@ actor AIAnalysisService {
 
                 switch availability {
                 case .available:
-                    do {
-                        languageSession = LanguageModelSession(
-                            instructions: """
-                                You are a technical analyst. Write concise mining device summaries.
+                    languageSession = LanguageModelSession(
+                        instructions: """
+                            You are a technical analyst. Write concise mining device summaries.
 
-                                CRITICAL: Only output the summary text. NO introductory phrases.
+                            CRITICAL: Only output the summary text. NO introductory phrases.
 
-                                Be natural and conversational while including all technical details.
-                                """
-                        )
-                        lastGenerationFailed = false
-                        lastErrorMessage = nil
-                    } catch {
-                        lastGenerationFailed = true
-                        lastErrorMessage = "Failed to create session"
-                    }
+                            Be natural and conversational while including all technical details.
+                            """
+                    )
+                    lastGenerationFailed = false
+                    lastErrorMessage = nil
                 case .unavailable(let reason):
                     languageSession = nil
                     lastGenerationFailed = true
