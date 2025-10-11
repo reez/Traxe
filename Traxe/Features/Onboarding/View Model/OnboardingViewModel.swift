@@ -295,9 +295,6 @@ final class OnboardingViewModel: ObservableObject {
                 return false
             }
 
-            if attempt < 3 {
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
-            }
         }
         return false
     }
