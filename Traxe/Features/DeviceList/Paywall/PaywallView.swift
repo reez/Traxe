@@ -32,11 +32,6 @@ struct PaywallView: View {
                 } else {
                     currentOffering = offerings.current
                 }
-
-                if let finalOffering = currentOffering {
-                } else {
-                }
-
             } catch {
             }
         }
