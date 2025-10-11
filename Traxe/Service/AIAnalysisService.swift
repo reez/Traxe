@@ -283,7 +283,7 @@ actor AIAnalysisService {
                 let sorted = historicalData.sorted { $0.timestamp < $1.timestamp }
                 let actualAverage = sorted.map { $0.hashrate }.reduce(0, +) / Double(sorted.count)
                 let actualRange = sorted.last!.timestamp.timeIntervalSince(sorted.first!.timestamp)
-                let actualRangeFormatted = formatDuration(seconds: actualRange)
+                _ = formatDuration(seconds: actualRange)
                 let actualAverageFormatted = actualAverage.formattedHashRateWithUnit()
 
             }
