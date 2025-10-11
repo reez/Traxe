@@ -236,14 +236,14 @@ enum DeviceCheckError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidURL: return "Internal error: Could not create URL for device check."
+        case .invalidURL: return "Internal error: Could not create URL for miner check."
         case .requestFailed(let code):
             switch code {
             case .timedOut:
-                return "The request timed out. The device might be offline or unreachable."
+                return "The request timed out. The miner might be offline or unreachable."
             case .cannotConnectToHost:
                 return
-                    "Cannot connect to the device. Ensure it's powered on and on the same network."
+                    "Cannot connect to the miner. Ensure it's powered on and on the same network."
             case .notConnectedToInternet:
                 return "Please check your network connection."
             case .networkConnectionLost:
@@ -251,9 +251,9 @@ enum DeviceCheckError: Error, LocalizedError {
             default:
                 return "A network error occurred (Code: \(code.rawValue))."
             }
-        case .invalidResponse: return "Received invalid response from the device IP."
+        case .invalidResponse: return "Received invalid response from the miner IP."
         case .decodingError(let field, let swiftError, _):
-            var baseMessage = "Could not understand the response from the device"
+            var baseMessage = "Could not understand the response from the miner"
             if let fieldName = field, !fieldName.isEmpty {
                 baseMessage += ". Issue with data field: '\(fieldName)'"
             } else {
@@ -264,7 +264,7 @@ enum DeviceCheckError: Error, LocalizedError {
             }
             return baseMessage
         case .notBitaxeDevice:
-            return "The device at this IP address doesn't appear to be a compatible."
+            return "The miner at this IP address doesn't appear to be compatible."
         case .unknown(let error): return "An unknown error occurred: \(error.localizedDescription)"
         }
     }

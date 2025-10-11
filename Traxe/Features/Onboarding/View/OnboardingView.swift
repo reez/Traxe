@@ -88,7 +88,7 @@ struct OnboardingView: View {
                     }
                 } message: {
                     Text(
-                        "Traxe needs access to your local network to find devices. Please enable it in Settings."
+                        "Traxe needs access to your local network to find miners. Please enable it in Settings."
                     )
                 }
                 .alert("Connection Error", isPresented: $showConnectionError) {
@@ -158,7 +158,7 @@ struct OnboardingView: View {
         ParticleSphereView(particleColor: .primary)
             .frame(width: 150, height: 150)
 
-        Text("Connect to device")
+        Text("Connect to miner")
             .font(.largeTitle)
             .fontWeight(.bold)
             .fontDesign(.serif)
@@ -218,7 +218,7 @@ struct OnboardingView: View {
         if viewModel.hasScanned {
             VStack(spacing: 12) {
                 if viewModel.discoveredDevices.isEmpty {
-                    Text("No devices found")
+                    Text("No miners found")
                         .font(.headline)
                         .foregroundColor(.secondary)
                 }

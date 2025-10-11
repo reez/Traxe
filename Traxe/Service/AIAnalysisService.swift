@@ -31,7 +31,7 @@ actor AIAnalysisService {
                 case .available:
                     languageSession = LanguageModelSession(
                         instructions: """
-                            You are a technical analyst. Write concise mining device summaries.
+                            You are a technical analyst. Write concise miner summaries.
 
                             CRITICAL: Only output the summary text. NO introductory phrases.
 
@@ -46,7 +46,7 @@ actor AIAnalysisService {
                     lastErrorMessage =
                         switch reason {
                         case .deviceNotEligible:
-                            "Device not compatible"
+                            "Miner not compatible"
                         case .appleIntelligenceNotEnabled:
                             "Apple Intelligence not enabled"
                         case .modelNotReady:
@@ -106,7 +106,7 @@ actor AIAnalysisService {
             throw NSError(
                 domain: "AIAnalysisService",
                 code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "No devices available for fleet analysis"]
+                userInfo: [NSLocalizedDescriptionKey: "No miners available for fleet analysis"]
             )
         }
 
@@ -167,16 +167,16 @@ actor AIAnalysisService {
                 historicalData: historicalData
             )
             if !historicalTrend.isEmpty {
-                summary = "Your device \(historicalTrend)."
+                summary = "Your miner \(historicalTrend)."
             } else {
                 // Fall back to current stats if trend is empty
                 summary =
-                    "Your device is producing \(hashRateFormatted.value) \(hashRateFormatted.unit)."
+                    "Your miner is producing \(hashRateFormatted.value) \(hashRateFormatted.unit)."
             }
         } else {
             // No historical data; show current stats
             summary =
-                "Your device is producing \(hashRateFormatted.value) \(hashRateFormatted.unit)"
+                "Your miner is producing \(hashRateFormatted.value) \(hashRateFormatted.unit)"
 
             if temperature > AppConstants.AI.hotTemperatureThreshold {
                 summary += ", running warm at \(Int(temperature))°C with fan at \(fanSpeedPercent)%"
@@ -306,7 +306,7 @@ actor AIAnalysisService {
             } else {
                 // Current stats (when no history)
                 prompt = """
-                    Create a mining device summary with these details:
+                    Create a miner summary with these details:
                     - Current hashrate: \(hashRateFormatted.value) \(hashRateFormatted.unit)
                     - Temperature: \(Int(temperature))°C
                     - Fan speed: \(fanSpeed)%

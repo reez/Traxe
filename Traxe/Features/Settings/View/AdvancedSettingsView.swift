@@ -25,7 +25,7 @@ struct AdvancedSettingsView: View {
                     }
                 }
 
-                Section("Device Configuration") {
+                Section("Miner Configuration") {
                     NavigationLink("Hostname") {
                         HostnameConfigurationView(viewModel: viewModel)
                     }
@@ -33,14 +33,14 @@ struct AdvancedSettingsView: View {
             }
         }
         .navigationTitle("Advanced Settings")
-        .alert("Restart Device", isPresented: $showingRestartConfirmation) {
+        .alert("Restart Miner", isPresented: $showingRestartConfirmation) {
             Button("Cancel", role: .cancel) {}
             Button("Restart", role: .destructive) {
                 Task { await viewModel.restartDevice() }
             }
         } message: {
             Text(
-                "Are you sure you want to restart the device? This will temporarily stop mining operations."
+                "Are you sure you want to restart the miner? This will temporarily stop mining operations."
             )
         }
     }

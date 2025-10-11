@@ -63,7 +63,7 @@ struct AddDeviceView: View {
                         for: nil
                     )
                 }
-                .navigationTitle("Add Device")
+                .navigationTitle("Add Miner")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
@@ -80,7 +80,7 @@ struct AddDeviceView: View {
                         }
                     }
                 }
-                .alert("Error Adding Device", isPresented: $showingErrorAlert) {
+                .alert("Error Adding Miner", isPresented: $showingErrorAlert) {
                     Button("OK") {}
                 } message: {
                     Text(errorMessage)
@@ -99,7 +99,7 @@ struct AddDeviceView: View {
                     }
                 } message: {
                     Text(
-                        "Traxe needs access to your local network to find devices. Please enable it in Settings."
+                        "Traxe needs access to your local network to find miners. Please enable it in Settings."
                     )
                 }
             }
@@ -228,7 +228,7 @@ struct AddDeviceView: View {
     private func manualEntrySection() -> some View {
         VStack(spacing: 12) {
             if viewModel.hasScanned && viewModel.discoveredDevices.isEmpty {
-                Text("No devices found")
+                Text("No miners found")
                     .font(.headline)
                     .foregroundColor(.secondary)
             }

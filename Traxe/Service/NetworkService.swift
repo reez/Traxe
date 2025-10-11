@@ -67,9 +67,9 @@ actor NetworkService {
                     throw NetworkError.decodingError(error, jsonData: data)
                 }
             case 404:
-                throw NetworkError.apiError(message: "Device not found at the specified IP address")
+                throw NetworkError.apiError(message: "Miner not found at the specified IP address")
             case 500:
-                throw NetworkError.apiError(message: "Device server error")
+                throw NetworkError.apiError(message: "Miner server error")
             default:
                 throw NetworkError.apiError(
                     message: "Unexpected response: \(httpResponse.statusCode)"
@@ -94,8 +94,8 @@ actor NetworkService {
         try await performGET(endpoint: "/api/system/info", ipAddressOverride: ipAddressOverride)
     }
 
-    func fetchSwarmInfo(ipAddressOverride: String? = nil) async throws -> /* SwarmInfoDTO */ Codable
-    {
+    func fetchSwarmInfo(ipAddressOverride: String? = nil) async throws -> /* SwarmInfoDTO */
+    Codable {
         struct PlaceholderSwarmDTO: Codable { var message: String = "Swarm info placeholder" }
         return try await performGET(
             endpoint: "/api/swarm/info",
@@ -125,7 +125,7 @@ actor NetworkService {
             case 404:
                 throw NetworkError.apiError(message: "Endpoint not found")
             case 500:
-                throw NetworkError.apiError(message: "Device server error")
+                throw NetworkError.apiError(message: "Miner server error")
             default:
                 throw NetworkError.apiError(
                     message: "Unexpected response: \(httpResponse.statusCode)"
@@ -180,7 +180,7 @@ actor NetworkService {
             case 404:
                 throw NetworkError.apiError(message: "Endpoint not found")
             case 500:
-                throw NetworkError.apiError(message: "Device server error")
+                throw NetworkError.apiError(message: "Miner server error")
             default:
                 throw NetworkError.apiError(
                     message: "Unexpected response: \(httpResponse.statusCode)"
@@ -238,7 +238,7 @@ enum NetworkError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidURL: return "The device IP address appears to be invalid."
+        case .invalidURL: return "The miner IP address appears to be invalid."
         case .requestFailed(let error):
             if let urlError = error as? URLError {
                 switch urlError.code {
@@ -246,19 +246,19 @@ enum NetworkError: Error, LocalizedError {
                     return "Not connected to the internet. Please check your connection."
                 case .cannotConnectToHost:
                     return
-                        "Cannot connect to the device. Ensure it's powered on and on the same network."
+                        "Cannot connect to the miner. Ensure it's powered on and on the same network."
                 case .timedOut:
-                    return "The request timed out. The device might be busy or unreachable."
+                    return "The request timed out. The miner might be busy or unreachable."
                 default: return "Network request failed: \(urlError.localizedDescription)"
                 }
             }
             return "Network request failed: \(error.localizedDescription)"
-        case .invalidResponse: return "Received an invalid response from the device."
+        case .invalidResponse: return "Received an invalid response from the miner."
         case .decodingError(let error, _):
-            return "Failed to process data from the device: \(error.localizedDescription)"
-        case .apiError(let message): return "Device API Error: \(message)"
+            return "Failed to process data from the miner: \(error.localizedDescription)"
+        case .apiError(let message): return "Miner API Error: \(message)"
         case .configurationMissing:
-            return "Device IP address is not configured. Please set it in the app."
+            return "Miner IP address is not configured. Please set it in the app."
         case .unknown: return "An unknown network error occurred."
         }
     }
