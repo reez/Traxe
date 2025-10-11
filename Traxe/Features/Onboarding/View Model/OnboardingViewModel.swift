@@ -123,7 +123,7 @@ final class OnboardingViewModel: ObservableObject {
             return false
         }
 
-        for attempt in 1...3 {
+        for _ in 1...3 {
             do {
                 var request = URLRequest(url: url)
                 request.timeoutInterval = 5.0
