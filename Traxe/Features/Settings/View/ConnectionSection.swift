@@ -13,7 +13,7 @@ struct ConnectionSection: View {
                         .fill(isConnected ? Color.green : Color.red)
                         .frame(width: 8, height: 8)
                         .animation(.easeInOut(duration: 0.3), value: isConnected)
-                    Text("Miner IP")
+                    Text("IP Address")
                 }
                 Spacer()
                 TextField("e.g., 192.168.1.100", text: $ipAddress)

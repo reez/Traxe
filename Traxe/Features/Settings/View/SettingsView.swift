@@ -28,6 +28,15 @@ struct SettingsView: View {
 
             NavigationView {
                 Form {
+
+                    Section {
+                        NavigationLink("Miner Configuration") {
+                            AdvancedSettingsView(viewModel: viewModel)
+                        }
+                    } header: {
+                        Text("Advanced")
+                    }
+
                     ConnectionSection(
                         ipAddress: $viewModel.bitaxeIPAddress,
                         onSubmit: viewModel.saveSettings,
@@ -36,7 +45,7 @@ struct SettingsView: View {
 
                     Section("Firmware") {
                         HStack {
-                            Text("Firmware Version")
+                            Text("Version")
                             Spacer()
                             if viewModel.currentVersion != "Unknown" {
                                 Text(viewModel.currentVersion)
@@ -53,7 +62,7 @@ struct SettingsView: View {
 
                     if #available(iOS 18.0, macOS 15.0, *) {
                         Section {
-                            Toggle("Summaries", isOn: $isAIEnabled)
+                            Toggle("Miner Summary", isOn: $isAIEnabled)
                                 .tint(.accentColor)
                                 .onChange(of: isAIEnabled) { _, newValue in
                                     UserDefaults.standard.set(newValue, forKey: "ai_enabled")
@@ -67,13 +76,13 @@ struct SettingsView: View {
                         }
                     }
 
-                    Section {
-                        NavigationLink("Configuration") {
-                            AdvancedSettingsView(viewModel: viewModel)
-                        }
-                    } header: {
-                        Text("Advanced")
-                    }
+                    //                    Section {
+                    //                        NavigationLink("Configuration") {
+                    //                            AdvancedSettingsView(viewModel: viewModel)
+                    //                        }
+                    //                    } header: {
+                    //                        Text("Advanced")
+                    //                    }
 
                     Section {
                         VStack(alignment: .leading, spacing: 12) {

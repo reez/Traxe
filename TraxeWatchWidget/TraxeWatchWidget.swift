@@ -156,12 +156,12 @@ struct TraxeWatchWidgetEntryView: View {
                         }
                     }
 
-                    if let lastUpdated = entry.lastUpdated {
-                        Text(lastUpdated, style: .time)
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                            .fontDesign(.rounded)
-                    }
+                    //                    if let lastUpdated = entry.lastUpdated {
+                    //                        Text(lastUpdated, style: .time)
+                    //                            .font(.caption2)
+                    //                            .foregroundStyle(.tertiary)
+                    //                            .fontDesign(.rounded)
+                    //                    }
                 }
                 Spacer()
             }
