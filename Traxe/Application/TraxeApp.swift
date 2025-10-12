@@ -44,6 +44,10 @@ struct TraxeApp: App {
             }
         }
 
+        #if os(iOS)
+            _ = WatchSyncManager.shared
+        #endif
+
         let modelContext = sharedModelContainer.mainContext
         _dashboardViewModel = StateObject(
             wrappedValue: DashboardViewModel(modelContext: modelContext)

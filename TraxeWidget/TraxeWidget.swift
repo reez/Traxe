@@ -1,6 +1,10 @@
 import SwiftUI
 import WidgetKit
 
+#if canImport(WatchConnectivity)
+    import WatchConnectivity
+#endif
+
 // Color extension for widget target
 extension Color {
     static let traxeGold = Color(red: 218 / 255, green: 165 / 255, blue: 32 / 255)
@@ -55,6 +59,9 @@ struct Provider: TimelineProvider {
         } catch {
             // Best-effort cache write
         }
+        #if canImport(WatchConnectivity)
+            pushUpdateToWatch(metricsByIP)
+        #endif
     }
 
     private func cacheLastKnownData(hashrate: String, totalDevices: Int, successfulFetches: Int) {
@@ -215,6 +222,43 @@ struct Provider: TimelineProvider {
         }
     }
 }
+
+#if canImport(WatchConnectivity)
+    private func pushUpdateToWatch(_ metrics: [String: CachedDeviceMetrics]) {
+        guard WCSession.isSupported() else { return }
+        let session = WCSession.default
+        if session.activationState != .activated {
+            session.activate()
+        }
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        guard let data = try? encoder.encode(metrics) else { return }
+
+        let totalHashrate = metrics.values.reduce(0.0) { $0 + $1.hashrate }
+        let lastUpdated = metrics.values.compactMap(\.lastUpdated).max() ?? Date()
+
+        let payload: [String: Any] = [
+            "cacheData": data,
+            "totalHashrate": totalHashrate,
+            "lastUpdated": lastUpdated,
+            "deviceCount": metrics.count,
+        ]
+
+        if session.isReachable {
+            session.sendMessage(payload, replyHandler: nil, errorHandler: nil)
+        }
+
+        do {
+            try session.updateApplicationContext(payload)
+        } catch {
+            // Ignore failures; transferUserInfo below will still deliver when possible.
+        }
+
+        session.transferCurrentComplicationUserInfo(payload)
+        session.transferUserInfo(payload)
+    }
+#endif
 
 struct SimpleEntry: TimelineEntry {
     let date: Date

@@ -14,6 +14,10 @@
 		AE45E1ED2DB577960096A497 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AE0771532DAECFCB00634820 /* WidgetKit.framework */; };
 		AE45E1EE2DB577960096A497 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AE0771552DAECFCB00634820 /* SwiftUI.framework */; };
 		AE45E1F92DB577980096A497 /* TraxeWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AE45E1EC2DB577960096A497 /* TraxeWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		AE8F8BBE2E9B099800E4450C /* TraxeWatch Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = AE8F8BB42E9B099700E4450C /* TraxeWatch Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		AE8F8BCB2E9B0B0F00E4450C /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AE0771532DAECFCB00634820 /* WidgetKit.framework */; };
+		AE8F8BCC2E9B0B0F00E4450C /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AE0771552DAECFCB00634820 /* SwiftUI.framework */; };
+		AE8F8BD72E9B0B1000E4450C /* TraxeWatchWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AE8F8BCA2E9B0B0F00E4450C /* TraxeWatchWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -23,6 +27,20 @@
 			proxyType = 1;
 			remoteGlobalIDString = AE45E1EB2DB577960096A497;
 			remoteInfo = TraxeWidgetExtension;
+		};
+		AE8F8BBC2E9B099800E4450C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AE45A3172DAC951E0096641F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AE8F8BB32E9B099700E4450C;
+			remoteInfo = "TraxeWatch Watch App";
+		};
+		AE8F8BD52E9B0B1000E4450C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AE45A3172DAC951E0096641F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AE8F8BC92E9B0B0F00E4450C;
+			remoteInfo = TraxeWatchWidgetExtension;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -38,6 +56,28 @@
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AE8F8BC22E9B099800E4450C /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				AE8F8BBE2E9B099800E4450C /* TraxeWatch Watch App.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AE8F8BDC2E9B0B1000E4450C /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				AE8F8BD72E9B0B1000E4450C /* TraxeWatchWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
@@ -48,9 +88,27 @@
 		AE45A4282DADA85F0096641F /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		AE45E1EC2DB577960096A497 /* TraxeWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TraxeWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		AE45E2012DB57B590096A497 /* TraxeWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = TraxeWidgetExtension.entitlements; path = TraxeWidgetExtension/TraxeWidgetExtension.entitlements; sourceTree = "<group>"; };
+		AE8F8BB42E9B099700E4450C /* TraxeWatch Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "TraxeWatch Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		AE8F8BCA2E9B0B0F00E4450C /* TraxeWatchWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TraxeWatchWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		AE8F8BDD2E9B0B1E00E4450C /* TraxeWatchWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TraxeWatchWidgetExtension.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		AE1A7B9A2E9B3F8400C6609F /* Exceptions for "Traxe" folder in "TraxeWatch Watch App" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				AppIcon.icon,
+				"Utilities/Double+Extensions.swift",
+			);
+			target = AE8F8BB32E9B099700E4450C /* TraxeWatch Watch App */;
+		};
+		AE1A7B9B2E9B3F8400C6609F /* Exceptions for "Traxe" folder in "TraxeWatchWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"Utilities/Double+Extensions.swift",
+			);
+			target = AE8F8BC92E9B0B0F00E4450C /* TraxeWatchWidgetExtension */;
+		};
 		AE45E1FC2DB577980096A497 /* Exceptions for "TraxeWidget" folder in "TraxeWidgetExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -67,6 +125,13 @@
 			);
 			target = AE45E1EB2DB577960096A497 /* TraxeWidgetExtension */;
 		};
+		AE8F8BDB2E9B0B1000E4450C /* Exceptions for "TraxeWatchWidget" folder in "TraxeWatchWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = AE8F8BC92E9B0B0F00E4450C /* TraxeWatchWidgetExtension */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -74,6 +139,8 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				AE45E2002DB57AFD0096A497 /* Exceptions for "Traxe" folder in "TraxeWidgetExtension" target */,
+				AE1A7B9A2E9B3F8400C6609F /* Exceptions for "Traxe" folder in "TraxeWatch Watch App" target */,
+				AE1A7B9B2E9B3F8400C6609F /* Exceptions for "Traxe" folder in "TraxeWatchWidgetExtension" target */,
 			);
 			path = Traxe;
 			sourceTree = "<group>";
@@ -84,6 +151,19 @@
 				AE45E1FC2DB577980096A497 /* Exceptions for "TraxeWidget" folder in "TraxeWidgetExtension" target */,
 			);
 			path = TraxeWidget;
+			sourceTree = "<group>";
+		};
+		AE8F8BB52E9B099700E4450C /* TraxeWatch Watch App */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "TraxeWatch Watch App";
+			sourceTree = "<group>";
+		};
+		AE8F8BCD2E9B0B0F00E4450C /* TraxeWatchWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				AE8F8BDB2E9B0B1000E4450C /* Exceptions for "TraxeWatchWidget" folder in "TraxeWatchWidgetExtension" target */,
+			);
+			path = TraxeWatchWidget;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -108,6 +188,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AE8F8BB12E9B099700E4450C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AE8F8BC72E9B0B0F00E4450C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AE8F8BCC2E9B0B0F00E4450C /* SwiftUI.framework in Frameworks */,
+				AE8F8BCB2E9B0B0F00E4450C /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -124,10 +220,13 @@
 		AE45A3162DAC951E0096641F = {
 			isa = PBXGroup;
 			children = (
+				AE8F8BDD2E9B0B1E00E4450C /* TraxeWatchWidgetExtension.entitlements */,
 				AE45E2012DB57B590096A497 /* TraxeWidgetExtension.entitlements */,
 				AE45A4282DADA85F0096641F /* README.md */,
 				AE45A3212DAC951E0096641F /* Traxe */,
 				AE45E1EF2DB577960096A497 /* TraxeWidget */,
+				AE8F8BB52E9B099700E4450C /* TraxeWatch Watch App */,
+				AE8F8BCD2E9B0B0F00E4450C /* TraxeWatchWidget */,
 				AE0771522DAECFCB00634820 /* Frameworks */,
 				AE45A3202DAC951E0096641F /* Products */,
 			);
@@ -138,6 +237,8 @@
 			children = (
 				AE45A31F2DAC951E0096641F /* Traxe.app */,
 				AE45E1EC2DB577960096A497 /* TraxeWidgetExtension.appex */,
+				AE8F8BB42E9B099700E4450C /* TraxeWatch Watch App.app */,
+				AE8F8BCA2E9B0B0F00E4450C /* TraxeWatchWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -153,11 +254,13 @@
 				AE45A31C2DAC951E0096641F /* Frameworks */,
 				AE45A31D2DAC951E0096641F /* Resources */,
 				AE0771642DAECFCC00634820 /* Embed Foundation Extensions */,
+				AE8F8BC22E9B099800E4450C /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				AE45E1F82DB577980096A497 /* PBXTargetDependency */,
+				AE8F8BBD2E9B099800E4450C /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				AE45A3212DAC951E0096641F /* Traxe */,
@@ -193,6 +296,52 @@
 			productReference = AE45E1EC2DB577960096A497 /* TraxeWidgetExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		AE8F8BB32E9B099700E4450C /* TraxeWatch Watch App */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AE8F8BBF2E9B099800E4450C /* Build configuration list for PBXNativeTarget "TraxeWatch Watch App" */;
+			buildPhases = (
+				AE8F8BB02E9B099700E4450C /* Sources */,
+				AE8F8BB12E9B099700E4450C /* Frameworks */,
+				AE8F8BB22E9B099700E4450C /* Resources */,
+				AE8F8BDC2E9B0B1000E4450C /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AE8F8BD62E9B0B1000E4450C /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				AE8F8BB52E9B099700E4450C /* TraxeWatch Watch App */,
+			);
+			name = "TraxeWatch Watch App";
+			packageProductDependencies = (
+			);
+			productName = "TraxeWatch Watch App";
+			productReference = AE8F8BB42E9B099700E4450C /* TraxeWatch Watch App.app */;
+			productType = "com.apple.product-type.application";
+		};
+		AE8F8BC92E9B0B0F00E4450C /* TraxeWatchWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AE8F8BD82E9B0B1000E4450C /* Build configuration list for PBXNativeTarget "TraxeWatchWidgetExtension" */;
+			buildPhases = (
+				AE8F8BC62E9B0B0F00E4450C /* Sources */,
+				AE8F8BC72E9B0B0F00E4450C /* Frameworks */,
+				AE8F8BC82E9B0B0F00E4450C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				AE8F8BCD2E9B0B0F00E4450C /* TraxeWatchWidget */,
+			);
+			name = TraxeWatchWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = TraxeWatchWidgetExtension;
+			productReference = AE8F8BCA2E9B0B0F00E4450C /* TraxeWatchWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -200,14 +349,20 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1630;
-				LastUpgradeCheck = 1630;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
 				TargetAttributes = {
 					AE45A31E2DAC951E0096641F = {
 						CreatedOnToolsVersion = 16.3;
 					};
 					AE45E1EB2DB577960096A497 = {
 						CreatedOnToolsVersion = 16.3;
+					};
+					AE8F8BB32E9B099700E4450C = {
+						CreatedOnToolsVersion = 26.0.1;
+					};
+					AE8F8BC92E9B0B0F00E4450C = {
+						CreatedOnToolsVersion = 26.0.1;
 					};
 				};
 			};
@@ -230,6 +385,8 @@
 			targets = (
 				AE45A31E2DAC951E0096641F /* Traxe */,
 				AE45E1EB2DB577960096A497 /* TraxeWidgetExtension */,
+				AE8F8BB32E9B099700E4450C /* TraxeWatch Watch App */,
+				AE8F8BC92E9B0B0F00E4450C /* TraxeWatchWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -244,6 +401,20 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		AE45E1EA2DB577960096A497 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AE8F8BB22E9B099700E4450C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AE8F8BC82E9B0B0F00E4450C /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -267,6 +438,20 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AE8F8BB02E9B099700E4450C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AE8F8BC62E9B0B0F00E4450C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -274,6 +459,16 @@
 			isa = PBXTargetDependency;
 			target = AE45E1EB2DB577960096A497 /* TraxeWidgetExtension */;
 			targetProxy = AE45E1F72DB577980096A497 /* PBXContainerItemProxy */;
+		};
+		AE8F8BBD2E9B099800E4450C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AE8F8BB32E9B099700E4450C /* TraxeWatch Watch App */;
+			targetProxy = AE8F8BBC2E9B099800E4450C /* PBXContainerItemProxy */;
+		};
+		AE8F8BD62E9B0B1000E4450C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AE8F8BC92E9B0B0F00E4450C /* TraxeWatchWidgetExtension */;
+			targetProxy = AE8F8BD52E9B0B1000E4450C /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -337,6 +532,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -394,6 +590,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};
@@ -423,7 +620,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.4;
+				MARKETING_VERSION = 1.1.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.matthewramsden.Traxe;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -460,7 +657,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.4;
+				MARKETING_VERSION = 1.1.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.matthewramsden.Traxe;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -492,7 +689,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1.4;
+				MARKETING_VERSION = 1.1.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.matthewramsden.Traxe.TraxeWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -521,13 +718,149 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1.4;
+				MARKETING_VERSION = 1.1.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.matthewramsden.Traxe.TraxeWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		AE8F8BC02E9B099800E4450C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "TraxeWatch Watch App/TraxeWatch Watch App.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 9G6M658RKZ;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Traxe;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.matthewramsden.Traxe;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.1.5;
+				PRODUCT_BUNDLE_IDENTIFIER = com.matthewramsden.Traxe.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 11.5;
+			};
+			name = Debug;
+		};
+		AE8F8BC12E9B099800E4450C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "TraxeWatch Watch App/TraxeWatch Watch App.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 9G6M658RKZ;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Traxe;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.matthewramsden.Traxe;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.1.5;
+				PRODUCT_BUNDLE_IDENTIFIER = com.matthewramsden.Traxe.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 11.5;
+			};
+			name = Release;
+		};
+		AE8F8BD92E9B0B1000E4450C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = TraxeWatchWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 9G6M658RKZ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = TraxeWatchWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = TraxeWatchWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 1.1.5;
+				PRODUCT_BUNDLE_IDENTIFIER = com.matthewramsden.Traxe.watchkitapp.TraxeWatchWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 11.5;
+			};
+			name = Debug;
+		};
+		AE8F8BDA2E9B0B1000E4450C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = TraxeWatchWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 9G6M658RKZ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = TraxeWatchWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = TraxeWatchWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 1.1.5;
+				PRODUCT_BUNDLE_IDENTIFIER = com.matthewramsden.Traxe.watchkitapp.TraxeWatchWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 11.5;
 			};
 			name = Release;
 		};
@@ -557,6 +890,24 @@
 			buildConfigurations = (
 				AE45E1FA2DB577980096A497 /* Debug */,
 				AE45E1FB2DB577980096A497 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AE8F8BBF2E9B099800E4450C /* Build configuration list for PBXNativeTarget "TraxeWatch Watch App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AE8F8BC02E9B099800E4450C /* Debug */,
+				AE8F8BC12E9B099800E4450C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AE8F8BD82E9B0B1000E4450C /* Build configuration list for PBXNativeTarget "TraxeWatchWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AE8F8BD92E9B0B1000E4450C /* Debug */,
+				AE8F8BDA2E9B0B1000E4450C /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

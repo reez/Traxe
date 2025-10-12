@@ -248,6 +248,9 @@ final class DeviceListViewModel: ObservableObject {
         }
 
         metricsCache.saveAll(cacheMetrics)
+        #if os(iOS)
+            WatchSyncManager.shared.updateCacheMetrics(cacheMetrics)
+        #endif
     }
 
     private func parseDifficultyString(_ diffString: String) -> Double {
