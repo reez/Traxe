@@ -1,6 +1,10 @@
 import SwiftUI
 import WidgetKit
 
+#if canImport(WatchConnectivity)
+    import WatchConnectivity
+#endif
+
 // Color extension for widget target
 extension Color {
     static let traxeGold = Color(red: 218 / 255, green: 165 / 255, blue: 32 / 255)
@@ -55,6 +59,9 @@ struct Provider: TimelineProvider {
         } catch {
             // Best-effort cache write
         }
+        #if canImport(WatchConnectivity)
+            pushUpdateToWatch(metricsByIP)
+        #endif
     }
 
     private func cacheLastKnownData(hashrate: String, totalDevices: Int, successfulFetches: Int) {
@@ -124,7 +131,7 @@ struct Provider: TimelineProvider {
             let refreshDate = Calendar.current.date(byAdding: .minute, value: 10, to: currentDate)!
             let networkService = getNetworkService()
             // Load existing per-device cache (shared with the app)
-            var perDeviceCache = loadDeviceMetricsCache()
+            let perDeviceCache = loadDeviceMetricsCache()
 
             // Fetch per-device hashrates in parallel and merge with cache
             var fetchedHashrates: [String: Double] = [:]
@@ -215,6 +222,43 @@ struct Provider: TimelineProvider {
         }
     }
 }
+
+#if canImport(WatchConnectivity)
+    private func pushUpdateToWatch(_ metrics: [String: CachedDeviceMetrics]) {
+        guard WCSession.isSupported() else { return }
+        let session = WCSession.default
+        if session.activationState != .activated {
+            session.activate()
+        }
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        guard let data = try? encoder.encode(metrics) else { return }
+
+        let totalHashrate = metrics.values.reduce(0.0) { $0 + $1.hashrate }
+        let lastUpdated = metrics.values.compactMap(\.lastUpdated).max() ?? Date()
+
+        let payload: [String: Any] = [
+            "cacheData": data,
+            "totalHashrate": totalHashrate,
+            "lastUpdated": lastUpdated,
+            "deviceCount": metrics.count,
+        ]
+
+        if session.isReachable {
+            session.sendMessage(payload, replyHandler: nil, errorHandler: nil)
+        }
+
+        do {
+            try session.updateApplicationContext(payload)
+        } catch {
+            // Ignore failures; transferUserInfo below will still deliver when possible.
+        }
+
+        session.transferCurrentComplicationUserInfo(payload)
+        session.transferUserInfo(payload)
+    }
+#endif
 
 struct SimpleEntry: TimelineEntry {
     let date: Date
@@ -470,34 +514,34 @@ struct TraxeWidget: Widget {
             if #available(iOS 17.0, *) {
                 TraxeWidgetEntryView(entry: entry)
                     .containerBackground(for: .widget) {
-//                        ZStack {
-//                            // Base layer - solid background
-//                            RoundedRectangle(cornerRadius: 20)
-//                                .fill(
-                                    LinearGradient(
-                                        colors: colorScheme == .dark
-                                            ? [
-                                                Color(.systemGray6),
-                                                Color(.systemGray5)
-                                            ]
-                                            : [
-                                                Color(.systemGray5),
-                                                Color(.systemGray4)
-                                            ],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-//                                )
-//                                .shadow(color: .black.opac/*ity(0.1), radius: 8, x: 0, y: 4)*/
-                            
-                            // Simple glass layer on top
-//                            RoundedRectangle(cornerRadius: 20)
-//                                .fill(.ultraThinMaterial)
-//                                .overlay(
-//                                    RoundedRectangle(cornerRadius: 20)
-//                                        .stroke(.white.opacity(0.3), lineWidth: 1)
-//                                )
-//                        }
+                        //                        ZStack {
+                        //                            // Base layer - solid background
+                        //                            RoundedRectangle(cornerRadius: 20)
+                        //                                .fill(
+                        LinearGradient(
+                            colors: colorScheme == .dark
+                                ? [
+                                    Color(.systemGray6),
+                                    Color(.systemGray5),
+                                ]
+                                : [
+                                    Color(.systemGray5),
+                                    Color(.systemGray4),
+                                ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                        //                                )
+                        //                                .shadow(color: .black.opac/*ity(0.1), radius: 8, x: 0, y: 4)*/
+
+                        // Simple glass layer on top
+                        //                            RoundedRectangle(cornerRadius: 20)
+                        //                                .fill(.ultraThinMaterial)
+                        //                                .overlay(
+                        //                                    RoundedRectangle(cornerRadius: 20)
+                        //                                        .stroke(.white.opacity(0.3), lineWidth: 1)
+                        //                                )
+                        //                        }
                     }
             } else {
                 TraxeWidgetEntryView(entry: entry)
@@ -511,18 +555,18 @@ struct TraxeWidget: Widget {
                                         colors: colorScheme == .dark
                                             ? [
                                                 Color(.systemGray6),
-                                                Color(.systemGray5)
+                                                Color(.systemGray5),
                                             ]
                                             : [
                                                 Color(.systemGray5),
-                                                Color(.systemGray4)
+                                                Color(.systemGray4),
                                             ],
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
                                 )
                                 .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
-                            
+
                             // Simple glass layer on top
                             RoundedRectangle(cornerRadius: 20)
                                 .fill(.ultraThinMaterial)

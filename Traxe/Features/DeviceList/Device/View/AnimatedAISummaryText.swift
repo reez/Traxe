@@ -101,11 +101,16 @@ struct AnimatedAISummaryText: View {
                 }
 
                 // Play haptic every 10% progress and only after data is loaded
-                if newProgress - lastHapticProgress >= 0.1 && isDataLoaded {
-                    await MainActor.run {
+                let shouldTriggerHaptic = await MainActor.run { () -> Bool in
+                    guard isDataLoaded else { return false }
+                    let needsHaptic = newProgress - lastHapticProgress >= 0.1
+                    if needsHaptic {
                         lastHapticProgress = newProgress
                     }
+                    return needsHaptic
+                }
 
+                if shouldTriggerHaptic {
                     Task.detached(priority: .background) {
                         await playHaptic()
                     }

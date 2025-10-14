@@ -20,8 +20,8 @@ extension String {
         ]
 
         let patterns: [String] = [
-            // Device count phrase (e.g., "15 devices" or "1 device")
-            #"\b\d+\s+devices?\b"#,
+            // Miner count phrase (e.g., "15 miners" or "1 miner")
+            #"\b\d+\s+miners?\b"#,
             #"\b\d+(?:\.\d+)?\s?(?:TH/s|GH/s|MH/s|kH/s|H/s)\b"#,
             #"\b\d+\s?-\s?\d+°C\b"#,
             #"\b\d+(?:\.\d+)?°C\b"#,

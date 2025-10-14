@@ -26,7 +26,7 @@ enum AISummaryFormatter {
             .count
         let deviceCount = metrics.count
 
-        var content = "\(deviceCount) devices with a total of \(hashValue) \(hashUnit), "
+        var content = "\(deviceCount) miners with a total of \(hashValue) \(hashUnit), "
         if nonZeroTemps.isEmpty {
             content += "temperatures 0°C"
         } else {
@@ -52,7 +52,7 @@ enum AISummaryFormatter {
             .count
         let deviceCount = infos.count
 
-        var content = "\(deviceCount) devices with a total of \(hashValue) \(hashUnit), "
+        var content = "\(deviceCount) miners with a total of \(hashValue) \(hashUnit), "
         if nonZeroTemps.isEmpty {
             content += "temperatures 0°C"
         } else {

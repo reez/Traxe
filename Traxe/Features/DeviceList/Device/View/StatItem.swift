@@ -46,7 +46,7 @@ struct StatItem: View {
                     .font(.system(size: 18))
                     .foregroundStyle(.secondary)
 
-                if let onRefresh = onRefresh {
+                if onRefresh != nil {
                     Spacer()
                         .frame(width: 8)
 

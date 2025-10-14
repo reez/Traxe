@@ -20,7 +20,7 @@
       "internalID" : "6745104000",
       "localizations" : [
         {
-          "description" : "One-time purchase to unlock the ability to manage more devices.",
+          "description" : "One-time purchase to unlock the ability to manage more miners.",
           "displayName" : "Traxe Pro (One-Time, 5 Miners)",
           "locale" : "en_US"
         }
@@ -107,7 +107,7 @@
           "introductoryOffer" : null,
           "localizations" : [
             {
-              "description" : "Unlock the ability to manage more devices. ",
+              "description" : "Unlock the ability to manage more miners. ",
               "displayName" : "Traxe Pro (Monthly)",
               "locale" : "en_US"
             }

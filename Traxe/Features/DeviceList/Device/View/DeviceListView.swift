@@ -371,7 +371,7 @@ struct DeviceListView: View {
                     poolName: viewModel.deviceMetrics[device.ipAddress]?.poolURL
                 )
             } else {
-                Text("Error: No device selected")
+                Text("Error: No miner selected")
             }
         }
         .alert("Connection Failed", isPresented: $showConnectionErrorAlert) {
@@ -383,7 +383,7 @@ struct DeviceListView: View {
             }
             return Text(message)
         }
-        .alert("Delete Device", isPresented: $showingDeleteConfirmation) {
+        .alert("Delete Miner", isPresented: $showingDeleteConfirmation) {
             Button("Delete", role: .destructive) {
                 if let indexSet = indexSetToDelete {
                     viewModel.deleteDevice(at: indexSet)
@@ -394,12 +394,12 @@ struct DeviceListView: View {
                 indexSetToDelete = nil
             }
         } message: {
-            Text("Are you sure you want to delete this device?")
+            Text("Are you sure you want to delete this miner?")
         }
         .alert("Monthly Subscription Expired", isPresented: $showingSubscriptionExpiredAlert) {
             Button("OK") {}
         } message: {
-            Text("Your monthly subscription has expired. Please renew to access this device.")
+            Text("Your monthly subscription has expired. Please renew to access this miner.")
         }
     }
 
@@ -427,7 +427,7 @@ struct DeviceListView: View {
             // Always use the dashboard error message if available, even if empty
             connectionErrorMessage =
                 dashboardViewModel.errorMessage.isEmpty
-                ? "Could not connect to the device at \(device.ipAddress). Please check the IP and network."
+                ? "Could not connect to the miner at \(device.ipAddress). Please check the IP and network."
                 : dashboardViewModel.errorMessage
 
             connectionErrorDeviceInfo = dashboardViewModel.errorDeviceInfo
@@ -484,7 +484,7 @@ struct DeviceListView: View {
         let deviceCount: Int
     }
     let summaryContent =
-        "\(devices.count) devices producing a total of 10.1 TH/s, with a temperature range of 61-72°C, and consuming 2450W of power."
+        "\(devices.count) miners producing a total of 10.1 TH/s, with a temperature range of 61-72°C, and consuming 2450W of power."
     let summaryEncoder = JSONEncoder()
     summaryEncoder.dateEncodingStrategy = .iso8601
     groupDefaults.set(

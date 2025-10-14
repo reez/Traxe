@@ -65,8 +65,6 @@ final class DeviceListViewModel: ObservableObject {
     func loadCacheAndComputeTotals() {
         // Load cached metrics
         let cachedMetrics = metricsCache.loadAll()
-        let totalCachedHashrate = cachedMetrics.values.reduce(0.0) { $0 + $1.hashrate }
-
         // Prune cache to only include current devices
         let currentIPs = savedDevices.map { $0.ipAddress }
         metricsCache.prune(ips: currentIPs)
@@ -250,6 +248,9 @@ final class DeviceListViewModel: ObservableObject {
         }
 
         metricsCache.saveAll(cacheMetrics)
+        #if os(iOS)
+            WatchSyncManager.shared.updateCacheMetrics(cacheMetrics)
+        #endif
     }
 
     private func parseDifficultyString(_ diffString: String) -> Double {

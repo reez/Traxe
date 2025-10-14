@@ -5,7 +5,7 @@ struct DangerZoneSection: View {
 
     var body: some View {
         Section {
-            Button("Restart Device", role: .destructive, action: onRestart)
+            Button("Restart Miner", role: .destructive, action: onRestart)
         } header: {
             Text("Danger Zone")
         }

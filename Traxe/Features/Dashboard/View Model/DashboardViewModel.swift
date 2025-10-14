@@ -127,7 +127,7 @@ final class DashboardViewModel: ObservableObject {
         guard let deviceId = currentDeviceId, !deviceId.isEmpty else {
             await MainActor.run {
                 self.connectionState = .disconnected
-                self.errorMessage = "No device IP address configured"
+                self.errorMessage = "No miner IP address configured"
             }
             isConnecting = false
             return
@@ -161,8 +161,8 @@ final class DashboardViewModel: ObservableObject {
         message: String, deviceInfo: String
     ) {
         let message =
-            "Failed to connect to device at \(deviceId). Please check the IP address and network connection."
-        let deviceInfo = "Device: \(deviceId)\nError: \(error.localizedDescription)"
+            "Failed to connect to miner at \(deviceId). Please check the IP address and network connection."
+        let deviceInfo = "Miner: \(deviceId)\nError: \(error.localizedDescription)"
         return (message, deviceInfo)
     }
 

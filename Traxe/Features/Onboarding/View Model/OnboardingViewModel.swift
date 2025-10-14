@@ -69,7 +69,7 @@ final class OnboardingViewModel: ObservableObject {
                 guard let self = self else { return }
 
                 if self.scanStatus
-                    == "Please allow local network access in Settings to scan for devices"
+                    == "Please allow local network access in Settings to scan for miners"
                     && !self.isScanning
                 {
                     self.scanStatus = ""
@@ -85,7 +85,7 @@ final class OnboardingViewModel: ObservableObject {
     private func checkAndUpdatePermission() async {
         hasLocalNetworkPermission = await checkLocalNetworkPermission()
         if !hasLocalNetworkPermission {
-            scanStatus = "Please allow local network access in Settings to scan for devices"
+            scanStatus = "Please allow local network access in Settings to scan for miners"
         } else {
             if !isScanning {
                 scanStatus = ""
@@ -123,7 +123,7 @@ final class OnboardingViewModel: ObservableObject {
             return false
         }
 
-        for attempt in 1...3 {
+        for _ in 1...3 {
             do {
                 var request = URLRequest(url: url)
                 request.timeoutInterval = 5.0
@@ -166,7 +166,7 @@ final class OnboardingViewModel: ObservableObject {
                                     discoveredDevices.append(device)
                                     let deviceCount = discoveredDevices.count
                                     scanStatus =
-                                        "Found \(deviceCount) device\(deviceCount == 1 ? "" : "s")..."
+                                        "Found \(deviceCount) miner\(deviceCount == 1 ? "" : "s")..."
                                 }
                             }
                             return true
@@ -182,9 +182,9 @@ final class OnboardingViewModel: ObservableObject {
                         if let json = try? JSONSerialization.jsonObject(with: data)
                             as? [String: Any]
                         {
-                            let deviceModel = json["deviceModel"] as? String ?? "Unknown Device"
+                            let deviceModel = json["deviceModel"] as? String ?? "Unknown Miner"
                             let version = json["version"] as? String ?? "Unknown Version"
-                            extractedDeviceInfo = "Device: \(deviceModel) \(version)"
+                            extractedDeviceInfo = "Miner: \(deviceModel) \(version)"
                         }
 
                         // Detailed decoding error handling
@@ -281,7 +281,7 @@ final class OnboardingViewModel: ObservableObject {
                     }
                     return false
                 }
-            } catch let error as URLError {
+            } catch is URLError {
                 // Network-level errors (timeout, cannot connect, etc.)
                 // Don't show alerts for expected network failures during AP mode check
                 return false
@@ -295,9 +295,6 @@ final class OnboardingViewModel: ObservableObject {
                 return false
             }
 
-            if attempt < 3 {
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
-            }
         }
         return false
     }
@@ -306,7 +303,7 @@ final class OnboardingViewModel: ObservableObject {
         await checkAndUpdatePermission()
 
         guard hasLocalNetworkPermission else {
-            scanStatus = "Please allow local network access in Settings to scan for devices"
+            scanStatus = "Please allow local network access in Settings to scan for miners"
             isScanning = false
             hasScanned = true
             return .permissionDenied
@@ -315,7 +312,7 @@ final class OnboardingViewModel: ObservableObject {
         guard !isScanning else { return .alreadyScanning }
 
         isScanning = true
-        scanStatus = "Scanning for devices..."
+        scanStatus = "Scanning for miners..."
         discoveredDevices.removeAll()
         showErrorAlert = false
         deviceInfo = ""
@@ -361,22 +358,22 @@ final class OnboardingViewModel: ObservableObject {
                                         self.discoveredDevices.append(discoveredDevice)
                                         let deviceCount = self.discoveredDevices.count
                                         self.scanStatus =
-                                            "Found \(deviceCount) device\(deviceCount == 1 ? "" : "s")..."
+                                            "Found \(deviceCount) miner\(deviceCount == 1 ? "" : "s")..."
                                     }
                                 }
                             } catch let error as DeviceCheckError {
                                 // Handle decoding errors from network scan
-                                if case .decodingError(let fieldName, _, let jsonData) = error,
+                                if case .decodingError(_, _, let jsonData) = error,
                                     let data = jsonData
                                 {
                                     if let json = try? JSONSerialization.jsonObject(with: data)
                                         as? [String: Any]
                                     {
                                         let deviceModel =
-                                            json["deviceModel"] as? String ?? "Unknown Device"
+                                            json["deviceModel"] as? String ?? "Unknown Miner"
                                         let version =
                                             json["version"] as? String ?? "Unknown Version"
-                                        let deviceInfo = "Device: \(deviceModel) \(version)"
+                                        let deviceInfo = "Miner: \(deviceModel) \(version)"
 
                                         var problemFieldInfo = ""
                                         var problems: [String] = []
@@ -468,13 +465,13 @@ final class OnboardingViewModel: ObservableObject {
             if self.discoveredDevices.isEmpty {
                 self.handleError(
                     """
-                    No devices found.
+                    No miners found.
                     """
                 )
             } else {
                 let deviceCount = self.discoveredDevices.count
                 self.scanStatus =
-                    "Scan complete. Found \(deviceCount) device\(deviceCount == 1 ? "" : "s")."
+                    "Scan complete. Found \(deviceCount) miner\(deviceCount == 1 ? "" : "s")."
             }
             self.isScanning = false
             self.hasScanned = true
@@ -488,7 +485,7 @@ final class OnboardingViewModel: ObservableObject {
         do {
             try DeviceManagementService.saveDevice(savedDevice)
         } catch {
-            handleError("Failed to save the selected device. Please try again.")
+            handleError("Failed to save the selected miner. Please try again.")
         }
     }
 
@@ -521,11 +518,11 @@ final class OnboardingViewModel: ObservableObject {
 
         } catch let error as DeviceCheckError {
             // Try to extract device info if it's a decoding error
-            if case .decodingError(let fieldName, _, let jsonData) = error, let data = jsonData {
+            if case .decodingError(_, _, let jsonData) = error, let data = jsonData {
                 if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                    let deviceModel = json["deviceModel"] as? String ?? "Unknown Device"
+                    let deviceModel = json["deviceModel"] as? String ?? "Unknown Miner"
                     let version = json["version"] as? String ?? "Unknown Version"
-                    let deviceInfo = "Device: \(deviceModel) \(version)"
+                    let deviceInfo = "Miner: \(deviceModel) \(version)"
 
                     var problemFieldInfo = ""
                     var problems: [String] = []
@@ -581,7 +578,7 @@ final class OnboardingViewModel: ObservableObject {
             handleError(error.localizedDescription)
             return false
         } catch {
-            handleError("An unexpected error occurred while adding the device.")
+            handleError("An unexpected error occurred while adding the miner.")
             return false
         }
     }

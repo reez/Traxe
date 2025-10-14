@@ -257,7 +257,7 @@ extension SystemInfoDTO {
     }
 
     // Computed properties with fallbacks - maintains API compatibility
-    var hostname: String { _hostname ?? "Unknown Device" }
+    var hostname: String { _hostname ?? "Unknown Miner" }
     var version: String { _version ?? "Unknown" }
     var ASICModel: String { _ASICModel ?? "Unknown" }
     var bestDiff: String { _bestDiff ?? "0" }

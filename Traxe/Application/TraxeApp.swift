@@ -38,11 +38,15 @@ struct TraxeApp: App {
         Purchases.configure(withAPIKey: "appl_qmpDjLonGDKmmzmItMjeuLZLYLj")
         Task {
             do {
-                try await Purchases.shared.syncPurchases()
+                _ = try await Purchases.shared.syncPurchases()
             } catch {
                 // Log and continue—syncPurchases failures aren’t fatal but help with debugging
             }
         }
+
+        #if os(iOS)
+            _ = WatchSyncManager.shared
+        #endif
 
         let modelContext = sharedModelContainer.mainContext
         _dashboardViewModel = StateObject(

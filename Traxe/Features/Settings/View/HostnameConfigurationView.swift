@@ -10,7 +10,7 @@ struct HostnameConfigurationView: View {
 
     var body: some View {
         Form {
-            Section("Device Configuration") {
+            Section("Miner Configuration") {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Hostname".uppercased())
                         .font(.subheadline)
@@ -18,7 +18,7 @@ struct HostnameConfigurationView: View {
                     TextField("bitaxe", text: $localHostname)
                         .autocorrectionDisabled(true)
                         .textInputAutocapitalization(.never)
-                    Text("The device name shown on your network and in the app.")
+                    Text("The miner name shown on your network and in the app.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .padding(.top, 2)
