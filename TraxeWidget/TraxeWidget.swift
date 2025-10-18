@@ -224,9 +224,32 @@ struct Provider: TimelineProvider {
 }
 
 #if canImport(WatchConnectivity)
+    private final class WidgetWatchSessionDelegate: NSObject, WCSessionDelegate {
+        static let shared = WidgetWatchSessionDelegate()
+
+        private override init() {
+            super.init()
+        }
+
+        func session(
+            _ session: WCSession,
+            activationDidCompleteWith activationState: WCSessionActivationState,
+            error: Error?
+        ) {}
+
+        func sessionDidBecomeInactive(_ session: WCSession) {}
+
+        func sessionDidDeactivate(_ session: WCSession) {
+            session.activate()
+        }
+    }
+
     private func pushUpdateToWatch(_ metrics: [String: CachedDeviceMetrics]) {
         guard WCSession.isSupported() else { return }
         let session = WCSession.default
+        if session.delegate == nil || !(session.delegate === WidgetWatchSessionDelegate.shared) {
+            session.delegate = WidgetWatchSessionDelegate.shared
+        }
         if session.activationState != .activated {
             session.activate()
         }
