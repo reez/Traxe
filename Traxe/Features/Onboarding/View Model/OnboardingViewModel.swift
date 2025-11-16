@@ -43,6 +43,7 @@ final class OnboardingViewModel: ObservableObject {
         label: "com.matthewramsden.traxe.discovery",
         qos: .userInitiated
     )
+    private var permissionErrorDetected = false
 
     private actor ScanState {
         var tasks: [Task<Void, Never>] = []
@@ -301,6 +302,7 @@ final class OnboardingViewModel: ObservableObject {
 
     func startScan() async -> ScanInitiationResult {
         await checkAndUpdatePermission()
+        permissionErrorDetected = false
 
         guard hasLocalNetworkPermission else {
             scanStatus = "Please allow local network access in Settings to scan for miners"
@@ -433,6 +435,10 @@ final class OnboardingViewModel: ObservableObject {
                                             self.problemField = problemFieldInfo
                                             self.showErrorAlert = true
                                         }
+                                    }
+                                } else if case .requestFailed(let code) = error {
+                                    if await self.handlePermissionIssueIfNeeded(for: code) {
+                                        return
                                     }
                                 }
                             } catch {
@@ -581,6 +587,29 @@ final class OnboardingViewModel: ObservableObject {
             handleError("An unexpected error occurred while adding the miner.")
             return false
         }
+    }
+
+    private func handlePermissionIssueIfNeeded(for code: URLError.Code) async -> Bool {
+        let permissionCodes: Set<URLError.Code> = [
+            .notConnectedToInternet,
+            .networkConnectionLost,
+            .timedOut,
+            .cannotConnectToHost,
+        ]
+        guard permissionCodes.contains(code), !permissionErrorDetected else { return false }
+
+        permissionErrorDetected = true
+
+        await scanState.cancelAll()
+
+        await MainActor.run {
+            hasLocalNetworkPermission = false
+            isScanning = false
+            hasScanned = true
+            scanStatus = "Please allow local network access in Settings to scan for miners"
+            showErrorAlert = false
+        }
+        return true
     }
 
     private func getNetworkInterfaces() -> [String]? {
