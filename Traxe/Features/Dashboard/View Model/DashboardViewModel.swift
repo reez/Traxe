@@ -160,9 +160,87 @@ final class DashboardViewModel: ObservableObject {
     private func handleConnectionError(_ error: Error, deviceId: String) -> (
         message: String, deviceInfo: String
     ) {
+        if case NetworkError.decodingError(let decodeError, let data) = error {
+            let details = buildDecodingErrorDetails(
+                data: data,
+                deviceId: deviceId,
+                underlyingError: decodeError
+            )
+            return details
+        } else {
+            let message =
+                "Failed to connect to miner at \(deviceId). Please check the IP address and network connection."
+            let deviceInfo = "Miner: \(deviceId)\nError: \(error.localizedDescription)"
+            return (message, deviceInfo)
+        }
+    }
+
+    // Mirror onboarding-style clarity for decoding failures: tell the user the miner responded
+    // with an unexpected data format and include lightweight context. No raw payload is stored.
+    private func buildDecodingErrorDetails(
+        data: Data?,
+        deviceId: String,
+        underlyingError: Error
+    ) -> (message: String, deviceInfo: String) {
+        var deviceModel = "Unknown Miner"
+        var firmwareVersion: String = "Unknown Version"
+        var problems: [String] = []
+        var failingField: String?
+
+        if let decodingError = underlyingError as? DecodingError {
+            switch decodingError {
+            case .typeMismatch(_, let context),
+                .valueNotFound(_, let context),
+                .keyNotFound(_, let context),
+                .dataCorrupted(let context):
+                failingField = context.codingPath.last?.stringValue
+            @unknown default:
+                failingField = nil
+            }
+        }
+
+        if let data = data,
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        {
+            deviceModel =
+                json["deviceModel"] as? String
+                ?? json["hostname"] as? String
+                ?? deviceModel
+            firmwareVersion =
+                json["version"] as? String
+                ?? json["axeOSVersion"] as? String
+                ?? firmwareVersion
+
+            // Highlight unknown fields to hint at schema changes
+            let expectedFields = Set(SystemInfoDTO.CodingKeys.allCases.map { $0.rawValue })
+            let jsonFields = Set(json.keys)
+            let extraFields = jsonFields.subtracting(expectedFields)
+
+            if !extraFields.isEmpty {
+                let sortedExtra = Array(extraFields.prefix(3)).sorted()
+                problems.append(contentsOf: sortedExtra.map { "\($0) (unknown field)" })
+                if extraFields.count > 3 {
+                    problems.append("+\(extraFields.count - 3) more unknown fields")
+                }
+            }
+
+            if let failingField, !failingField.isEmpty {
+                problems.insert("Decoder failed on field: \(failingField)", at: 0)
+            }
+        } else if let failingField, !failingField.isEmpty {
+            problems.append("Decoder failed on field: \(failingField)")
+        }
+
         let message =
-            "Failed to connect to miner at \(deviceId). Please check the IP address and network connection."
-        let deviceInfo = "Miner: \(deviceId)\nError: \(error.localizedDescription)"
+            "Miner data format changed. Traxe needs an update to read this firmware. Metrics may be unavailable until then."
+
+        var deviceInfo =
+            "Miner: \(deviceModel) (\(deviceId))\nFirmware: \(firmwareVersion)\nError: \(underlyingError.localizedDescription)"
+
+        if !problems.isEmpty {
+            deviceInfo += "\n\nProblem fields: " + problems.joined(separator: ", ")
+        }
+
         return (message, deviceInfo)
     }
 
