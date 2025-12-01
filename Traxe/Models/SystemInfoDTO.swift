@@ -136,8 +136,8 @@ struct SystemInfoDTO: Codable {
             vrTemp = nil
         }
         expectedHashrate = try container.decodeIfPresent(Double.self, forKey: .expectedHashrate)
-        _bestDiff = try container.decodeIfPresent(String.self, forKey: ._bestDiff)
-        bestSessionDiff = try container.decodeIfPresent(String.self, forKey: .bestSessionDiff)
+        _bestDiff = Self.decodeDiffAsString(container: container, key: ._bestDiff)
+        bestSessionDiff = Self.decodeDiffAsString(container: container, key: .bestSessionDiff)
         stratumDiff = try container.decodeIfPresent(Int.self, forKey: .stratumDiff)
         // Handle isUsingFallbackStratum - support both Bool (NerdQAxe) and Int (Bitaxe)
         if let boolValue = try? container.decode(Bool.self, forKey: .isUsingFallbackStratum) {
@@ -180,7 +180,7 @@ struct SystemInfoDTO: Codable {
         invertscreen = try container.decodeIfPresent(Int.self, forKey: .invertscreen)
         invertfanpolarity = try container.decodeIfPresent(Int.self, forKey: .invertfanpolarity)
         autofanspeed = try container.decodeIfPresent(Int.self, forKey: .autofanspeed)
-        fanspeed = try container.decodeIfPresent(Int.self, forKey: .fanspeed)
+        fanspeed = Self.decodeIntFlexible(container: container, key: .fanspeed)
         fanrpm = try container.decodeIfPresent(Int.self, forKey: .fanrpm)
 
         // Decode NerdQAxe-specific fields (optional, won't affect Bitaxe)
@@ -269,4 +269,39 @@ extension SystemInfoDTO {
 struct ErrorDTO: Codable {
     let error: String
     let message: String?
+}
+
+// AxeOS 2.11.0 switched bestDiff/bestSessionDiff from string to number.
+// Decode both string and numeric payloads and normalize everything to a string.
+// Prefer integers first to avoid appending ".0" and to preserve precision.
+extension SystemInfoDTO {
+    fileprivate static func decodeDiffAsString(
+        container: KeyedDecodingContainer<CodingKeys>,
+        key: CodingKeys
+    ) -> String? {
+        if let int64Value = try? container.decode(Int64.self, forKey: key) {
+            return String(int64Value)
+        }
+        if let doubleValue = try? container.decode(Double.self, forKey: key) {
+            return String(doubleValue)
+        }
+        if let stringValue = try? container.decode(String.self, forKey: key) {
+            return stringValue
+        }
+        return nil
+    }
+
+    // Some firmware builds emit fan speed as Double; accept either and normalize to Int.
+    fileprivate static func decodeIntFlexible(
+        container: KeyedDecodingContainer<CodingKeys>,
+        key: CodingKeys
+    ) -> Int? {
+        if let intValue = try? container.decodeIfPresent(Int.self, forKey: key) {
+            return intValue
+        }
+        if let doubleValue = try? container.decodeIfPresent(Double.self, forKey: key) {
+            return Int(doubleValue)
+        }
+        return nil
+    }
 }
