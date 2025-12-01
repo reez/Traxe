@@ -37,6 +37,7 @@ struct SystemInfoDTO: Codable {
     let macAddr: String?
     let _hostname: String?
     let wifiStatus: String?
+    let wifiRSSI: Int?
 
     let sharesAccepted: Int?
     let sharesRejected: Int?
@@ -92,7 +93,7 @@ struct SystemInfoDTO: Codable {
         case coreVoltage, coreVoltageActual, frequency
         case ssid, macAddr
         case _hostname = "hostname"
-        case wifiStatus
+        case wifiStatus, wifiRSSI
         case sharesAccepted, sharesRejected, uptimeSeconds
         case asicCount, smallCoreCount
         case _ASICModel = "ASICModel"
@@ -123,10 +124,10 @@ struct SystemInfoDTO: Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
         // Decode all known fields as optional
-        power = try container.decodeIfPresent(Double.self, forKey: .power)
-        voltage = try container.decodeIfPresent(Double.self, forKey: .voltage)
-        current = try container.decodeIfPresent(Double.self, forKey: .current)
-        temp = try container.decodeIfPresent(Double.self, forKey: .temp)
+        power = try? container.decodeIfPresent(Double.self, forKey: .power)
+        voltage = try? container.decodeIfPresent(Double.self, forKey: .voltage)
+        current = try? container.decodeIfPresent(Double.self, forKey: .current)
+        temp = try? container.decodeIfPresent(Double.self, forKey: .temp)
         // Handle vrTemp - support both Int (Bitaxe) and Double (NerdQAxe)
         if let doubleValue = try? container.decode(Double.self, forKey: .vrTemp) {
             vrTemp = doubleValue
@@ -135,69 +136,70 @@ struct SystemInfoDTO: Codable {
         } else {
             vrTemp = nil
         }
-        expectedHashrate = try container.decodeIfPresent(Double.self, forKey: .expectedHashrate)
-        _bestDiff = try container.decodeIfPresent(String.self, forKey: ._bestDiff)
-        bestSessionDiff = try container.decodeIfPresent(String.self, forKey: .bestSessionDiff)
-        stratumDiff = try container.decodeIfPresent(Int.self, forKey: .stratumDiff)
+        expectedHashrate = try? container.decodeIfPresent(Double.self, forKey: .expectedHashrate)
+        _bestDiff = Self.decodeDiffAsString(container: container, key: ._bestDiff)
+        bestSessionDiff = Self.decodeDiffAsString(container: container, key: .bestSessionDiff)
+        stratumDiff = try? container.decodeIfPresent(Int.self, forKey: .stratumDiff)
         // Handle isUsingFallbackStratum - support both Bool (NerdQAxe) and Int (Bitaxe)
         if let boolValue = try? container.decode(Bool.self, forKey: .isUsingFallbackStratum) {
             isUsingFallbackStratum = boolValue ? 1 : 0  // Convert Bool to Int
         } else {
-            isUsingFallbackStratum = try container.decodeIfPresent(
+            isUsingFallbackStratum = try? container.decodeIfPresent(
                 Int.self,
                 forKey: .isUsingFallbackStratum
             )
         }
-        freeHeap = try container.decodeIfPresent(Int.self, forKey: .freeHeap)
-        coreVoltage = try container.decodeIfPresent(Int.self, forKey: .coreVoltage)
-        coreVoltageActual = try container.decodeIfPresent(Int.self, forKey: .coreVoltageActual)
-        frequency = try container.decodeIfPresent(Int.self, forKey: .frequency)
-        ssid = try container.decodeIfPresent(String.self, forKey: .ssid)
-        macAddr = try container.decodeIfPresent(String.self, forKey: .macAddr)
-        _hostname = try container.decodeIfPresent(String.self, forKey: ._hostname)
-        wifiStatus = try container.decodeIfPresent(String.self, forKey: .wifiStatus)
-        sharesAccepted = try container.decodeIfPresent(Int.self, forKey: .sharesAccepted)
-        sharesRejected = try container.decodeIfPresent(Int.self, forKey: .sharesRejected)
-        uptimeSeconds = try container.decodeIfPresent(Int.self, forKey: .uptimeSeconds)
-        asicCount = try container.decodeIfPresent(Int.self, forKey: .asicCount)
-        smallCoreCount = try container.decodeIfPresent(Int.self, forKey: .smallCoreCount)
-        _ASICModel = try container.decodeIfPresent(String.self, forKey: ._ASICModel)
-        _stratumURL = try container.decodeIfPresent(String.self, forKey: ._stratumURL)
-        fallbackStratumURL = try container.decodeIfPresent(String.self, forKey: .fallbackStratumURL)
-        _stratumPort = try container.decodeIfPresent(Int.self, forKey: ._stratumPort)
-        fallbackStratumPort = try container.decodeIfPresent(Int.self, forKey: .fallbackStratumPort)
-        _stratumUser = try container.decodeIfPresent(String.self, forKey: ._stratumUser)
-        fallbackStratumUser = try container.decodeIfPresent(
+        freeHeap = try? container.decodeIfPresent(Int.self, forKey: .freeHeap)
+        coreVoltage = try? container.decodeIfPresent(Int.self, forKey: .coreVoltage)
+        coreVoltageActual = try? container.decodeIfPresent(Int.self, forKey: .coreVoltageActual)
+        frequency = try? container.decodeIfPresent(Int.self, forKey: .frequency)
+        ssid = try? container.decodeIfPresent(String.self, forKey: .ssid)
+        macAddr = try? container.decodeIfPresent(String.self, forKey: .macAddr)
+        _hostname = try? container.decodeIfPresent(String.self, forKey: ._hostname)
+        wifiStatus = try? container.decodeIfPresent(String.self, forKey: .wifiStatus)
+        wifiRSSI = try? container.decodeIfPresent(Int.self, forKey: .wifiRSSI)
+        sharesAccepted = try? container.decodeIfPresent(Int.self, forKey: .sharesAccepted)
+        sharesRejected = try? container.decodeIfPresent(Int.self, forKey: .sharesRejected)
+        uptimeSeconds = try? container.decodeIfPresent(Int.self, forKey: .uptimeSeconds)
+        asicCount = try? container.decodeIfPresent(Int.self, forKey: .asicCount)
+        smallCoreCount = try? container.decodeIfPresent(Int.self, forKey: .smallCoreCount)
+        _ASICModel = try? container.decodeIfPresent(String.self, forKey: ._ASICModel)
+        _stratumURL = try? container.decodeIfPresent(String.self, forKey: ._stratumURL)
+        fallbackStratumURL = try? container.decodeIfPresent(String.self, forKey: .fallbackStratumURL)
+        _stratumPort = try? container.decodeIfPresent(Int.self, forKey: ._stratumPort)
+        fallbackStratumPort = try? container.decodeIfPresent(Int.self, forKey: .fallbackStratumPort)
+        _stratumUser = try? container.decodeIfPresent(String.self, forKey: ._stratumUser)
+        fallbackStratumUser = try? container.decodeIfPresent(
             String.self,
             forKey: .fallbackStratumUser
         )
-        _version = try container.decodeIfPresent(String.self, forKey: ._version)
-        idfVersion = try container.decodeIfPresent(String.self, forKey: .idfVersion)
-        boardVersion = try container.decodeIfPresent(String.self, forKey: .boardVersion)
-        runningPartition = try container.decodeIfPresent(String.self, forKey: .runningPartition)
-        flipscreen = try container.decodeIfPresent(Int.self, forKey: .flipscreen)
-        overheat_mode = try container.decodeIfPresent(Int.self, forKey: .overheat_mode)
-        invertscreen = try container.decodeIfPresent(Int.self, forKey: .invertscreen)
-        invertfanpolarity = try container.decodeIfPresent(Int.self, forKey: .invertfanpolarity)
-        autofanspeed = try container.decodeIfPresent(Int.self, forKey: .autofanspeed)
-        fanspeed = try container.decodeIfPresent(Int.self, forKey: .fanspeed)
-        fanrpm = try container.decodeIfPresent(Int.self, forKey: .fanrpm)
+        _version = try? container.decodeIfPresent(String.self, forKey: ._version)
+        idfVersion = try? container.decodeIfPresent(String.self, forKey: .idfVersion)
+        boardVersion = try? container.decodeIfPresent(String.self, forKey: .boardVersion)
+        runningPartition = try? container.decodeIfPresent(String.self, forKey: .runningPartition)
+        flipscreen = try? container.decodeIfPresent(Int.self, forKey: .flipscreen)
+        overheat_mode = try? container.decodeIfPresent(Int.self, forKey: .overheat_mode)
+        invertscreen = try? container.decodeIfPresent(Int.self, forKey: .invertscreen)
+        invertfanpolarity = try? container.decodeIfPresent(Int.self, forKey: .invertfanpolarity)
+        autofanspeed = try? container.decodeIfPresent(Int.self, forKey: .autofanspeed)
+        fanspeed = try? container.decodeIfPresent(Int.self, forKey: .fanspeed)
+        fanrpm = try? container.decodeIfPresent(Int.self, forKey: .fanrpm)
 
         // Decode NerdQAxe-specific fields (optional, won't affect Bitaxe)
-        deviceModel = try container.decodeIfPresent(String.self, forKey: .deviceModel)
-        hostip = try container.decodeIfPresent(String.self, forKey: .hostip)
-        maxPower = try container.decodeIfPresent(Double.self, forKey: .maxPower)
-        minPower = try container.decodeIfPresent(Double.self, forKey: .minPower)
-        maxVoltage = try container.decodeIfPresent(Double.self, forKey: .maxVoltage)
-        minVoltage = try container.decodeIfPresent(Double.self, forKey: .minVoltage)
-        hashRateTimestamp = try container.decodeIfPresent(Int.self, forKey: .hashRateTimestamp)
-        hashRate_10m = try container.decodeIfPresent(Double.self, forKey: .hashRate_10m)
-        hashRate_1h = try container.decodeIfPresent(Double.self, forKey: .hashRate_1h)
-        hashRate_1d = try container.decodeIfPresent(Double.self, forKey: .hashRate_1d)
-        jobInterval = try container.decodeIfPresent(Int.self, forKey: .jobInterval)
-        overheat_temp = try container.decodeIfPresent(Double.self, forKey: .overheat_temp)
-        autoscreenoff = try container.decodeIfPresent(Int.self, forKey: .autoscreenoff)
-        lastResetReason = try container.decodeIfPresent(String.self, forKey: .lastResetReason)
+        deviceModel = try? container.decodeIfPresent(String.self, forKey: .deviceModel)
+        hostip = try? container.decodeIfPresent(String.self, forKey: .hostip)
+        maxPower = try? container.decodeIfPresent(Double.self, forKey: .maxPower)
+        minPower = try? container.decodeIfPresent(Double.self, forKey: .minPower)
+        maxVoltage = try? container.decodeIfPresent(Double.self, forKey: .maxVoltage)
+        minVoltage = try? container.decodeIfPresent(Double.self, forKey: .minVoltage)
+        hashRateTimestamp = try? container.decodeIfPresent(Int.self, forKey: .hashRateTimestamp)
+        hashRate_10m = try? container.decodeIfPresent(Double.self, forKey: .hashRate_10m)
+        hashRate_1h = try? container.decodeIfPresent(Double.self, forKey: .hashRate_1h)
+        hashRate_1d = try? container.decodeIfPresent(Double.self, forKey: .hashRate_1d)
+        jobInterval = try? container.decodeIfPresent(Int.self, forKey: .jobInterval)
+        overheat_temp = try? container.decodeIfPresent(Double.self, forKey: .overheat_temp)
+        autoscreenoff = try? container.decodeIfPresent(Int.self, forKey: .autoscreenoff)
+        lastResetReason = try? container.decodeIfPresent(String.self, forKey: .lastResetReason)
 
         // Handle hashRate variants - try the main key first, then NerdQAxe/Bitaxe fallbacks
         if let hr = try? container.decode(Double.self, forKey: .hashRate) {
@@ -222,6 +224,24 @@ struct SystemInfoDTO: Codable {
             }
         }
     }
+
+    // AxeOS 2.11.0 switched bestDiff/bestSessionDiff from string to number.
+    // Decode both string and numeric payloads and normalize everything to a string.
+    private static func decodeDiffAsString(
+        container: KeyedDecodingContainer<CodingKeys>,
+        key: CodingKeys
+    ) -> String? {
+        if let doubleValue = try? container.decode(Double.self, forKey: key) {
+            return String(doubleValue)
+        }
+        if let intValue = try? container.decode(Int.self, forKey: key) {
+            return String(intValue)
+        }
+        if let stringValue = try? container.decode(String.self, forKey: key) {
+            return stringValue
+        }
+        return nil
+    }
 }
 
 enum DeviceType {
@@ -238,7 +258,6 @@ extension SystemInfoDTO {
     var poolUser: String? { stratumUser }
     var poolURL: String? { stratumURL }
     var wifiSSID: String? { ssid }
-    var wifiRSSI: Int? { 0 }
     var ip: String? { nil }
     var status: String? { "ok" }
     var uptime: UInt64? { UInt64(uptimeSeconds ?? 0) }
