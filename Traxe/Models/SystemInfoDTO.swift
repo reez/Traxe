@@ -37,6 +37,7 @@ struct SystemInfoDTO: Codable {
     let macAddr: String?
     let _hostname: String?
     let wifiStatus: String?
+    let wifiRSSI: Int?
 
     let sharesAccepted: Int?
     let sharesRejected: Int?
@@ -92,7 +93,7 @@ struct SystemInfoDTO: Codable {
         case coreVoltage, coreVoltageActual, frequency
         case ssid, macAddr
         case _hostname = "hostname"
-        case wifiStatus
+        case wifiStatus, wifiRSSI
         case sharesAccepted, sharesRejected, uptimeSeconds
         case asicCount, smallCoreCount
         case _ASICModel = "ASICModel"
@@ -156,6 +157,7 @@ struct SystemInfoDTO: Codable {
         macAddr = try container.decodeIfPresent(String.self, forKey: .macAddr)
         _hostname = try container.decodeIfPresent(String.self, forKey: ._hostname)
         wifiStatus = try container.decodeIfPresent(String.self, forKey: .wifiStatus)
+        wifiRSSI = try container.decodeIfPresent(Int.self, forKey: .wifiRSSI)
         sharesAccepted = try container.decodeIfPresent(Int.self, forKey: .sharesAccepted)
         sharesRejected = try container.decodeIfPresent(Int.self, forKey: .sharesRejected)
         uptimeSeconds = try container.decodeIfPresent(Int.self, forKey: .uptimeSeconds)
@@ -238,7 +240,6 @@ extension SystemInfoDTO {
     var poolUser: String? { stratumUser }
     var poolURL: String? { stratumURL }
     var wifiSSID: String? { ssid }
-    var wifiRSSI: Int? { 0 }
     var ip: String? { nil }
     var status: String? { "ok" }
     var uptime: UInt64? { UInt64(uptimeSeconds ?? 0) }
