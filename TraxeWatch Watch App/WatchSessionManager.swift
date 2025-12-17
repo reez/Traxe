@@ -6,7 +6,7 @@ final class WatchSessionManager: NSObject, WCSessionDelegate {
     static let shared = WatchSessionManager()
 
     private let appGroupID = "group.matthewramsden.traxe"
-    private let deviceCacheKey = "cachedDeviceMetricsV1"
+    private let deviceCacheKey = "cachedDeviceMetricsV2"
     private let legacyDataKey = "lastKnownWidgetData"
 
     private override init() {

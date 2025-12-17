@@ -37,7 +37,7 @@ struct WatchMinerSummary: Identifiable, Hashable {
 @MainActor
 final class HashrateViewModel {
     private let appGroupID = "group.matthewramsden.traxe"
-    private let deviceCacheKey = "cachedDeviceMetricsV1"
+    private let deviceCacheKey = "cachedDeviceMetricsV2"
     private let legacyDataKey = "lastKnownWidgetData"
 
     var totalHashrateValue: String = "--"

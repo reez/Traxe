@@ -94,7 +94,7 @@ actor AIAnalysisService {
             for try await systemInfo in group {
                 if let systemInfo = systemInfo {
                     allDevices.append(systemInfo)
-                    totalHashRate += systemInfo.hashRate ?? 0
+                    totalHashRate += systemInfo.hashrate ?? 0
                     totalPower += systemInfo.power ?? 0
                     avgTemperature += systemInfo.temp ?? 0
                     deviceCount += 1
@@ -153,7 +153,7 @@ actor AIAnalysisService {
 
         let systemInfo = try await networkService.fetchSystemInfo(ipAddressOverride: deviceIP)
 
-        let hashRate = systemInfo.hashRate ?? 0
+        let hashRate = systemInfo.hashrate ?? 0
         let temperature = systemInfo.temp ?? 0
         let power = systemInfo.power ?? 0
         let fanSpeedPercent = systemInfo.fanspeed ?? 0

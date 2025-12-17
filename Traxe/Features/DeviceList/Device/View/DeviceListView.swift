@@ -475,7 +475,7 @@ struct DeviceListView: View {
     ]
     let cacheEncoder = JSONEncoder()
     cacheEncoder.dateEncodingStrategy = .iso8601
-    groupDefaults.set(try! cacheEncoder.encode(cached), forKey: "cachedDeviceMetricsV1")
+    groupDefaults.set(try! cacheEncoder.encode(cached), forKey: "cachedDeviceMetricsV2")
 
     // Seed a cached fleet AI summary so the preview doesn't need networking
     struct _FleetSummaryCacheEntry: Codable {

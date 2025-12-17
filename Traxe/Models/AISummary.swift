@@ -43,7 +43,7 @@ enum AISummaryFormatter {
     static func fleetSummary(fromSystemInfos infos: [SystemInfoDTO]) -> AISummary? {
         guard !infos.isEmpty else { return nil }
 
-        let totalHash = infos.reduce(0) { $0 + ($1.hashRate ?? 0) }
+        let totalHash = infos.reduce(0) { $0 + ($1.hashrate ?? 0) }
         let (hashValue, hashUnit) = totalHash.formattedHashRateWithUnit()
         let temps = infos.map { $0.temp ?? 0 }
         let nonZeroTemps = temps.filter { $0 > 0 }

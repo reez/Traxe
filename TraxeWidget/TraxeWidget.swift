@@ -27,7 +27,7 @@ struct Provider: TimelineProvider {
     let appGroupID = "group.matthewramsden.traxe"
     let savedDevicesKey = "savedDeviceIPs"
     let cachedDataKey = "lastKnownWidgetData"
-    let deviceCacheKey = "cachedDeviceMetricsV1"
+    let deviceCacheKey = "cachedDeviceMetricsV2"
 
     private func getNetworkService() -> NetworkService {
         return NetworkService()
@@ -143,7 +143,7 @@ struct Provider: TimelineProvider {
                             let systemInfo = try await networkService.fetchSystemInfo(
                                 ipAddressOverride: ip
                             )
-                            return (ip, (hash: systemInfo.hashRate, temp: systemInfo.temp))
+                            return (ip, (hash: systemInfo.hashrate, temp: systemInfo.temp))
                         } catch {
                             return (ip, (hash: nil, temp: nil))
                         }

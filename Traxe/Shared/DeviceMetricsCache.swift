@@ -37,7 +37,8 @@ extension DeviceMetrics {
 @MainActor
 class DeviceMetricsCache {
     private let appGroupID = "group.matthewramsden.traxe"
-    private let cacheKey = "cachedDeviceMetricsV1"
+    // Bump key to drop previously cached (pre-normalization) hashrate values.
+    private let cacheKey = "cachedDeviceMetricsV2"
     private let schemaVersion = 1
 
     private var defaults: UserDefaults? {

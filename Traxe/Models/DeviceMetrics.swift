@@ -96,7 +96,7 @@ struct DeviceMetrics {
         }()
 
         self.init(
-            hashrate: systemInfo.hashRate ?? 0.0,
+            hashrate: systemInfo.hashrate ?? 0.0,
             expectedHashrate: 0.0,
             temperature: systemInfo.temp ?? 0.0,
             power: systemInfo.power ?? 0.0,
