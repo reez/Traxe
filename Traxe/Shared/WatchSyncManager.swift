@@ -7,7 +7,7 @@ import Foundation
         static let shared = WatchSyncManager()
 
         private let appGroupID = "group.matthewramsden.traxe"
-        private let deviceCacheKey = "cachedDeviceMetricsV1"
+        private let deviceCacheKey = "cachedDeviceMetricsV2"
         private let legacyDataKey = "lastKnownWidgetData"
 
         private var pendingPayload: [String: Any]?

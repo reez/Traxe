@@ -14,7 +14,7 @@ private struct CachedDeviceMetrics: Codable {
 
 struct WatchHashrateProvider: TimelineProvider {
     private let appGroupID = "group.matthewramsden.traxe"
-    private let deviceCacheKey = "cachedDeviceMetricsV1"
+    private let deviceCacheKey = "cachedDeviceMetricsV2"
     private let cachedDataKey = "lastKnownWidgetData"
     private let fallbackRefresh = TimeInterval(60 * 15)
 

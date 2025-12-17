@@ -233,7 +233,16 @@ enum DeviceType {
 }
 
 extension SystemInfoDTO {
-    var hashrate: Double? { hashRate }
+    // Canonical hashrate in GH/s (handles some firmware reporting MH/s in `hashRate`).
+    var hashrate: Double? {
+        guard let raw = hashRate else { return nil }
+        // For Bitaxe-class devices the hashrate should be in the hundreds/thousands of GH/s.
+        // If a device reports a value this large, it's almost certainly MH/s and needs /1000.
+        if raw >= 50_000 {
+            return raw / 1_000.0
+        }
+        return raw
+    }
     var temperature: Double? { temp }
     var fanPercent: Int? { fanspeed }
     var mac: String? { macAddr }
