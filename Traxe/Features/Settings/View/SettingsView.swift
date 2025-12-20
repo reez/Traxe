@@ -187,7 +187,7 @@ extension SettingsView {
         components.scheme = "mailto"
         components.path = "ramsden.matthew@gmail.com"
         components.queryItems = [
-            URLQueryItem(name: "subject", value: "Traxe - Support Issue")
+            URLQueryItem(name: "subject", value: "Traxe - Support")
         ]
         return components.url
     }

@@ -6,6 +6,7 @@
 import RevenueCat
 import SwiftData
 import SwiftUI
+import TipKit
 import WidgetKit
 
 @main
@@ -68,6 +69,19 @@ struct TraxeApp: App {
             }
             .id(hasCompletedOnboarding)
             .modelContainer(sharedModelContainer)
+            .task {
+                //                #if DEBUG
+                //                                    /// Optionally, call `Tips.resetDatastore()` before `Tips.configure()` to reset the state of all tips. This will allow tips to re-appear even after they have been dismissed by the user.
+                //                                    /// This is for testing only, and should not be enabled in release builds.
+                //                                    try? Tips.resetDatastore()
+                //                #endif
+                try? Tips.configure(
+                    [
+                        .datastoreLocation(.applicationDefault),
+                        .displayFrequency(.immediate),
+                    ]
+                )
+            }
             .onChange(of: scenePhase) { oldPhase, newPhase in
                 if newPhase == .active {
                     WidgetCenter.shared.reloadTimelines(ofKind: "TraxeWidget")
