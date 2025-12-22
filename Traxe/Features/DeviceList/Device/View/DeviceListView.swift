@@ -1,7 +1,44 @@
 import RevenueCat
 import SwiftData
 import SwiftUI
+import TipKit
 import WidgetKit
+
+struct WhatsNewTip: Tip {
+    enum ActionID: String {
+        case openWhatsNew
+    }
+
+    var id: String {
+        "whatsnew-\(WhatsNewConfig.currentWhatsNewKey())"
+    }
+
+    var options: [TipOption] {
+        [Tip.MaxDisplayCount(1)]
+    }
+
+    var title: Text {
+        Text("See What’s New")
+    }
+
+    var message: Text? {
+        Text("Catch up on the latest Traxe updates.")
+    }
+
+    var image: Image? {
+        Image(systemName: "sparkles")
+            .symbolRenderingMode(.hierarchical)
+    }
+
+    var actions: [Action] {
+        [
+            Tip.Action(
+                id: ActionID.openWhatsNew.rawValue,
+                title: "View Updates"
+            )
+        ]
+    }
+}
 
 struct DeviceListView: View {
     @Environment(\.dismiss) var dismiss
@@ -25,6 +62,7 @@ struct DeviceListView: View {
     }
     @State private var navigateToSummary = false
     @State private var selectedDevice: SavedDevice? = nil
+    @State private var showingWhatsNew = false
     @State private var showConnectionErrorAlert = false
     @State private var connectionErrorMessage = ""
     @State private var connectionErrorDeviceInfo = ""
@@ -34,6 +72,7 @@ struct DeviceListView: View {
     @State private var showingPaywallSheet = false
     @State private var showingSubscriptionExpiredAlert = false
     @State private var customerInfo: CustomerInfo? = nil
+    private var whatsNewTip = WhatsNewTip()
 
     private var deviceGridView: some View {
         LazyVStack(spacing: 40) {
@@ -258,6 +297,25 @@ struct DeviceListView: View {
         .transition(.opacity)
     }
 
+    private var whatsNewTipSection: some View {
+        Group {
+            if viewModel.shouldShowWhatsNewTip {
+                TipView(whatsNewTip, arrowEdge: .bottom) { action in
+                    if action.id == WhatsNewTip.ActionID.openWhatsNew.rawValue {
+                        viewModel.markWhatsNewTipSeen()
+                        showingWhatsNew = true
+                    }
+                }
+                .accentColor(.traxeGold)
+                .tipBackground(Color(.secondarySystemBackground))
+                .tipViewStyle(.miniTip)
+                .scaleEffect(0.9)
+                .padding(.top, 6)
+                .padding(.horizontal)
+            }
+        }
+    }
+
     var body: some View {
         ZStack {
             LinearGradient(
@@ -270,15 +328,20 @@ struct DeviceListView: View {
             )
             .ignoresSafeArea()
 
-            ScrollView {
-                VStack(spacing: 0) {
-                    deviceGridView
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        deviceGridView
+                    }
                 }
+                .refreshable {
+                    await viewModel.updateAggregatedStats()
+                }
+                .allowsHitTesting(!viewModel.isEditMode)
             }
-            .refreshable {
-                await viewModel.updateAggregatedStats()
+            .safeAreaInset(edge: .top) {
+                whatsNewTipSection
             }
-            .allowsHitTesting(!viewModel.isEditMode)
 
             if viewModel.isEditMode {
                 editModeOverlay
@@ -359,6 +422,21 @@ struct DeviceListView: View {
         ) {
             AddDeviceView()
         }
+        .sheet(isPresented: $showingWhatsNew) {
+            WhatsNewSheetView(
+                content: WhatsNewConfig.content,
+                accentColor: .traxeGold,
+                requestReview: {
+                    viewModel.requestReview()
+                },
+                sendSupportEmail: {
+                    viewModel.sendSupportEmail()
+                },
+                openSourceRepo: {
+                    viewModel.openSourceRepo()
+                }
+            )
+        }
         .sheet(isPresented: $showingPaywallSheet) {
             PaywallView()
         }
@@ -400,6 +478,13 @@ struct DeviceListView: View {
             Button("OK") {}
         } message: {
             Text("Your monthly subscription has expired. Please renew to access this miner.")
+        }
+        .task {
+            for await status in whatsNewTip.statusUpdates {
+                await MainActor.run {
+                    viewModel.handleWhatsNewTipStatus(status)
+                }
+            }
         }
     }
 
@@ -503,6 +588,34 @@ struct DeviceListView: View {
         DeviceListView(
             dashboardViewModel: previewDashboardVM,
             navigateToDeviceList: .constant(true)
+        )
+    }
+    .modelContainer(container)
+}
+
+#Preview("Whats New Tip Visible") {
+    let _ = {
+        WhatsNewConfig.isEnabledForCurrentBuild = true
+        WhatsNewConfig.currentAnnouncementID = UUID().uuidString
+        try? Tips.resetDatastore()
+        try? Tips.configure([
+            .datastoreLocation(.applicationDefault),
+            .displayFrequency(.immediate),
+        ])
+    }()
+
+    let config = ModelConfiguration(isStoredInMemoryOnly: true)
+    let container = try! ModelContainer(for: HistoricalDataPoint.self, configurations: config)
+    let previewDashboardVM = DashboardViewModel(modelContext: container.mainContext)
+
+    let groupDefaults = UserDefaults(suiteName: "group.matthewramsden.traxe")!
+    groupDefaults.set("preview-previous-announcement", forKey: "lastSeenWhatsNewVersion")
+
+    return NavigationView {
+        DeviceListView(
+            dashboardViewModel: previewDashboardVM,
+            navigateToDeviceList: .constant(true),
+            mockUserDefaults: groupDefaults
         )
     }
     .modelContainer(container)

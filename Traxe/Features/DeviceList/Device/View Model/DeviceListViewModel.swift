@@ -1,5 +1,8 @@
 import Combine
+import StoreKit
 import SwiftUI
+import TipKit
+import UIKit
 import WidgetKit
 
 @MainActor
@@ -14,10 +17,24 @@ final class DeviceListViewModel: ObservableObject {
     @Published var fleetAISummary: AISummary?
     @Published var lastDataUpdate: Date = Date()
     @Published var reachableIPs: Set<String> = []
+    @Published var lastSeenWhatsNewVersion: String? = nil
 
     private let defaults: UserDefaults
     private var aiAnalysisService: AIAnalysisService?
     private let metricsCache = DeviceMetricsCache()
+
+    private enum StorageKeys {
+        static let lastSeenWhatsNewVersion = "lastSeenWhatsNewVersion"
+    }
+
+    private enum Support {
+        static let emailAddress = "ramsden.matthew@gmail.com"
+        static let emailSubject = "Traxe - Support"
+    }
+
+    private enum OpenSource {
+        static let repoURL = "https://github.com/reez/Traxe"
+    }
 
     // Minimal cached fleet summary entry for instant display on launch
     private struct FleetSummaryCacheEntry: Codable {
@@ -33,6 +50,9 @@ final class DeviceListViewModel: ObservableObject {
         if #available(iOS 18.0, macOS 15.0, *) {
             self.aiAnalysisService = AIAnalysisService()
         }
+        self.lastSeenWhatsNewVersion = defaults.string(
+            forKey: StorageKeys.lastSeenWhatsNewVersion
+        )
         loadDevices()
         loadCacheAndComputeTotals()
         // If we couldn't build a summary from cached metrics (e.g., cache is empty),
@@ -40,6 +60,12 @@ final class DeviceListViewModel: ObservableObject {
         if fleetAISummary == nil, let cached = loadCachedFleetSummary() {
             self.fleetAISummary = cached
         }
+    }
+
+    var shouldShowWhatsNewTip: Bool {
+        let currentKey = WhatsNewConfig.currentWhatsNewKey()
+        return WhatsNewConfig.isEnabledForCurrentBuild
+            && lastSeenWhatsNewVersion != currentKey
     }
 
     func loadDevices() {
@@ -113,6 +139,63 @@ final class DeviceListViewModel: ObservableObject {
             let summary = buildFleetSummaryFromMetrics(Array(deviceMetrics.values))
         {
             self.fleetAISummary = summary
+        }
+    }
+
+    func markWhatsNewTipSeen() {
+        let currentKey = WhatsNewConfig.currentWhatsNewKey()
+        lastSeenWhatsNewVersion = currentKey
+        defaults.set(currentKey, forKey: StorageKeys.lastSeenWhatsNewVersion)
+    }
+
+    func handleWhatsNewTipStatus(_ status: Tips.Status) {
+        guard case let .invalidated(reason) = status else { return }
+        if shouldRecordCompletion(for: reason) {
+            markWhatsNewTipSeen()
+        }
+    }
+
+    func requestReview() {
+        guard
+            let scene = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene })
+                .first(where: { $0.activationState == .foregroundActive })
+        else {
+            return
+        }
+
+        AppStore.requestReview(in: scene)
+    }
+
+    func sendSupportEmail() {
+        var components = URLComponents()
+        components.scheme = "mailto"
+        components.path = Support.emailAddress
+        components.queryItems = [
+            URLQueryItem(name: "subject", value: Support.emailSubject)
+        ]
+
+        guard let url = components.url else {
+            return
+        }
+
+        UIApplication.shared.open(url)
+    }
+
+    func openSourceRepo() {
+        guard let url = URL(string: OpenSource.repoURL) else {
+            return
+        }
+
+        UIApplication.shared.open(url)
+    }
+
+    private func shouldRecordCompletion(for reason: Tips.InvalidationReason) -> Bool {
+        switch reason {
+        case .actionPerformed, .tipClosed:
+            return true
+        default:
+            return false
         }
     }
 
