@@ -163,6 +163,10 @@ extension DeviceMetrics {
 
         let cleaned = numericPart.replacingOccurrences(of: ",", with: "")
         guard let value = Double(cleaned) else { return 0.0 }
+        if multiplier == 1.0, trimmed.last?.isNumber == true {
+            // No suffix: treat as raw diff and normalize to millions.
+            return value / 1_000_000.0
+        }
         return value * multiplier
     }
 }
