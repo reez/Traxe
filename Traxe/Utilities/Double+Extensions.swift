@@ -82,4 +82,33 @@ extension Double {
             return (formatter.string(from: NSNumber(value: self)) ?? "\(self)", "GH/s")
         }
     }
+
+    func formattedWithSuffix() -> (value: String, unit: String) {
+        let units = ["", "K", "M", "B", "T", "P", "E"]
+        var scaledValue = self
+        var unitIndex = 0
+        var absValue = abs(scaledValue)
+
+        while absValue >= 1000.0, unitIndex < units.count - 1 {
+            scaledValue /= 1000.0
+            absValue /= 1000.0
+            unitIndex += 1
+        }
+
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.usesGroupingSeparator = false
+        switch absValue {
+        case 100...:
+            formatter.maximumFractionDigits = 0
+        case 10...:
+            formatter.maximumFractionDigits = 1
+        default:
+            formatter.maximumFractionDigits = 2
+        }
+        formatter.minimumFractionDigits = 0
+
+        let formatted = formatter.string(from: NSNumber(value: scaledValue)) ?? "\(scaledValue)"
+        return (formatted, units[unitIndex])
+    }
 }

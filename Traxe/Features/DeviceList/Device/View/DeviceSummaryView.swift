@@ -1,17 +1,27 @@
+import Foundation
+import SimpleToast
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct DeviceSummaryView: View {
     @StateObject var dashboardViewModel: DashboardViewModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @State private var showingSettings = false
+    @State private var showBlockFoundToast = false
+    @State private var lastBlockFoundValue: Int? = nil
     let deviceName: String
     let deviceIP: String
     let poolName: String?
 
     @State private var deviceAISummary: AISummary?
     @State private var isGeneratingDeviceSummary = false
+    private var displayPoolName: String? { dashboardViewModel.currentMetrics.poolURL ?? poolName }
+    private var poolSegments: [PoolDisplaySegment] {
+        guard let poolName = displayPoolName else { return [] }
+        return poolSegments(from: poolName)
+    }
 
     var body: some View {
         ZStack {
@@ -34,11 +44,24 @@ struct DeviceSummaryView: View {
                             //                            .foregroundStyle(.primary)
                             Text(deviceName)
                                 .foregroundStyle(.secondary)
-                            if let poolName = poolName, !poolName.isEmpty {
+                            if !poolSegments.isEmpty {
                                 Text("•")
                                     .foregroundStyle(.secondary)
-                                Text(poolName)
-                                    .foregroundStyle(.secondary)
+                                HStack(spacing: 6) {
+                                    ForEach(Array(poolSegments.enumerated()), id: \.offset) {
+                                        index,
+                                        segment in
+                                        if index > 0 {
+                                            Text("•")
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        HStack(spacing: 6) {
+                                            poolIcon(for: segment.logoName)
+                                            Text(segment.text)
+                                        }
+                                    }
+                                }
+                                .foregroundStyle(.secondary)
                             }
                         }
                         .font(.caption)
@@ -94,8 +117,12 @@ struct DeviceSummaryView: View {
                                     try? await Task.sleep(nanoseconds: 500_000_000)  // 500ms delay
                                     if ProcessInfo.isPreview {
                                         // In previews, use a seed if provided
-                                        let seeded = UserDefaults.standard.string(forKey: "preview_device_summary")
-                                        let content = seeded ?? "Hashrate steady around 2.5 TH/s; temps mid‑60s °C; power ~620W."
+                                        let seeded = UserDefaults.standard.string(
+                                            forKey: "preview_device_summary"
+                                        )
+                                        let content =
+                                            seeded
+                                            ?? "Hashrate steady around 2.5 TH/s; temps mid‑60s °C; power ~620W."
                                         self.deviceAISummary = AISummary(content: content)
                                     } else {
                                         generateDeviceAISummary()
@@ -149,6 +176,9 @@ struct DeviceSummaryView: View {
                 }
                 .animation(.easeInOut(duration: 0.4), value: deviceAISummary != nil)
             }
+            .debugBlockFoundToast {
+                showBlockFoundToast = true
+            }
         }
         .navigationTitle(deviceIP)
         .navigationBarTitleDisplayMode(.large)
@@ -172,6 +202,31 @@ struct DeviceSummaryView: View {
                 modelContext: modelContext
             )
             SettingsView(viewModel: settingsViewModel)
+        }
+        .onAppear {
+            lastBlockFoundValue = dashboardViewModel.currentMetrics.blockFound
+        }
+        .onChange(of: dashboardViewModel.currentMetrics.blockFound) { _, newValue in
+            let previousValue = lastBlockFoundValue
+            lastBlockFoundValue = newValue
+
+            guard dashboardViewModel.connectionState == .connected else { return }
+            guard newValue == 1, previousValue != 1 else { return }
+            showBlockFoundToast = true
+        }
+        .simpleToast(
+            isPresented: $showBlockFoundToast,
+            options: .init(
+                hideAfter: 5.0,
+                animation: .spring,
+                modifierType: .slide
+            )
+        ) {
+            BlockFoundToastView(
+                blockHeight: dashboardViewModel.currentMetrics.blockHeight,
+                poolName: displayPoolName
+            )
+            .padding(.horizontal, 24)
         }
         // Keep the dashboard connected while the settings sheet is presented
         .task {
@@ -217,8 +272,127 @@ struct DeviceSummaryView: View {
             }
         }
     }
+
+    private struct PoolDisplaySegment: Identifiable {
+        let id = UUID()
+        let text: String
+        let logoName: String?
+    }
+
+    private func poolSegments(from poolDisplayName: String) -> [PoolDisplaySegment] {
+        let segments =
+            poolDisplayName
+            .components(separatedBy: "\u{2022}")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        return segments.map { segment in
+            let host = normalizedHost(from: segment)
+            return PoolDisplaySegment(
+                text: segment,
+                logoName: host.flatMap(poolLogoName(for:))
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func poolIcon(for logoName: String?) -> some View {
+        let iconSize = UIFont.preferredFont(forTextStyle: .caption2).pointSize
+        if let logoName, let image = UIImage(named: logoName) {
+            Image(uiImage: image)
+                .resizable()
+                .renderingMode(.original)
+                .scaledToFit()
+                .frame(width: iconSize, height: iconSize)
+        } else {
+            Image(systemName: "hammer.fill")
+                .font(.caption2)
+        }
+    }
+
+    private func poolLogoName(for host: String) -> String? {
+        if host.contains("ocean") {
+            return "ocean"
+        }
+        if host.contains("public-pool") || host.contains("publicpool") {
+            return "publicpool"
+        }
+        if host.contains("parasite") {
+            return "parasite"
+        }
+        return nil
+    }
+
+    private func normalizedHost(from raw: String) -> String? {
+        let base = raw.split(separator: "(").first.map(String.init) ?? ""
+        let trimmed = base.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        if let url = URL(string: trimmed), let host = url.host {
+            return host.lowercased()
+        }
+
+        if let url = URL(string: "stratum://\(trimmed)"), let host = url.host {
+            return host.lowercased()
+        }
+
+        let hostPort = trimmed.split(separator: "/").first ?? ""
+        let host = hostPort.split(separator: ":").first ?? ""
+        let normalized = host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized.isEmpty ? nil : normalized
+    }
 }
 
+extension View {
+    @ViewBuilder
+    fileprivate func debugBlockFoundToast(_ action: @escaping () -> Void) -> some View {
+        #if DEBUG
+            self.onTapGesture(count: 3, perform: action)
+        #else
+            self
+        #endif
+    }
+}
+
+private struct BlockFoundToastView: View {
+    let blockHeight: Int?
+    let poolName: String?
+
+    private var formattedBlockHeight: String? {
+        guard let blockHeight else { return nil }
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        return formatter.string(from: NSNumber(value: blockHeight)) ?? "\(blockHeight)"
+    }
+
+    private var messageText: String {
+        let poolSuffix = (poolName?.isEmpty == false) ? " by \(poolName ?? "")" : ""
+        if let formattedHeight = formattedBlockHeight {
+            return "Block \(formattedHeight) found\(poolSuffix)"
+        }
+        return "Block found\(poolSuffix)"
+    }
+
+    var body: some View {
+        HStack {
+            Text(messageText)
+                .font(.headline)
+                .foregroundStyle(.primary)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(
+            Color(.secondarySystemBackground),
+            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(.secondary.opacity(0.3), lineWidth: 0.5)
+        )
+    }
+}
 #Preview {
     let config = ModelConfiguration(isStoredInMemoryOnly: true)
     let container = try! ModelContainer(for: HistoricalDataPoint.self, configurations: config)
@@ -236,11 +410,11 @@ struct DeviceSummaryView: View {
     // Seed live metrics and a simple historical series
     let now = Date()
     var historical: [HistoricalDataPoint] = []
-    for i in (0..<30) { // 30 points at 1‑min intervals
+    for i in (0..<30) {  // 30 points at 1‑min intervals
         let t = Calendar.current.date(byAdding: .minute, value: -i, to: now) ?? now
         // Deterministic oscillation around 721.0 GH/s and 66°C
-        let deltaHash = (i % 6) - 3 // -3..2
-        let deltaTemp = (i % 4) - 2 // -2..1
+        let deltaHash = (i % 6) - 3  // -3..2
+        let deltaTemp = (i % 4) - 2  // -2..1
         let point = HistoricalDataPoint(
             timestamp: t,
             hashrate: 721.0 + Double(deltaHash),
@@ -253,14 +427,14 @@ struct DeviceSummaryView: View {
     historical.sort { $0.timestamp < $1.timestamp }
 
     let metrics = DeviceMetrics(
-        hashrate: 721.0, // GH/s
+        hashrate: 721.0,  // GH/s
         expectedHashrate: 721.0,
         temperature: 66,
         power: 16.1,
-        uptime: TimeInterval(27 * 24 * 60 * 60), // 27 days
+        uptime: TimeInterval(27 * 24 * 60 * 60),  // 27 days
         fanSpeedPercent: 82,
         timestamp: now,
-        bestDifficulty: 598.7, // in M
+        bestDifficulty: 598.7,  // in M
         inputVoltage: 0,
         asicVoltage: 0,
         measuredVoltage: 0,
@@ -268,16 +442,18 @@ struct DeviceSummaryView: View {
         sharesAccepted: 985,
         sharesRejected: 0,
         poolURL: "mine.ocean.xyz",
-        hostname: "bitaxe"
+        hostname: "bitaxe",
+        blockHeight: 874_321,
+        networkDifficulty: 83_250_000_000_000
     )
 
-#if DEBUG
-    previewViewModel.seedPreviewData(
-        deviceId: "192.168.1.102",
-        metrics: metrics,
-        historical: historical
-    )
-#endif
+    #if DEBUG
+        previewViewModel.seedPreviewData(
+            deviceId: "192.168.1.102",
+            metrics: metrics,
+            historical: historical
+        )
+    #endif
 
     return NavigationStack {
         DeviceSummaryView(

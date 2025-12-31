@@ -42,6 +42,9 @@ struct SystemInfoDTO: Codable {
     let sharesAccepted: Int?
     let sharesRejected: Int?
     let uptimeSeconds: Int?
+    let blockHeight: Int?
+    let networkDifficulty: Double?
+    let blockFound: Int?
 
     let asicCount: Int?
     let smallCoreCount: Int?
@@ -64,6 +67,7 @@ struct SystemInfoDTO: Codable {
     let invertscreen: Int?
     let invertfanpolarity: Int?
     let autofanspeed: Int?
+    let minimumFanSpeed: Int?
     let fanspeed: Int?
     let fanrpm: Int?
 
@@ -82,6 +86,7 @@ struct SystemInfoDTO: Codable {
     let overheat_temp: Double?
     let autoscreenoff: Int?
     let lastResetReason: String?
+    let stratum: StratumInfoDTO?
 
     enum CodingKeys: String, CodingKey, CaseIterable {
         case power, voltage, current, temp, vrTemp
@@ -95,6 +100,7 @@ struct SystemInfoDTO: Codable {
         case _hostname = "hostname"
         case wifiStatus, wifiRSSI
         case sharesAccepted, sharesRejected, uptimeSeconds
+        case blockHeight, networkDifficulty, blockFound
         case asicCount, smallCoreCount
         case _ASICModel = "ASICModel"
         case _stratumURL = "stratumURL"
@@ -108,7 +114,7 @@ struct SystemInfoDTO: Codable {
         case runningPartition
         case flipscreen, overheat_mode
         case invertscreen, invertfanpolarity
-        case autofanspeed, fanspeed, fanrpm
+        case autofanspeed, minimumFanSpeed, fanspeed, fanrpm
 
         // NerdQAxe-specific keys
         case deviceModel, hostip
@@ -118,6 +124,7 @@ struct SystemInfoDTO: Codable {
         case hashRate_10m, hashRate_1h, hashRate_1d
         case jobInterval, overheat_temp
         case autoscreenoff, lastResetReason
+        case stratum
     }
 
     init(from decoder: Decoder) throws {
@@ -161,6 +168,13 @@ struct SystemInfoDTO: Codable {
         sharesAccepted = try container.decodeIfPresent(Int.self, forKey: .sharesAccepted)
         sharesRejected = try container.decodeIfPresent(Int.self, forKey: .sharesRejected)
         uptimeSeconds = try container.decodeIfPresent(Int.self, forKey: .uptimeSeconds)
+        blockHeight = try container.decodeIfPresent(Int.self, forKey: .blockHeight)
+        networkDifficulty = Self.decodeDoubleFlexible(container: container, key: .networkDifficulty)
+        if let boolValue = try? container.decode(Bool.self, forKey: .blockFound) {
+            blockFound = boolValue ? 1 : 0
+        } else {
+            blockFound = try container.decodeIfPresent(Int.self, forKey: .blockFound)
+        }
         asicCount = try container.decodeIfPresent(Int.self, forKey: .asicCount)
         smallCoreCount = try container.decodeIfPresent(Int.self, forKey: .smallCoreCount)
         _ASICModel = try container.decodeIfPresent(String.self, forKey: ._ASICModel)
@@ -182,6 +196,7 @@ struct SystemInfoDTO: Codable {
         invertscreen = try container.decodeIfPresent(Int.self, forKey: .invertscreen)
         invertfanpolarity = try container.decodeIfPresent(Int.self, forKey: .invertfanpolarity)
         autofanspeed = try container.decodeIfPresent(Int.self, forKey: .autofanspeed)
+        minimumFanSpeed = Self.decodeIntFlexible(container: container, key: .minimumFanSpeed)
         fanspeed = Self.decodeIntFlexible(container: container, key: .fanspeed)
         fanrpm = try container.decodeIfPresent(Int.self, forKey: .fanrpm)
 
@@ -200,6 +215,7 @@ struct SystemInfoDTO: Codable {
         overheat_temp = try container.decodeIfPresent(Double.self, forKey: .overheat_temp)
         autoscreenoff = try container.decodeIfPresent(Int.self, forKey: .autoscreenoff)
         lastResetReason = try container.decodeIfPresent(String.self, forKey: .lastResetReason)
+        stratum = try container.decodeIfPresent(StratumInfoDTO.self, forKey: .stratum)
 
         // Handle hashRate variants - try the main key first, then NerdQAxe/Bitaxe fallbacks
         if let hr = try? container.decode(Double.self, forKey: .hashRate) {
@@ -226,6 +242,13 @@ struct SystemInfoDTO: Codable {
     }
 }
 
+struct StratumInfoDTO: Codable {
+    let poolMode: Int?
+    let activePoolMode: Int?
+    let poolBalance: Int?
+    let usingFallback: Bool?
+}
+
 enum DeviceType {
     case bitaxe
     case nerdqaxe
@@ -247,7 +270,7 @@ extension SystemInfoDTO {
     var fanPercent: Int? { fanspeed }
     var mac: String? { macAddr }
     var poolUser: String? { stratumUser }
-    var poolURL: String? { stratumURL }
+    var poolURL: String? { poolDisplayName }
     var wifiSSID: String? { ssid }
     var ip: String? { nil }
     var status: String? { "ok" }
@@ -274,6 +297,26 @@ extension SystemInfoDTO {
     var stratumURL: String { _stratumURL ?? "" }
     var stratumUser: String { _stratumUser ?? "" }
     var stratumPort: Int { _stratumPort ?? 0 }
+    var poolDisplayName: String? {
+        let primary = stratumURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let secondary = fallbackStratumURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let isUsingFallback = (isUsingFallbackStratum == 1) || (stratum?.usingFallback == true)
+        let isDualPool = (stratum?.poolMode ?? stratum?.activePoolMode ?? 0) == 1
+
+        if isDualPool {
+            guard !primary.isEmpty || !secondary.isEmpty else { return nil }
+            if secondary.isEmpty { return primary }
+            let balance = max(0, min(100, stratum?.poolBalance ?? 50))
+            let secondaryBalance = max(0, 100 - balance)
+            return "\(primary) (\(balance)%) • \(secondary) (\(secondaryBalance)%)"
+        }
+
+        if isUsingFallback, !secondary.isEmpty {
+            return secondary
+        }
+
+        return primary.isEmpty ? (secondary.isEmpty ? nil : secondary) : primary
+    }
 }
 
 struct ErrorDTO: Codable {
@@ -311,6 +354,23 @@ extension SystemInfoDTO {
         }
         if let doubleValue = try? container.decodeIfPresent(Double.self, forKey: key) {
             return Int(doubleValue)
+        }
+        return nil
+    }
+
+    // Some firmware builds emit numeric fields as strings; accept both.
+    fileprivate static func decodeDoubleFlexible(
+        container: KeyedDecodingContainer<CodingKeys>,
+        key: CodingKeys
+    ) -> Double? {
+        if let doubleValue = try? container.decodeIfPresent(Double.self, forKey: key) {
+            return doubleValue
+        }
+        if let intValue = try? container.decodeIfPresent(Int.self, forKey: key) {
+            return Double(intValue)
+        }
+        if let stringValue = try? container.decodeIfPresent(String.self, forKey: key) {
+            return Double(stringValue)
         }
         return nil
     }

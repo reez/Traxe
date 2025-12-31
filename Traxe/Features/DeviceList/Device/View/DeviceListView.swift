@@ -22,7 +22,7 @@ struct WhatsNewTip: Tip {
     }
 
     var message: Text? {
-        Text("Catch up on the latest Traxe updates.")
+        Text("Version \(WhatsNewConfig.currentVersion()) updates for Traxe.")  // Text("Catch up on the latest Traxe updates.")
     }
 
     var image: Image? {
@@ -103,6 +103,16 @@ struct DeviceListView: View {
                     }
                 }
                 .padding(.horizontal)
+            }
+
+            if !viewModel.savedDevices.isEmpty {
+                NetworkInfoView(
+                    blockHeight: viewModel.networkSnapshot?.blockHeight,
+                    networkDifficulty: viewModel.networkSnapshot?.networkDifficulty,
+                    isLoading: viewModel.isLoadingAggregatedStats
+                )
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
             }
         }
         .padding(.bottom, 40)
@@ -519,6 +529,63 @@ struct DeviceListView: View {
             showConnectionErrorAlert = true
             navigateToSummary = false
         }
+    }
+}
+
+private struct NetworkInfoView: View {
+    let blockHeight: Int?
+    let networkDifficulty: Double?
+    let isLoading: Bool
+
+    private var formattedBlockHeight: String? {
+        guard let blockHeight else { return nil }
+        let currentBlockHeight = max(blockHeight - 1, 0)
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        return formatter.string(from: NSNumber(value: currentBlockHeight))
+            ?? "\(currentBlockHeight)"
+    }
+
+    private var formattedNetworkDifficulty: (value: String, unit: String)? {
+        guard let networkDifficulty else { return nil }
+        return networkDifficulty.formattedWithSuffix()
+    }
+
+    private var footerText: String? {
+        switch (formattedBlockHeight, formattedNetworkDifficulty) {
+        case (nil, nil):
+            return nil
+        case let (blockHeight?, nil):
+            return "Block \(blockHeight)"
+        case let (nil, difficulty?):
+            return "Difficulty \(difficulty.value) \(difficulty.unit)"
+        case let (blockHeight?, difficulty?):
+            return "Block \(blockHeight) • Difficulty \(difficulty.value) \(difficulty.unit)"
+        }
+    }
+
+    private var placeholderText: String {
+        "Block 000,000 • Difficulty 000"
+    }
+
+    private var unavailableText: String {
+        "Block -- • Difficulty --"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let footerText {
+                Text(footerText)
+            } else if isLoading {
+                Text(placeholderText)
+                    .redacted(reason: .placeholder)
+            } else {
+                Text(unavailableText)
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

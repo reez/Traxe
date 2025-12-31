@@ -31,30 +31,30 @@ struct AddDeviceView: View {
             .ignoresSafeArea()
 
             NavigationView {
-                VStack(spacing: 20) {
+                ScrollView {
+                    VStack(spacing: 20) {
 
-                    manualEntrySection()
-                        .padding(.top, 8)
+                        manualEntrySection()
+                            .padding(.top, 8)
 
-                    HStack {
-                        VStack { Divider() }
-                        Text("Or".uppercased())
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 12)
-                            .font(.caption)
-                        VStack { Divider() }
+                        HStack {
+                            VStack { Divider() }
+                            Text("Or".uppercased())
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 12)
+                                .font(.caption)
+                            VStack { Divider() }
+                        }
+                        .padding(.vertical, 8)
+
+                        scanSection()
+
+                        if !viewModel.discoveredDevices.isEmpty {
+                            discoveredDevicesSection()
+                        }
                     }
-                    .padding(.vertical, 8)
-
-                    scanSection()
-
-                    if !viewModel.discoveredDevices.isEmpty {
-                        discoveredDevicesSection()
-                    }
-
-                    Spacer()
+                    .padding()
                 }
-                .padding()
                 .onTapGesture {
                     UIApplication.shared.sendAction(
                         #selector(UIResponder.resignFirstResponder),
@@ -168,15 +168,11 @@ struct AddDeviceView: View {
     @ViewBuilder
     private func discoveredDevicesSection() -> some View {
         VStack(alignment: .leading, spacing: 8) {
-
-            ScrollView {
-                VStack(spacing: 8) {
-                    ForEach(viewModel.discoveredDevices) { device in
-                        deviceRow(device)
-                    }
+            VStack(spacing: 8) {
+                ForEach(viewModel.discoveredDevices) { device in
+                    deviceRow(device)
                 }
             }
-            .frame(maxHeight: 300)
         }
     }
 

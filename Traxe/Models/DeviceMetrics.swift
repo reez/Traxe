@@ -18,6 +18,9 @@ struct DeviceMetrics {
     var sharesRejected: Int = 0
     var poolURL: String? = nil
     var hostname: String? = nil
+    var blockHeight: Int? = nil
+    var networkDifficulty: Double? = nil
+    var blockFound: Int? = nil
 
     var efficiency: Double {
         guard hashrate > 0 else { return 0 }
@@ -55,7 +58,10 @@ struct DeviceMetrics {
         sharesAccepted: Int = 0,
         sharesRejected: Int = 0,
         poolURL: String? = nil,
-        hostname: String? = nil
+        hostname: String? = nil,
+        blockHeight: Int? = nil,
+        networkDifficulty: Double? = nil,
+        blockFound: Int? = nil
     ) {
         self.hashrate = hashrate
         self.expectedHashrate = expectedHashrate
@@ -73,6 +79,9 @@ struct DeviceMetrics {
         self.sharesRejected = sharesRejected
         self.poolURL = poolURL
         self.hostname = hostname
+        self.blockHeight = blockHeight
+        self.networkDifficulty = networkDifficulty
+        self.blockFound = blockFound
     }
 
     init(from systemInfo: SystemInfoDTO) {
@@ -110,8 +119,11 @@ struct DeviceMetrics {
             frequency: Double(systemInfo.frequency ?? 0),
             sharesAccepted: systemInfo.sharesAccepted ?? 0,
             sharesRejected: systemInfo.sharesRejected ?? 0,
-            poolURL: systemInfo.stratumURL,
-            hostname: systemInfo.hostname
+            poolURL: systemInfo.poolURL,
+            hostname: systemInfo.hostname,
+            blockHeight: systemInfo.blockHeight,
+            networkDifficulty: systemInfo.networkDifficulty,
+            blockFound: systemInfo.blockFound
         )
     }
 
