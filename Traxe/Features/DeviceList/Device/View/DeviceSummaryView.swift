@@ -39,13 +39,13 @@ struct DeviceSummaryView: View {
                 VStack(spacing: 40) {
                     // Device info header
                     HStack {
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: 10) {
                             //                        Text(deviceIP)
                             //                            .foregroundStyle(.primary)
                             Text(deviceName)
                                 .foregroundStyle(.secondary)
                             if !poolSegments.isEmpty {
-                                VStack(alignment: .leading, spacing: 2) {
+                                VStack(alignment: .leading, spacing: 10) {
                                     ForEach(Array(poolSegments.enumerated()), id: \.offset) {
                                         _,
                                         segment in
