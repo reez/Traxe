@@ -199,6 +199,11 @@ actor NetworkService {
         stratumUser: String? = nil,
         stratumURL: String? = nil,
         stratumPort: Int? = nil,
+        fallbackStratumUser: String? = nil,
+        fallbackStratumURL: String? = nil,
+        fallbackStratumPort: Int? = nil,
+        poolBalance: Int? = nil,
+        poolMode: Int? = nil,
         hostname: String? = nil,
         ipAddressOverride: String? = nil
     ) async throws {
@@ -208,6 +213,11 @@ actor NetworkService {
             let stratumUser: String?
             let stratumURL: String?
             let stratumPort: Int?
+            let fallbackStratumUser: String?
+            let fallbackStratumURL: String?
+            let fallbackStratumPort: Int?
+            let poolBalance: Int?
+            let poolMode: Int?
             let hostname: String?
         }
 
@@ -217,6 +227,11 @@ actor NetworkService {
             stratumUser: stratumUser,
             stratumURL: stratumURL,
             stratumPort: stratumPort,
+            fallbackStratumUser: fallbackStratumUser,
+            fallbackStratumURL: fallbackStratumURL,
+            fallbackStratumPort: fallbackStratumPort,
+            poolBalance: poolBalance,
+            poolMode: poolMode,
             hostname: hostname
         )
         try await performPATCH(

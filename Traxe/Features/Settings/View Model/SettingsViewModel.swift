@@ -19,10 +19,17 @@ final class SettingsViewModel: ObservableObject {
     @Published var fanSpeed: Int = 0
     @Published var isAutoFan: Bool = true
     @Published var isUpdatingFan: Bool = false
+    @Published var minimumFanSpeed: Int? = nil
     @Published var isConnected: Bool = false
     @Published var stratumUser: String = ""
     @Published var stratumURL: String = ""
     @Published var stratumPortString: String = ""
+    @Published var fallbackStratumUser: String = ""
+    @Published var fallbackStratumURL: String = ""
+    @Published var fallbackStratumPortString: String = ""
+    @Published var poolBalance: Int = 50
+    @Published var isDualPool: Bool = false
+    @Published var poolMode: Int = 0
     @Published var isUpdatingPoolConfiguration: Bool = false
     @Published var poolConfigurationError: String? = nil
     @Published var hostname: String = ""
@@ -172,9 +179,18 @@ final class SettingsViewModel: ObservableObject {
             currentVersion = systemInfo.version
             fanSpeed = systemInfo.fanspeed ?? 0
             isAutoFan = systemInfo.autofanspeed != 0
+            minimumFanSpeed = systemInfo.minimumFanSpeed
             stratumUser = systemInfo.stratumUser
             stratumURL = systemInfo.stratumURL
             stratumPortString = String(systemInfo.stratumPort)
+            fallbackStratumUser = systemInfo.fallbackStratumUser ?? ""
+            fallbackStratumURL = systemInfo.fallbackStratumURL ?? ""
+            fallbackStratumPortString = systemInfo.fallbackStratumPort.map { String($0) } ?? ""
+            poolBalance = max(0, min(100, systemInfo.stratum?.poolBalance ?? 50))
+            let detectedPoolMode =
+                systemInfo.stratum?.poolMode ?? systemInfo.stratum?.activePoolMode ?? 0
+            poolMode = detectedPoolMode == 1 ? 1 : 0
+            isDualPool = poolMode == 1
             hostname = systemInfo.hostname
             isConnected = true
         } catch {
@@ -219,11 +235,25 @@ final class SettingsViewModel: ObservableObject {
             return false
         }
 
+        var fallbackPortToSave: Int? = nil
+        if let port = Int(fallbackStratumPortString), !fallbackStratumPortString.isEmpty {
+            fallbackPortToSave = port
+        } else if !fallbackStratumPortString.isEmpty {
+            poolConfigurationError = "Invalid fallback port number. Please enter a valid number."
+            isUpdatingPoolConfiguration = false
+            return false
+        }
+
         do {
             try await networkService.updateSystemSettings(
                 stratumUser: stratumUser.isEmpty ? nil : stratumUser,
                 stratumURL: stratumURL.isEmpty ? nil : stratumURL,
-                stratumPort: portToSave
+                stratumPort: portToSave,
+                fallbackStratumUser: fallbackStratumUser.isEmpty ? nil : fallbackStratumUser,
+                fallbackStratumURL: fallbackStratumURL.isEmpty ? nil : fallbackStratumURL,
+                fallbackStratumPort: fallbackPortToSave,
+                poolBalance: poolMode == 1 ? max(1, min(99, poolBalance)) : nil,
+                poolMode: poolMode
             )
             await fetchDeviceSettings()
             success = true

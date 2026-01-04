@@ -36,6 +36,17 @@ final class DeviceListViewModel: ObservableObject {
         static let repoURL = "https://github.com/reez/Traxe"
     }
 
+    var networkSnapshot: (blockHeight: Int?, networkDifficulty: Double?)? {
+        for device in savedDevices {
+            if let metrics = deviceMetrics[device.ipAddress],
+                metrics.blockHeight != nil || metrics.networkDifficulty != nil
+            {
+                return (metrics.blockHeight, metrics.networkDifficulty)
+            }
+        }
+        return nil
+    }
+
     // Minimal cached fleet summary entry for instant display on launch
     private struct FleetSummaryCacheEntry: Codable {
         let content: String
@@ -274,7 +285,9 @@ final class DeviceListViewModel: ObservableObject {
                                 power: discoveredDevice.power,
                                 bestDifficulty: parsedDifficulty,
                                 poolURL: discoveredDevice.poolURL,
-                                hostname: discoveredDevice.name
+                                hostname: discoveredDevice.name,
+                                blockHeight: discoveredDevice.blockHeight,
+                                networkDifficulty: discoveredDevice.networkDifficulty
                             )
                             return (device.ipAddress, metrics)
                         } catch {

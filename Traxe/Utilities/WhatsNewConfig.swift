@@ -62,7 +62,7 @@ public struct WhatsNewContent: Sendable, Equatable {
 
 public enum WhatsNewConfig {
     /// Toggle this flag when you want the TipKit surface to appear for the current build.
-    public static var isEnabledForCurrentBuild = false
+    public static var isEnabledForCurrentBuild = true  //false
 
     /// A stable identifier for a "What's New" announcement.
     ///
@@ -75,26 +75,28 @@ public enum WhatsNewConfig {
     /// Customize the content that the sheet renders when users tap the tip action.
     public static var content = WhatsNewContent(
         title: "What’s New",
-        message: "New features in Traxe",
+        message: "Version \(currentVersion())",  // "New features in Traxe",
         highlights: [
             WhatsNewHighlight(
                 badgeTint: .orange,
-                iconSystemName: "widget.large",
-                title: "Widgets",
-                detail: "Newly added widgets that show total hashrate on iPhone & Apple Watch."
+                iconSystemName: "arrow.left.and.line.vertical.and.arrow.right",
+                title: "Dual Pool",
+                detail:
+                    "Support on NerdQaxe, configure pools, set balance %, see pools on miner detail."
             ),
             WhatsNewHighlight(
                 badgeTint: .green,
                 iconSystemName: "iphone",
-                title: "Day one support for iOS 26",
-                detail: "Updated for Liquid Glass and new iOS 26 features."
+                title: "More miner details",
+                detail:
+                    "Pool logos in miner detail, block found toast, block height and difficulty footer, minimum fan speed, for firmware where available."
             ),
-            WhatsNewHighlight(
-                badgeTint: .indigo,
-                iconSystemName: "powerplug.portrait",
-                title: "More esp-miner's",
-                detail: "Support for more esp-miner forks."
-            ),
+            //            WhatsNewHighlight(
+            //                badgeTint: .indigo,
+            //                iconSystemName: "powerplug.portrait",
+            //                title: "More esp-miner's",
+            //                detail: "Support for more esp-miner forks."
+            //            ),
         ]
     )
 

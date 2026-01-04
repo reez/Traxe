@@ -19,6 +19,8 @@ struct DiscoveredDevice: Identifiable {
     let bestDiff: String
     let power: Double
     let poolURL: String?
+    let blockHeight: Int?
+    let networkDifficulty: Double?
 }
 
 @MainActor
@@ -160,7 +162,9 @@ final class OnboardingViewModel: ObservableObject {
                                 temperature: systemInfo.temperature ?? 0.0,
                                 bestDiff: systemInfo.bestDiff,
                                 power: systemInfo.power ?? 0.0,
-                                poolURL: systemInfo.poolURL
+                                poolURL: systemInfo.poolURL,
+                                blockHeight: systemInfo.blockHeight,
+                                networkDifficulty: systemInfo.networkDifficulty
                             )
                             await MainActor.run {
                                 if !discoveredDevices.contains(where: { $0.ip == apIP }) {
@@ -219,7 +223,9 @@ final class OnboardingViewModel: ObservableObject {
                                 "isUsingFallbackStratum", "freeHeap",
                                 "coreVoltage", "coreVoltageActual", "frequency", "ssid", "macAddr",
                                 "hostname",
-                                "wifiStatus", "wifiRSSI", "sharesAccepted", "sharesRejected", "uptimeSeconds",
+                                "wifiStatus", "wifiRSSI", "sharesAccepted", "sharesRejected",
+                                "uptimeSeconds",
+                                "blockHeight", "networkDifficulty", "blockFound",
                                 "asicCount",
                                 "smallCoreCount", "ASICModel", "stratumURL", "fallbackStratumURL",
                                 "stratumPort",
@@ -227,8 +233,8 @@ final class OnboardingViewModel: ObservableObject {
                                 "version",
                                 "idfVersion", "boardVersion", "runningPartition", "flipscreen",
                                 "overheat_mode",
-                                "invertscreen", "invertfanpolarity", "autofanspeed", "fanspeed",
-                                "fanrpm",
+                                "invertscreen", "invertfanpolarity", "autofanspeed",
+                                "minimumFanSpeed", "fanspeed", "fanrpm",
                             ])
 
                             let jsonFields = Set(json.keys)
@@ -394,8 +400,11 @@ final class OnboardingViewModel: ObservableObject {
                                             "isUsingFallbackStratum", "freeHeap",
                                             "coreVoltage", "coreVoltageActual", "frequency", "ssid",
                                             "macAddr", "hostname",
-                                            "wifiStatus", "wifiRSSI", "sharesAccepted", "sharesRejected",
-                                            "uptimeSeconds", "asicCount",
+                                            "wifiStatus", "wifiRSSI", "sharesAccepted",
+                                            "sharesRejected",
+                                            "uptimeSeconds", "blockHeight", "networkDifficulty",
+                                            "blockFound",
+                                            "asicCount",
                                             "smallCoreCount", "ASICModel", "stratumURL",
                                             "fallbackStratumURL", "stratumPort",
                                             "fallbackStratumPort", "stratumUser",
@@ -403,7 +412,7 @@ final class OnboardingViewModel: ObservableObject {
                                             "idfVersion", "boardVersion", "runningPartition",
                                             "flipscreen", "overheat_mode",
                                             "invertscreen", "invertfanpolarity", "autofanspeed",
-                                            "fanspeed", "fanrpm",
+                                            "minimumFanSpeed", "fanspeed", "fanrpm",
                                         ])
 
                                         let jsonFields = Set(json.keys)
@@ -546,14 +555,17 @@ final class OnboardingViewModel: ObservableObject {
                         "freeHeap",
                         "coreVoltage", "coreVoltageActual", "frequency", "ssid", "macAddr",
                         "hostname",
-                        "wifiStatus", "wifiRSSI", "sharesAccepted", "sharesRejected", "uptimeSeconds",
+                        "wifiStatus", "wifiRSSI", "sharesAccepted", "sharesRejected",
+                        "uptimeSeconds",
+                        "blockHeight", "networkDifficulty", "blockFound",
                         "asicCount",
                         "smallCoreCount", "ASICModel", "stratumURL", "fallbackStratumURL",
                         "stratumPort",
                         "fallbackStratumPort", "stratumUser", "fallbackStratumUser", "version",
                         "idfVersion", "boardVersion", "runningPartition", "flipscreen",
                         "overheat_mode",
-                        "invertscreen", "invertfanpolarity", "autofanspeed", "fanspeed", "fanrpm",
+                        "invertscreen", "invertfanpolarity", "autofanspeed", "minimumFanSpeed",
+                        "fanspeed", "fanrpm",
                     ])
 
                     let jsonFields = Set(json.keys)

@@ -82,7 +82,9 @@ struct DeviceManagementService {
                             temperature: systemInfo.temperature ?? 0.0,
                             bestDiff: systemInfo.bestDiff,
                             power: systemInfo.power ?? 0.0,
-                            poolURL: systemInfo.poolURL
+                            poolURL: systemInfo.poolURL,
+                            blockHeight: systemInfo.blockHeight,
+                            networkDifficulty: systemInfo.networkDifficulty
                         )
                     } else {
                         throw DeviceCheckError.notBitaxeDevice

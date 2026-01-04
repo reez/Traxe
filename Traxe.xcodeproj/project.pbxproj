@@ -18,6 +18,7 @@
 		AE8F8BCB2E9B0B0F00E4450C /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AE0771532DAECFCB00634820 /* WidgetKit.framework */; };
 		AE8F8BCC2E9B0B0F00E4450C /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AE0771552DAECFCB00634820 /* SwiftUI.framework */; };
 		AE8F8BD72E9B0B1000E4450C /* TraxeWatchWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AE8F8BCA2E9B0B0F00E4450C /* TraxeWatchWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		FD281FC852134B0BA90500F9 /* SimpleToast in Frameworks */ = {isa = PBXBuildFile; productRef = 4E046C484FAF4EA389BAB573 /* SimpleToast */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -176,6 +177,7 @@
 				AE3213D02DBC162D00E17268 /* StoreKit.framework in Frameworks */,
 				AE3213CE2DBC15DC00E17268 /* RevenueCatUI in Frameworks */,
 				AE3213CC2DBC15DC00E17268 /* RevenueCat in Frameworks */,
+				FD281FC852134B0BA90500F9 /* SimpleToast in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -269,6 +271,7 @@
 			packageProductDependencies = (
 				AE3213CB2DBC15DC00E17268 /* RevenueCat */,
 				AE3213CD2DBC15DC00E17268 /* RevenueCatUI */,
+				4E046C484FAF4EA389BAB573 /* SimpleToast */,
 			);
 			productName = Traxe;
 			productReference = AE45A31F2DAC951E0096641F /* Traxe.app */;
@@ -377,6 +380,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				AE3213CA2DBC15DC00E17268 /* XCRemoteSwiftPackageReference "purchases-ios" */,
+				3F776890CED4437ABF513975 /* XCRemoteSwiftPackageReference "SimpleToast" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = AE45A3202DAC951E0096641F /* Products */;
@@ -620,7 +624,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.11;
+				MARKETING_VERSION = 1.1.12;
 				PRODUCT_BUNDLE_IDENTIFIER = com.matthewramsden.Traxe;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -657,7 +661,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.11;
+				MARKETING_VERSION = 1.1.12;
 				PRODUCT_BUNDLE_IDENTIFIER = com.matthewramsden.Traxe;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -689,7 +693,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1.11;
+				MARKETING_VERSION = 1.1.12;
 				PRODUCT_BUNDLE_IDENTIFIER = com.matthewramsden.Traxe.TraxeWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -718,7 +722,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1.11;
+				MARKETING_VERSION = 1.1.12;
 				PRODUCT_BUNDLE_IDENTIFIER = com.matthewramsden.Traxe.TraxeWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -746,7 +750,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.11;
+				MARKETING_VERSION = 1.1.12;
 				PRODUCT_BUNDLE_IDENTIFIER = com.matthewramsden.Traxe.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -780,7 +784,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.11;
+				MARKETING_VERSION = 1.1.12;
 				PRODUCT_BUNDLE_IDENTIFIER = com.matthewramsden.Traxe.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -815,7 +819,7 @@
 					"@executable_path/../../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1.11;
+				MARKETING_VERSION = 1.1.12;
 				PRODUCT_BUNDLE_IDENTIFIER = com.matthewramsden.Traxe.watchkitapp.TraxeWatchWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -849,7 +853,7 @@
 					"@executable_path/../../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1.11;
+				MARKETING_VERSION = 1.1.12;
 				PRODUCT_BUNDLE_IDENTIFIER = com.matthewramsden.Traxe.watchkitapp.TraxeWatchWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -915,6 +919,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		3F776890CED4437ABF513975 /* XCRemoteSwiftPackageReference "SimpleToast" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sanzaru/SimpleToast.git";
+			requirement = {
+				kind = exactVersion;
+				version = 0.10.1;
+			};
+		};
 		AE3213CA2DBC15DC00E17268 /* XCRemoteSwiftPackageReference "purchases-ios" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/RevenueCat/purchases-ios.git";
@@ -926,6 +938,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		4E046C484FAF4EA389BAB573 /* SimpleToast */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3F776890CED4437ABF513975 /* XCRemoteSwiftPackageReference "SimpleToast" */;
+			productName = SimpleToast;
+		};
 		AE3213CB2DBC15DC00E17268 /* RevenueCat */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = AE3213CA2DBC15DC00E17268 /* XCRemoteSwiftPackageReference "purchases-ios" */;
