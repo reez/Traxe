@@ -214,7 +214,7 @@ final class SettingsViewModel: ObservableObject {
         isUpdatingFan = true
         let newSpeed = max(0, min(100, fanSpeed + amount))
         do {
-            try await networkService.updateSystemSettings(fanspeed: newSpeed)
+            try await networkService.updateSystemSettings(manualFanSpeed: newSpeed)
             fanSpeed = newSpeed
         } catch {
         }
@@ -225,6 +225,7 @@ final class SettingsViewModel: ObservableObject {
         isUpdatingPoolConfiguration = true
         poolConfigurationError = nil
         var success = false
+        let targetPoolBalance = poolMode == 1 ? max(1, min(99, poolBalance)) : nil
 
         var portToSave: Int? = nil
         if let port = Int(stratumPortString), !stratumPortString.isEmpty {
@@ -252,9 +253,40 @@ final class SettingsViewModel: ObservableObject {
                 fallbackStratumUser: fallbackStratumUser.isEmpty ? nil : fallbackStratumUser,
                 fallbackStratumURL: fallbackStratumURL.isEmpty ? nil : fallbackStratumURL,
                 fallbackStratumPort: fallbackPortToSave,
-                poolBalance: poolMode == 1 ? max(1, min(99, poolBalance)) : nil,
+                poolBalance: targetPoolBalance,
                 poolMode: poolMode
             )
+
+            let systemInfo = try await networkService.fetchSystemInfo()
+            let activePoolMode = systemInfo.stratum?.activePoolMode ?? 0
+            if activePoolMode != poolMode {
+                try await networkService.restartDevice()
+                let deadline = Date().addingTimeInterval(30)
+                var didActivatePoolMode = false
+                while Date() < deadline {
+                    if let updatedInfo = try? await networkService.fetchSystemInfo(),
+                        (updatedInfo.stratum?.activePoolMode ?? 0) == poolMode
+                    {
+                        didActivatePoolMode = true
+                        break
+                    }
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                }
+
+                if didActivatePoolMode {
+                    if poolMode == 1, let targetPoolBalance {
+                        try await networkService.updateSystemSettings(
+                            poolBalance: targetPoolBalance
+                        )
+                    }
+                } else {
+                    poolConfigurationError =
+                        "Pool mode requires a restart before applying changes. Please try again."
+                    isUpdatingPoolConfiguration = false
+                    return false
+                }
+            }
+
             await fetchDeviceSettings()
             success = true
         } catch let error {

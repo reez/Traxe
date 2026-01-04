@@ -204,7 +204,7 @@ extension WhatsNewSheetView {
                 iconSystemName: "chevron.left.slash.chevron.right",
                 tint: .traxeGold,
                 title: "Open Source",
-                detail: "Because of course an app for bitaxe should be open source",
+                detail: "Because of course an app for bitaxe should be open source.",
                 handler: openSourceRepo
             ),
         ]

@@ -54,6 +54,9 @@ struct PoolConfigurationView: View {
                         Text("Dual Pool").tag(1)
                     }
                     .pickerStyle(.menu)
+                    Text("Changing pool mode may require a device restart.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
                 .padding(.vertical, 4)
 
@@ -63,6 +66,11 @@ struct PoolConfigurationView: View {
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                         Slider(value: $localPoolBalance, in: 1...99, step: 1)
+                        Text(
+                            "Distributes jobs between the primary and secondary pool, e.g., 70/30."
+                        )
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                         if Int(localPoolBalance.rounded()) == 1
                             || Int(localPoolBalance.rounded()) == 99
                         {
@@ -70,13 +78,9 @@ struct PoolConfigurationView: View {
                                 "Very low ratios can make pool hashrate estimates inaccurate."
                             )
                             .font(.caption)
+                            .italic()
                             .foregroundColor(.secondary)
                         }
-                        Text(
-                            "Distributes jobs between the primary and secondary pool, e.g., 70/30."
-                        )
-                        .font(.caption)
-                        .foregroundColor(.secondary)
                     }
                     .padding(.vertical, 4)
                 }

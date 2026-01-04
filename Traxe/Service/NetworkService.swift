@@ -195,6 +195,7 @@ actor NetworkService {
 
     func updateSystemSettings(
         fanspeed: Int? = nil,
+        manualFanSpeed: Int? = nil,
         autofanspeed: Int? = nil,
         stratumUser: String? = nil,
         stratumURL: String? = nil,
@@ -209,6 +210,7 @@ actor NetworkService {
     ) async throws {
         struct SystemSettingsUpdate: Encodable {
             let fanspeed: Int?
+            let manualFanSpeed: Int?
             let autofanspeed: Int?
             let stratumUser: String?
             let stratumURL: String?
@@ -223,6 +225,7 @@ actor NetworkService {
 
         let update = SystemSettingsUpdate(
             fanspeed: fanspeed,
+            manualFanSpeed: manualFanSpeed,
             autofanspeed: autofanspeed,
             stratumUser: stratumUser,
             stratumURL: stratumURL,
