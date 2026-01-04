@@ -475,7 +475,7 @@ private struct BlockFoundToastView: View {
     groupDefaults.set("192.168.1.102", forKey: "bitaxeIPAddress")
     UserDefaults.standard.set(true, forKey: "ai_enabled")
     UserDefaults.standard.set(
-        "Hashrate steady around 2.5 TH/s; temps mid‑60s °C; power ~620W.",
+        "Over the last 24 hours the miner has averaged 721.0 GH/s",
         forKey: "preview_device_summary"
     )
 
