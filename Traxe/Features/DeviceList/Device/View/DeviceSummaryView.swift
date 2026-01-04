@@ -58,7 +58,7 @@ struct DeviceSummaryView: View {
                                 .foregroundStyle(.secondary)
                             }
                         }
-                        .font(.caption)
+                        .font(.footnote)
                         Spacer()
                     }
                     .padding()
