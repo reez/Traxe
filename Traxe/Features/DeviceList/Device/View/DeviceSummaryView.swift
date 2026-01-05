@@ -39,22 +39,16 @@ struct DeviceSummaryView: View {
                 VStack(spacing: 40) {
                     // Device info header
                     HStack {
-                        HStack(spacing: 6) {
+                        VStack(alignment: .leading, spacing: 10) {
                             //                        Text(deviceIP)
                             //                            .foregroundStyle(.primary)
                             Text(deviceName)
                                 .foregroundStyle(.secondary)
                             if !poolSegments.isEmpty {
-                                Text("•")
-                                    .foregroundStyle(.secondary)
-                                HStack(spacing: 6) {
+                                VStack(alignment: .leading, spacing: 10) {
                                     ForEach(Array(poolSegments.enumerated()), id: \.offset) {
-                                        index,
+                                        _,
                                         segment in
-                                        if index > 0 {
-                                            Text("•")
-                                                .foregroundStyle(.secondary)
-                                        }
                                         HStack(spacing: 6) {
                                             poolIcon(for: segment.logoName)
                                             Text(segment.text)
@@ -64,7 +58,7 @@ struct DeviceSummaryView: View {
                                 .foregroundStyle(.secondary)
                             }
                         }
-                        .font(.caption)
+                        .font(.footnote)
                         Spacer()
                     }
                     .padding()
@@ -461,6 +455,79 @@ private struct BlockFoundToastView: View {
             deviceName: "bitaxe",
             deviceIP: "192.168.1.102",
             poolName: "mine.ocean.xyz"
+        )
+    }
+}
+
+#Preview("Device Summary - Dual Pool") {
+    let config = ModelConfiguration(isStoredInMemoryOnly: true)
+    let container = try! ModelContainer(for: HistoricalDataPoint.self, configurations: config)
+    let previewViewModel = DashboardViewModel(modelContext: container.mainContext)
+
+    // Seed current device selection and AI enablement
+    let groupDefaults = UserDefaults(suiteName: "group.matthewramsden.traxe")!
+    groupDefaults.set("192.168.1.102", forKey: "bitaxeIPAddress")
+    UserDefaults.standard.set(true, forKey: "ai_enabled")
+    UserDefaults.standard.set(
+        "Over the last 24 hours the miner has averaged 721.0 GH/s",
+        forKey: "preview_device_summary"
+    )
+
+    // Seed live metrics and a simple historical series
+    let now = Date()
+    var historical: [HistoricalDataPoint] = []
+    for i in (0..<30) {  // 30 points at 1‑min intervals
+        let t = Calendar.current.date(byAdding: .minute, value: -i, to: now) ?? now
+        // Deterministic oscillation around 721.0 GH/s and 66°C
+        let deltaHash = (i % 6) - 3  // -3..2
+        let deltaTemp = (i % 4) - 2  // -2..1
+        let point = HistoricalDataPoint(
+            timestamp: t,
+            hashrate: 721.0 + Double(deltaHash),
+            temperature: 66 + Double(deltaTemp),
+            deviceId: "192.168.1.102"
+        )
+        historical.append(point)
+    }
+    // ascending order
+    historical.sort { $0.timestamp < $1.timestamp }
+
+    let dualPoolName = "mine.ocean.xyz (65%) • publicpool.io (35%)"
+    let metrics = DeviceMetrics(
+        hashrate: 721.0,  // GH/s
+        expectedHashrate: 721.0,
+        temperature: 66,
+        power: 16.1,
+        uptime: TimeInterval(27 * 24 * 60 * 60),  // 27 days
+        fanSpeedPercent: 82,
+        timestamp: now,
+        bestDifficulty: 598.7,  // in M
+        inputVoltage: 0,
+        asicVoltage: 0,
+        measuredVoltage: 0,
+        frequency: 0,
+        sharesAccepted: 985,
+        sharesRejected: 0,
+        poolURL: dualPoolName,
+        hostname: "bitaxe",
+        blockHeight: 874_321,
+        networkDifficulty: 83_250_000_000_000
+    )
+
+    #if DEBUG
+        previewViewModel.seedPreviewData(
+            deviceId: "192.168.1.102",
+            metrics: metrics,
+            historical: historical
+        )
+    #endif
+
+    return NavigationStack {
+        DeviceSummaryView(
+            dashboardViewModel: previewViewModel,
+            deviceName: "nerdqaxe++",
+            deviceIP: "192.168.1.102",
+            poolName: dualPoolName
         )
     }
 }
