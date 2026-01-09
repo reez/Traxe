@@ -1,3 +1,4 @@
+import RevenueCat
 import StoreKit
 import SwiftData
 import SwiftUI
@@ -10,9 +11,37 @@ struct SettingsView: View {
     @ObservedObject var viewModel: SettingsViewModel
     @State private var showingRestartConfirmation = false
     @State private var isAIEnabled = UserDefaults.standard.bool(forKey: "ai_enabled")
+    @State private var showingPaywallSheet = false
+    @State private var customerInfo: CustomerInfo? = nil
 
     @Environment(\.dismiss) var dismiss
     @Environment(\.requestReview) var requestReview
+    #if DEBUG
+        @Environment(\.previewUpgradeState) private var previewUpgradeState
+    #else
+        private var previewUpgradeState: UpgradeState? { nil }
+    #endif
+
+    private var proIsActive: Bool {
+        customerInfo?.entitlements["Pro"]?.isActive == true
+    }
+
+    private var miners5IsActive: Bool {
+        customerInfo?.entitlements["Miners_5"]?.isActive == true
+    }
+
+    private var upgradeState: UpgradeState {
+        if let previewUpgradeState {
+            return previewUpgradeState
+        }
+        if proIsActive {
+            return .activePlan("Traxe Pro (Monthly)")
+        }
+        if miners5IsActive {
+            return .activePlan("Traxe Pro (One-Time, 5 Miners)")
+        }
+        return .upgrade
+    }
 
     var body: some View {
         ZStack {
@@ -73,6 +102,59 @@ struct SettingsView: View {
                             Text(
                                 "Uses [Apple Intelligence](https://www.apple.com/apple-intelligence/)."
                             )
+                        }
+                    }
+
+                    switch upgradeState {
+                    case .activePlan(let planName):
+                        Section {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(planName)
+                                    .font(.headline)
+                                Text("Thanks for supporting Traxe!")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .listRowInsets(
+                                EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16)
+                            )
+                        } header: {
+                            Text("Plan")
+                        }
+                    case .upgrade:
+                        Section {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Button {
+                                    showingPaywallSheet = true
+                                } label: {
+                                    Text("View Plans")
+                                        .foregroundStyle(.primary)
+                                }
+
+                                Text("Want to support Traxe or unlock more miners?")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .listRowInsets(
+                                EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16)
+                            )
+                        } header: {
+                            Text("Plan")
+                        }
+                    case .loading:
+                        Section {
+                            HStack(spacing: 12) {
+                                ProgressView()
+                                Text("Checking plan status…")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .listRowInsets(
+                                EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16)
+                            )
+                        } header: {
+                            Text("Plan")
                         }
                     }
 
@@ -150,15 +232,24 @@ struct SettingsView: View {
                         "Are you sure you want to restart the miner? This will temporarily stop mining operations."
                     )
                 }
+                .sheet(isPresented: $showingPaywallSheet) {
+                    PaywallView()
+                }
             }
         }
         .onAppear {
             viewModel.loadSettings()
         }
+        .task {
+            guard previewUpgradeState == nil, !ProcessInfo.isPreview else { return }
+            for await info in Purchases.shared.customerInfoStream {
+                customerInfo = info
+            }
+        }
     }
 }
 
-#Preview {
+#Preview("Settings - Pro Monthly") {
     let previewContainer: ModelContainer = {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
         do {
@@ -178,7 +269,62 @@ struct SettingsView: View {
     )
 
     SettingsView(viewModel: previewViewModel)
+        .environment(\.previewUpgradeState, .activePlan("Traxe Pro (Monthly)"))
         .modelContainer(previewContainer)
+}
+
+#Preview("Settings - Pro One-Time") {
+    let previewContainer: ModelContainer = {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        do {
+            return try ModelContainer(for: HistoricalDataPoint.self, configurations: config)
+        } catch {
+            fatalError("Failed to create preview container: \(error)")
+        }
+    }()
+
+    let previewSharedDefaults = UserDefaults(
+        suiteName: SettingsViewModel.sharedUserDefaultsSuiteName
+    )
+
+    let previewViewModel = SettingsViewModel(
+        sharedUserDefaults: previewSharedDefaults,
+        modelContext: previewContainer.mainContext
+    )
+
+    SettingsView(viewModel: previewViewModel)
+        .environment(\.previewUpgradeState, .activePlan("Traxe Pro (One-Time, 5 Miners)"))
+        .modelContainer(previewContainer)
+}
+
+#Preview("Settings - Upgrade") {
+    let previewContainer: ModelContainer = {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        do {
+            return try ModelContainer(for: HistoricalDataPoint.self, configurations: config)
+        } catch {
+            fatalError("Failed to create preview container: \(error)")
+        }
+    }()
+
+    let previewSharedDefaults = UserDefaults(
+        suiteName: SettingsViewModel.sharedUserDefaultsSuiteName
+    )
+
+    let previewViewModel = SettingsViewModel(
+        sharedUserDefaults: previewSharedDefaults,
+        modelContext: previewContainer.mainContext
+    )
+
+    SettingsView(viewModel: previewViewModel)
+        .environment(\.previewUpgradeState, .upgrade)
+        .modelContainer(previewContainer)
+}
+
+private enum UpgradeState {
+    case loading
+    case upgrade
+    case activePlan(String)
 }
 
 extension SettingsView {
@@ -190,5 +336,16 @@ extension SettingsView {
             URLQueryItem(name: "subject", value: "Traxe - Support")
         ]
         return components.url
+    }
+}
+
+private struct PreviewUpgradeStateKey: EnvironmentKey {
+    static let defaultValue: UpgradeState? = nil
+}
+
+extension EnvironmentValues {
+    fileprivate var previewUpgradeState: UpgradeState? {
+        get { self[PreviewUpgradeStateKey.self] }
+        set { self[PreviewUpgradeStateKey.self] = newValue }
     }
 }

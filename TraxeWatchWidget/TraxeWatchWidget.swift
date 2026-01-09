@@ -291,17 +291,19 @@ struct TraxeWatchWidget: Widget {
     )
 }
 
-#Preview("accessoryCorner", as: .accessoryCorner) {
-    TraxeWatchWidget()
-} timeline: {
-    WatchHashrateEntry(
-        date: Date.now,
-        hashrate: "432.1",
-        unit: "GH/s",
-        lastUpdated: Date.now,
-        isPlaceholder: false
-    )
-}
+#if os(watchOS)
+    #Preview("accessoryCorner", as: .accessoryCorner) {
+        TraxeWatchWidget()
+    } timeline: {
+        WatchHashrateEntry(
+            date: Date.now,
+            hashrate: "432.1",
+            unit: "GH/s",
+            lastUpdated: Date.now,
+            isPlaceholder: false
+        )
+    }
+#endif
 
 #Preview("accessoryCircular", as: .accessoryCircular) {
     TraxeWatchWidget()
