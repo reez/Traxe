@@ -62,7 +62,7 @@ struct WhatsNewSheetView: View {
                 .multilineTextAlignment(.leading)
 
             if let message = content.message, !message.isEmpty {
-                Text(message)
+                Text(.init(message))
                     .font(.system(.body))
                     .foregroundStyle(.secondary)
             }
@@ -87,7 +87,7 @@ struct WhatsNewSheetView: View {
                     .font(.system(.headline))
                     .foregroundStyle(.primary)
 
-                Text(highlight.detail)
+                Text(.init(highlight.detail))
                     .font(.system(.subheadline))
                     .foregroundStyle(.secondary)
             }
