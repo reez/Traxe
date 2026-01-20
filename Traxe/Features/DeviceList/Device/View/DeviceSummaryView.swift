@@ -314,6 +314,9 @@ struct DeviceSummaryView: View {
         if host.contains("parasite") {
             return "parasite"
         }
+        if host.contains("256foundation") {
+            return "256-foundation"
+        }
         return nil
     }
 

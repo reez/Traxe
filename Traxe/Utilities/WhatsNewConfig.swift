@@ -62,7 +62,7 @@ public struct WhatsNewContent: Sendable, Equatable {
 
 public enum WhatsNewConfig {
     /// Toggle this flag when you want the TipKit surface to appear for the current build.
-    public static var isEnabledForCurrentBuild = false
+    public static var isEnabledForCurrentBuild = true
 
     /// A stable identifier for a "What's New" announcement.
     ///
@@ -79,24 +79,17 @@ public enum WhatsNewConfig {
         highlights: [
             WhatsNewHighlight(
                 badgeTint: .orange,
-                iconSystemName: "arrow.left.and.line.vertical.and.arrow.right",
-                title: "Dual Pool",
+                iconSystemName: "circle.grid.3x3",
+                title: "256 Foundation",
                 detail:
-                    "Support on NerdQaxe, configure pools, set balance %, see pools on miner detail."
+                    "Added Pool icon for upcoming Telehash (learn more at [dash.256f.org](https://dash.256f.org))."
             ),
             WhatsNewHighlight(
                 badgeTint: .green,
-                iconSystemName: "iphone",
-                title: "More miner details",
-                detail:
-                    "Pool logos in miner detail, block found toast, block height and difficulty footer, minimum fan speed, for firmware where available."
+                iconSystemName: "clock.arrow.circlepath",
+                title: "Previous Updates",
+                detail: "Dual pool support for NerdQAxe."
             ),
-            //            WhatsNewHighlight(
-            //                badgeTint: .indigo,
-            //                iconSystemName: "powerplug.portrait",
-            //                title: "More esp-miner's",
-            //                detail: "Support for more esp-miner forks."
-            //            ),
         ]
     )
 
