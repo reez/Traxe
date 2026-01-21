@@ -62,7 +62,7 @@ public struct WhatsNewContent: Sendable, Equatable {
 
 public enum WhatsNewConfig {
     /// Toggle this flag when you want the TipKit surface to appear for the current build.
-    public static var isEnabledForCurrentBuild = true
+    public static var isEnabledForCurrentBuild = false
 
     /// A stable identifier for a "What's New" announcement.
     ///

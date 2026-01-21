@@ -78,7 +78,7 @@ struct SettingsView: View {
                             Spacer()
                             if viewModel.currentVersion != "Unknown" {
                                 Text(viewModel.currentVersion)
-                                    .foregroundColor(.secondary)
+                                    .foregroundStyle(.secondary)
                                     .animation(nil, value: viewModel.currentVersion)
                             } else {
                                 ProgressView()

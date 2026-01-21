@@ -21,25 +21,31 @@ struct FanControlSection: View {
 
             HStack {
                 Text("Fan Speed")
-                    .foregroundColor(viewModel.isAutoFan ? .secondary : .primary)
+                    .foregroundStyle(viewModel.isAutoFan ? Color.secondary : Color.primary)
                 Spacer()
 
                 Button(action: { Task { await viewModel.adjustFanSpeed(by: -5) } }) {
                     Image(systemName: "minus.circle.fill")
-                        .foregroundColor(
-                            isControlDisabled || viewModel.fanSpeed <= 0 ? .secondary : .traxeGold
+                        .foregroundStyle(
+                            isControlDisabled || viewModel.fanSpeed <= 0
+                                ? Color.secondary
+                                : Color.traxeGold
                         )
                 }
                 .disabled(isControlDisabled || viewModel.fanSpeed <= 0)
 
                 Text("\(viewModel.fanSpeed)%")
-                    .foregroundColor(viewModel.isAutoFan ? .secondary : .traxeGold)
+                    .foregroundStyle(
+                        viewModel.isAutoFan ? Color.secondary : Color.traxeGold
+                    )
                     .frame(width: 50)
 
                 Button(action: { Task { await viewModel.adjustFanSpeed(by: 5) } }) {
                     Image(systemName: "plus.circle.fill")
-                        .foregroundColor(
-                            isControlDisabled || viewModel.fanSpeed >= 100 ? .secondary : .traxeGold
+                        .foregroundStyle(
+                            isControlDisabled || viewModel.fanSpeed >= 100
+                                ? Color.secondary
+                                : Color.traxeGold
                         )
                 }
                 .disabled(isControlDisabled || viewModel.fanSpeed >= 100)
@@ -50,11 +56,11 @@ struct FanControlSection: View {
         } footer: {
             VStack(alignment: .leading) {
                 Text("Switch Auto Fan **Off** to manually control fan speed.")
-                    .foregroundColor(viewModel.isAutoFan ? .secondary : .clear)
+                    .foregroundStyle(viewModel.isAutoFan ? Color.secondary : Color.clear)
                 if let minimumFanSpeed = viewModel.minimumFanSpeed {
                     Text("Auto fan minimum: \(minimumFanSpeed)%")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .padding(.top, 4)
                 }
             }

@@ -35,7 +35,7 @@ enum AISummaryFormatter {
             content += "a temp range of \(Int(minTemp))-\(Int(maxTemp))°C"
         }
         if hotDevices > 0 { content += " (\(hotDevices) above 75°C)" }
-        content += ", and \(String(format: "%.0f", totalPower))W of power."
+        content += ", and \(totalPower.formatted(.number.precision(.fractionLength(0))))W of power."
 
         return AISummary(content: content)
     }
@@ -61,7 +61,7 @@ enum AISummaryFormatter {
             content += "a temp range of \(Int(minTemp))-\(Int(maxTemp))°C"
         }
         if hotDevices > 0 { content += " (\(hotDevices) above 75°C)" }
-        content += ", and \(String(format: "%.0f", totalPower))W of power."
+        content += ", and \(totalPower.formatted(.number.precision(.fractionLength(0))))W of power."
 
         return AISummary(content: content)
     }
