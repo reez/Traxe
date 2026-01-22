@@ -58,11 +58,11 @@ extension Double {
 
     func formattedHashRateWithUnit() -> (value: String, unit: String) {
         if self >= 1_000 {
-            return (String(format: "%.1f", self / 1_000), "TH/s")
+            return ((self / 1_000).formatted(.number.precision(.fractionLength(1))), "TH/s")
         } else if self >= 1 {
-            return (String(format: "%.1f", self), "GH/s")
+            return (self.formatted(.number.precision(.fractionLength(1))), "GH/s")
         } else {
-            return (String(format: "%.0f", self * 1_000), "MH/s")
+            return ((self * 1_000).formatted(.number.precision(.fractionLength(0))), "MH/s")
         }
     }
 

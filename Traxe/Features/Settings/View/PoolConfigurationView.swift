@@ -48,7 +48,7 @@ struct PoolConfigurationView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Pool Mode".uppercased())
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                     Picker("Pool Mode", selection: $localPoolMode) {
                         Text("Failover").tag(0)
                         Text("Dual Pool").tag(1)
@@ -56,7 +56,7 @@ struct PoolConfigurationView: View {
                     .pickerStyle(.menu)
                     Text("Changing pool mode may require a device restart.")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
                 .padding(.vertical, 4)
 
@@ -64,13 +64,13 @@ struct PoolConfigurationView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(poolBalanceTitle.uppercased())
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                         Slider(value: $localPoolBalance, in: 1...99, step: 1)
                         Text(
                             "Distributes jobs between the primary and secondary pool, e.g., 70/30."
                         )
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         if Int(localPoolBalance.rounded()) == 1
                             || Int(localPoolBalance.rounded()) == 99
                         {
@@ -79,7 +79,7 @@ struct PoolConfigurationView: View {
                             )
                             .font(.caption)
                             .italic()
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                         }
                     }
                     .padding(.vertical, 4)
@@ -95,27 +95,27 @@ struct PoolConfigurationView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Stratum Host".uppercased())
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                     TextField("NA.lincoin.com", text: activeStratumURL)
                         .keyboardType(.URL)
                         .autocorrectionDisabled(true)
                         .textInputAutocapitalization(.never)
                     Text("Do not include 'stratum+tcp://' or port.")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .padding(.top, 2)
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Stratum Port".uppercased())
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                     TextField("3333", text: activeStratumPortString)
                         .keyboardType(.numberPad)
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Stratum User".uppercased())
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                     TextField("pod256.traxe", text: activeStratumUser)
                         .autocorrectionDisabled(true)
                         .textInputAutocapitalization(.never)

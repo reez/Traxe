@@ -49,7 +49,7 @@ struct OnboardingView: View {
                         )
                         Text("•")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                         Link(
                             "Terms of Use",
                             destination: URL(
@@ -59,7 +59,7 @@ struct OnboardingView: View {
                         )
                     }
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
 
                 }
@@ -127,20 +127,24 @@ struct OnboardingView: View {
                 HStack {
                     Text(device.ip)
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                     Spacer()
-                    Text(String(format: "%.1f GH/s", device.hashrate))
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    Text(String(format: "%.1f°C", device.temperature))
-                        .font(.subheadline)
-                        .foregroundColor(device.temperature > 80 ? .red : .blue)
+                    Text(
+                        "\(device.hashrate.formatted(.number.precision(.fractionLength(1)))) GH/s"
+                    )
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    Text(
+                        "\(device.temperature.formatted(.number.precision(.fractionLength(1))))°C"
+                    )
+                    .font(.subheadline)
+                    .foregroundStyle(device.temperature > 80 ? .red : .blue)
                 }
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color(.secondarySystemBackground))
-            .cornerRadius(10)
+            .clipShape(.rect(cornerRadius: 10))
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
                     .stroke(Color.traxeGold, lineWidth: 1)
@@ -164,7 +168,7 @@ struct OnboardingView: View {
             .fontDesign(.serif)
 
         Text(viewModel.scanStatus)
-            .foregroundColor(.secondary)
+            .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
             .padding(.horizontal)
 
@@ -204,10 +208,10 @@ struct OnboardingView: View {
             HStack(spacing: 4) {
                 Image(systemName: "network")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                 Text(viewModel.detectedNetworkInfo)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
             }
             .padding(.top, 8)
         }
@@ -220,7 +224,7 @@ struct OnboardingView: View {
                 if viewModel.discoveredDevices.isEmpty {
                     Text("No miners found")
                         .font(.headline)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
 
                 VStack(spacing: 12) {
@@ -237,14 +241,14 @@ struct OnboardingView: View {
                                     .degrees(viewModel.showManualEntry ? 180 : 0)
                                 )
                         }
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                     }
 
                     if viewModel.showManualEntry {
                         VStack(spacing: 12) {
                             HStack {
                                 Image(systemName: "network")
-                                    .foregroundColor(.secondary)
+                                    .foregroundStyle(.secondary)
                                 TextField("IP Address", text: $viewModel.manualIPAddress)
                                     .textFieldStyle(.plain)
                                     .keyboardType(.numbersAndPunctuation)
@@ -252,7 +256,7 @@ struct OnboardingView: View {
                             }
                             .padding()
                             .background(Color(uiColor: .systemGray6))
-                            .cornerRadius(10)
+                            .clipShape(.rect(cornerRadius: 10))
                             .padding(.horizontal)
 
                             if #available(iOS 26.0, *) {

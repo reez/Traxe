@@ -176,14 +176,19 @@ struct DeviceListView: View {
 
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(metrics != nil ? String(format: "%.1f", displayValue) : "---")
-                        .font(.title)
-                        .fontWeight(.bold)
-                        .fontDesign(.rounded)
-                        .contentTransition(.numericText())
-                        .animation(.spring, value: hashRate)
-                        .redacted(reason: metrics == nil ? .placeholder : [])
-                        .foregroundStyle(isReachable ? .primary : .secondary)
+                    Text(
+                        metrics != nil
+                            ? displayValue
+                                .formatted(.number.precision(.fractionLength(1)))
+                            : "---"
+                    )
+                    .font(.title)
+                    .fontWeight(.bold)
+                    .fontDesign(.rounded)
+                    .contentTransition(.numericText())
+                    .animation(.spring, value: hashRate)
+                    .redacted(reason: metrics == nil ? .placeholder : [])
+                    .foregroundStyle(isReachable ? .primary : .secondary)
 
                     Text(displayUnit)
                         .font(.caption2)
@@ -264,8 +269,11 @@ struct DeviceListView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if let metrics = viewModel.deviceMetrics[device.ipAddress] {
+                    let displayValue =
+                        metrics.hashrate >= 1000 ? metrics.hashrate / 1000 : metrics.hashrate
+                    let displayUnit = metrics.hashrate >= 1000 ? "TH/s" : "GH/s"
                     Text(
-                        "\(String(format: "%.1f", metrics.hashrate >= 1000 ? metrics.hashrate / 1000 : metrics.hashrate)) \(metrics.hashrate >= 1000 ? "TH/s" : "GH/s")"
+                        "\(displayValue.formatted(.number.precision(.fractionLength(1)))) \(displayUnit)"
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)

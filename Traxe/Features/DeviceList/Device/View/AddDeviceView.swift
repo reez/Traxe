@@ -114,7 +114,7 @@ struct AddDeviceView: View {
     private func scanSection() -> some View {
         VStack(spacing: 12) {
             Text(viewModel.scanStatus)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
             if viewModel.isScanning {
@@ -188,26 +188,30 @@ struct AddDeviceView: View {
                     Spacer()
                     if selectedDevice?.id == device.id {
                         Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.traxeGold)
+                            .foregroundStyle(Color.traxeGold)
                     }
                 }
                 HStack {
                     Text(device.ip)
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                     Spacer()
-                    Text(String(format: "%.1f GH/s", device.hashrate))
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    Text(String(format: "%.1f°C", device.temperature))
-                        .font(.subheadline)
-                        .foregroundColor(device.temperature > 80 ? .red : .blue)
+                    Text(
+                        "\(device.hashrate.formatted(.number.precision(.fractionLength(1)))) GH/s"
+                    )
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    Text(
+                        "\(device.temperature.formatted(.number.precision(.fractionLength(1))))°C"
+                    )
+                    .font(.subheadline)
+                    .foregroundStyle(device.temperature > 80 ? .red : .blue)
                 }
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color(.secondarySystemBackground))
-            .cornerRadius(10)
+            .clipShape(.rect(cornerRadius: 10))
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
                     .stroke(
@@ -226,7 +230,7 @@ struct AddDeviceView: View {
             if viewModel.hasScanned && viewModel.discoveredDevices.isEmpty {
                 Text("No miners found")
                     .font(.headline)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
             }
 
             Divider()
@@ -234,7 +238,7 @@ struct AddDeviceView: View {
 
             HStack {
                 Image(systemName: "network")
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                 TextField("IP Address", text: $ipAddress)
                     .textFieldStyle(.plain)
                     .keyboardType(.decimalPad)
@@ -247,7 +251,7 @@ struct AddDeviceView: View {
             }
             .padding()
             .background(Color(uiColor: .systemGray6))
-            .cornerRadius(10)
+            .clipShape(.rect(cornerRadius: 10))
         }
     }
 

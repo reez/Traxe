@@ -16,10 +16,10 @@ struct StatItem: View {
 
         if label == "Hash Rate" {
             let displayValue = value >= 1000 ? value / 1000 : value
-            return String(format: "%.1f", displayValue)
+            return displayValue.formatted(.number.precision(.fractionLength(1)))
         } else {
             let displayValue = formatAsMillions ? value / 1_000_000 : value
-            return String(format: "%.1f", displayValue)
+            return displayValue.formatted(.number.precision(.fractionLength(1)))
         }
     }
 
@@ -37,7 +37,7 @@ struct StatItem: View {
                 .font(.system(size: 64, weight: .bold))
                 .contentTransition(.numericText())
                 .animation(.default, value: formattedValue)
-                .foregroundColor(.primary)
+                .foregroundStyle(.primary)
                 .redacted(reason: value == 0.0 ? .placeholder : [])
 
             HStack(spacing: 6) {

@@ -42,7 +42,9 @@ struct MetricsSummaryGrid: View {
             MetricSummaryItem(
                 label: "Efficiency",
                 value: viewModel.connectionState == .connected
-                    ? String(format: "%.2f", viewModel.currentMetrics.efficiency) : "Loading",
+                    ? viewModel.currentMetrics.efficiency
+                        .formatted(.number.precision(.fractionLength(2)))
+                    : "Loading",
                 unit: "W/Th",
                 isLoading: viewModel.connectionState != .connected
             )
@@ -59,7 +61,9 @@ struct MetricsSummaryGrid: View {
             MetricSummaryItem(
                 label: "Power",
                 value: viewModel.connectionState == .connected
-                    ? String(format: "%.1f", viewModel.currentMetrics.power) : "Loading",
+                    ? viewModel.currentMetrics.power
+                        .formatted(.number.precision(.fractionLength(1)))
+                    : "Loading",
                 unit: "W",
                 isLoading: viewModel.connectionState != .connected
             )
@@ -85,7 +89,9 @@ struct MetricsSummaryGrid: View {
             MetricSummaryItem(
                 label: "Temp",
                 value: viewModel.connectionState == .connected
-                    ? String(format: "%.0f", viewModel.currentMetrics.temperature) : "Loading",
+                    ? viewModel.currentMetrics.temperature
+                        .formatted(.number.precision(.fractionLength(0)))
+                    : "Loading",
                 unit: "°C",
                 isLoading: viewModel.connectionState != .connected
             )
@@ -94,7 +100,8 @@ struct MetricsSummaryGrid: View {
             MetricSummaryItem(
                 label: "Fan",
                 value: viewModel.connectionState == .connected
-                    ? String(format: "%.0f", Double(viewModel.currentMetrics.fanSpeedPercent))
+                    ? Double(viewModel.currentMetrics.fanSpeedPercent)
+                        .formatted(.number.precision(.fractionLength(0)))
                     : "Loading",
                 unit: "%",
                 isLoading: viewModel.connectionState != .connected
@@ -103,7 +110,9 @@ struct MetricsSummaryGrid: View {
             MetricSummaryItem(
                 label: "Frequency",
                 value: viewModel.connectionState == .connected
-                    ? String(format: "%.0f", viewModel.currentMetrics.frequency) : "Loading",
+                    ? viewModel.currentMetrics.frequency
+                        .formatted(.number.precision(.fractionLength(0)))
+                    : "Loading",
                 unit: "MHz",
                 isLoading: viewModel.connectionState != .connected
             )

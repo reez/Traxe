@@ -66,7 +66,7 @@ struct SparklineView: View {
                         Rectangle()
                             .frame(width: fixedBarWidth, height: finalBarHeight)
                             .position(x: x + fixedBarWidth / 2, y: y + finalBarHeight / 2)
-                            .foregroundColor(
+                            .foregroundStyle(
                                 index == selectedIndex
                                     ? Color.traxeGold
                                     : Color.secondary.opacity(isPulsing ? 0.9 : 0.7)

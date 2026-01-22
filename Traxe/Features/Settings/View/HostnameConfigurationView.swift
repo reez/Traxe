@@ -14,13 +14,13 @@ struct HostnameConfigurationView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Hostname".uppercased())
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                     TextField("bitaxe", text: $localHostname)
                         .autocorrectionDisabled(true)
                         .textInputAutocapitalization(.never)
                     Text("The miner name shown on your network and in the app.")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .padding(.top, 2)
                 }
             }

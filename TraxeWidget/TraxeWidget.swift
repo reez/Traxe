@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 import WidgetKit
 
@@ -187,7 +188,8 @@ struct Provider: TimelineProvider {
             // Compute total from merged per-device metrics (only current IPs)
             let totalHashrate = merged.values.reduce(0.0) { $0 + $1.hashrate }
             let successfulFetches = fetchedHashrates.count
-            let displayHashrate = String(format: "%.1f", totalHashrate)
+            let displayHashrate =
+                totalHashrate.formatted(.number.precision(.fractionLength(1)))
 
             // Determine freshness timestamp
             let mostRecentUpdate = merged.values.map(\.lastUpdated).max()
@@ -498,9 +500,15 @@ struct TraxeWidgetEntryView: View {
 
         if value >= 1000 {
             let teraValue = value / 1000
-            return (value: String(format: "%.1f", teraValue) + partialSuffix, unit: "TH/s")
+            return (
+                value: teraValue.formatted(.number.precision(.fractionLength(1))) + partialSuffix,
+                unit: "TH/s"
+            )
         } else {
-            return (value: String(format: "%.1f", value) + partialSuffix, unit: "GH/s")
+            return (
+                value: value.formatted(.number.precision(.fractionLength(1))) + partialSuffix,
+                unit: "GH/s"
+            )
         }
     }
 }
