@@ -189,7 +189,7 @@ struct Provider: TimelineProvider {
             let totalHashrate = merged.values.reduce(0.0) { $0 + $1.hashrate }
             let successfulFetches = fetchedHashrates.count
             let displayHashrate =
-                totalHashrate.formatted(.number.precision(.fractionLength(1)))
+                totalHashrate.formatted(.number.grouping(.never).precision(.fractionLength(1)))
 
             // Determine freshness timestamp
             let mostRecentUpdate = merged.values.map(\.lastUpdated).max()
@@ -492,7 +492,14 @@ struct TraxeWidgetEntryView: View {
         let isPartial = hashrateString.hasSuffix("+")
         let numericString = isPartial ? String(hashrateString.dropLast()) : hashrateString
 
-        guard let value = Double(numericString) else {
+        let trimmedString = numericString.trimmingCharacters(in: .whitespacesAndNewlines)
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.locale = Locale.current
+        let parsedValue =
+            formatter.number(from: trimmedString)?.doubleValue
+            ?? Double(trimmedString)
+        guard let value = parsedValue else {
             return (value: hashrateString, unit: "")
         }
 
@@ -704,4 +711,16 @@ struct TraxeWidget: Widget {
         lastUpdated: .now.addingTimeInterval(-1800)
     )
     SimpleEntry(date: .now, hashrate: "--", isPlaceholder: true, lastUpdated: nil)
+}
+
+#Preview("systemSmall groupedHashrate", as: .systemSmall) {
+    TraxeWidget()
+} timeline: {
+    SimpleEntry(
+        date: .now,
+        hashrate: "10,818.3",
+        totalDevices: 6,
+        successfulFetches: 6,
+        lastUpdated: .now
+    )
 }
