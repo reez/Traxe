@@ -108,7 +108,7 @@ struct DeviceSummaryView: View {
                             if deviceAISummary == nil {
                                 // Delay AI summary generation to prioritize data loading
                                 Task {
-                                    try? await Task.sleep(nanoseconds: 500_000_000)  // 500ms delay
+                                    try? await Task.sleep(for: .milliseconds(500))
                                     if ProcessInfo.isPreview {
                                         // In previews, use a seed if provided
                                         let seeded = UserDefaults.standard.string(

@@ -233,7 +233,9 @@ final class DeviceListViewModel: ObservableObject {
 
     func updateAggregatedStats() async {
         // Prevent overlapping refreshes
-        if isLoadingAggregatedStats { return }
+        if isLoadingAggregatedStats {
+            return
+        }
         // Keep existing fleet AI summary visible during refresh
 
         isLoadingAggregatedStats = true
@@ -250,7 +252,9 @@ final class DeviceListViewModel: ObservableObject {
                     group.addTask {
                         do {
                             let discoveredDevice = try await DeviceManagementService.checkDevice(
-                                ip: device.ipAddress
+                                ip: device.ipAddress,
+                                timeout: 2.0,
+                                retryOnTimeout: false
                             )
                             // Inline parse to avoid touching main-actor method
                             let parsedDifficulty: Double = {
