@@ -262,7 +262,7 @@ struct AddDeviceView: View {
         viewModel.selectDevice(device)
 
         Task {
-            try? await Task.sleep(nanoseconds: 200_000_000)
+            try? await Task.sleep(for: .milliseconds(200))
             await MainActor.run {
                 isSaving = false
                 dismiss()

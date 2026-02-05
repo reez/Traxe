@@ -116,7 +116,7 @@ struct AnimatedAISummaryText: View {
                     }
                 }
 
-                try? await Task.sleep(nanoseconds: UInt64(stepDuration * 1_000_000_000))
+                try? await Task.sleep(for: .seconds(stepDuration))
             }
 
             // Final completion haptic

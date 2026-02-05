@@ -5,7 +5,11 @@ struct DeviceManagementService {
     private static let session = URLSession.shared
     private static let decoder = JSONDecoder()
 
-    static func checkDevice(ip: String) async throws -> DiscoveredDevice {
+    static func checkDevice(
+        ip: String,
+        timeout: TimeInterval = 5.0,
+        retryOnTimeout: Bool = true
+    ) async throws -> DiscoveredDevice {
         let urlString = "http://\(ip)/api/system/info"
         guard let url = URL(string: urlString) else {
             throw DeviceCheckError.invalidURL
@@ -13,7 +17,7 @@ struct DeviceManagementService {
 
         var request = URLRequest(url: url)
         // Slightly higher timeout to reduce -1001 churn on local devices
-        request.timeoutInterval = 5.0
+        request.timeoutInterval = timeout
 
         // One-time retry on timeout for resiliency
         func fetchOnce() async throws -> (Data, URLResponse) {
@@ -24,7 +28,7 @@ struct DeviceManagementService {
         do {
             (data, response) = try await fetchOnce()
         } catch let error as URLError {
-            if error.code == .timedOut {
+            if error.code == .timedOut, retryOnTimeout {
                 // Retry once on timeout
                 (data, response) = try await fetchOnce()
             } else {

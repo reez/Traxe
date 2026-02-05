@@ -24,7 +24,7 @@ struct TypingDots: View {
         .task {
             guard !reduceMotion else { return }
             while true {
-                try? await Task.sleep(nanoseconds: 450_000_000)
+                try? await Task.sleep(for: .milliseconds(450))
                 phase = (phase + 1) % 3
             }
         }

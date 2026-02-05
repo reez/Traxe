@@ -254,7 +254,7 @@ final class DashboardViewModel: ObservableObject {
         pollingTask?.cancel()
         pollingTask = Task {
             while !Task.isCancelled && connectionState == .connected {
-                try? await Task.sleep(nanoseconds: 5_000_000_000)  // 5 seconds
+                try? await Task.sleep(for: .seconds(5))
 
                 guard !Task.isCancelled else { continue }
 
