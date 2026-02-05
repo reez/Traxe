@@ -12,9 +12,12 @@
 
 ## Features
 
-*   Automatically discover and manage your home miner devices on your network
-*   Monitor miner stats and performance in real time
-*   Support for Light and Dark mode
-*   StandBy support for always-on at-a-glance monitoring
+* Open Source
+* No Tracking
+* Automatically discover and manage your home miner devices on your network
+* Monitor miner stats and performance in real time
+* Support for Light and Dark mode
+* StandBy support for always-on at-a-glance monitoring
+* Widgets support
 
 Traxe is compatible with [Bitaxe](https://bitaxe.org) hardware devices running [ESP-Miner](https://github.com/bitaxeorg/ESP-Miner) firmware.
