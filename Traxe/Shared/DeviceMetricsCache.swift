@@ -6,6 +6,8 @@ struct CachedDeviceMetrics: Codable {
     var bestDifficulty: Double?
     var hostname: String?
     var poolURL: String?
+    var blockHeight: Int?
+    var networkDifficulty: Double?
     // Added: cache temperature (optional for backward compatibility)
     var temperature: Double?
     var lastUpdated: Date
@@ -16,6 +18,8 @@ struct CachedDeviceMetrics: Codable {
         self.bestDifficulty = metrics.bestDifficulty
         self.hostname = metrics.hostname
         self.poolURL = metrics.poolURL
+        self.blockHeight = metrics.blockHeight
+        self.networkDifficulty = metrics.networkDifficulty
         self.temperature = metrics.temperature
         self.lastUpdated = Date()
     }
@@ -29,7 +33,9 @@ extension DeviceMetrics {
             power: cached.power ?? 0.0,
             bestDifficulty: cached.bestDifficulty ?? 0.0,
             poolURL: cached.poolURL,
-            hostname: cached.hostname
+            hostname: cached.hostname,
+            blockHeight: cached.blockHeight,
+            networkDifficulty: cached.networkDifficulty
         )
     }
 }

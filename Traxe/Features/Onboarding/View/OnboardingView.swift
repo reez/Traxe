@@ -2,7 +2,7 @@ import SwiftData
 import SwiftUI
 
 struct OnboardingView: View {
-    @StateObject private var viewModel = OnboardingViewModel()
+    @State private var viewModel = OnboardingViewModel()
     @State private var navigateToDeviceList = false
     @State private var showSettingsAlert = false
     @State private var showConnectionError = false
@@ -10,6 +10,11 @@ struct OnboardingView: View {
     let dashboardViewModel: DashboardViewModel
     @State private var pulse = false
     @State private var isConnecting = false
+
+    private let privacyPolicyURL = URL(string: "https://matthewramsden.com/privacy")
+    private let termsOfUseURL = URL(
+        string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/"
+    )
 
     var body: some View {
         ZStack {
@@ -42,25 +47,18 @@ struct OnboardingView: View {
 
                     Spacer()
 
-                    HStack(spacing: 4) {
-                        Link(
-                            "Privacy Policy",
-                            destination: URL(string: "https://matthewramsden.com/privacy")!
-                        )
-                        Text("•")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Link(
-                            "Terms of Use",
-                            destination: URL(
-                                string:
-                                    "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/"
-                            )!
-                        )
+                    if let privacyPolicyURL, let termsOfUseURL {
+                        HStack(spacing: 4) {
+                            Link("Privacy Policy", destination: privacyPolicyURL)
+                            Text("•")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Link("Terms of Use", destination: termsOfUseURL)
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
                     }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
 
                 }
                 .padding()
@@ -319,9 +317,17 @@ struct PressableButtonStyle: ButtonStyle {
 
 #Preview {
     let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: HistoricalDataPoint.self, configurations: config)
+    let container = makeOnboardingPreviewContainer(config: config)
     let previewDashboardVM = DashboardViewModel(modelContext: container.mainContext)
 
     return OnboardingView(dashboardViewModel: previewDashboardVM)
         .modelContainer(container)
+}
+
+private func makeOnboardingPreviewContainer(config: ModelConfiguration) -> ModelContainer {
+    do {
+        return try ModelContainer(for: HistoricalDataPoint.self, configurations: config)
+    } catch {
+        fatalError("Failed to create onboarding preview container: \(error)")
+    }
 }

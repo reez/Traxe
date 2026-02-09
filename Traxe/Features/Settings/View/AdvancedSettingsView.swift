@@ -1,7 +1,8 @@
+import Observation
 import SwiftUI
 
 struct AdvancedSettingsView: View {
-    @ObservedObject var viewModel: SettingsViewModel
+    @Bindable var viewModel: SettingsViewModel
     @State private var showingRestartConfirmation = false
 
     var body: some View {

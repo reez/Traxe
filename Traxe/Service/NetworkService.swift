@@ -26,8 +26,8 @@ actor NetworkService {
             return nil
         }
 
-        let cleanIP = ipAddress.replacingOccurrences(of: "http://", with: "")
-            .replacingOccurrences(of: "/", with: "")
+        let cleanIP = ipAddress.replacing("http://", with: "")
+            .replacing("/", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         let ipRegex =

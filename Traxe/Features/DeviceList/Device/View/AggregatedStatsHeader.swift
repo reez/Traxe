@@ -1,7 +1,8 @@
+import Observation
 import SwiftUI
 
 struct AggregatedStatsHeader: View {
-    @ObservedObject var viewModel: DeviceListViewModel
+    @Bindable var viewModel: DeviceListViewModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -122,7 +123,7 @@ struct AggregatedStatsHeader: View {
 }
 
 #Preview {
-    let mockDefaults = UserDefaults(suiteName: "preview.aggregated")!
+    let mockDefaults = makeAggregatedStatsPreviewDefaults()
     let mockDevices = [
         SavedDevice(name: "Living Room", ipAddress: "192.168.1.101"),
         SavedDevice(name: "Office", ipAddress: "192.168.1.102"),
@@ -247,4 +248,8 @@ struct AggregatedStatsHeader: View {
     viewModel.isLoadingAggregatedStats = false
 
     return AggregatedStatsHeader(viewModel: viewModel)
+}
+
+private func makeAggregatedStatsPreviewDefaults() -> UserDefaults {
+    UserDefaults(suiteName: "preview.aggregated") ?? .standard
 }

@@ -305,6 +305,7 @@ extension SystemInfoDTO {
 
         if isDualPool {
             guard !primary.isEmpty || !secondary.isEmpty else { return nil }
+            if primary.isEmpty { return secondary }
             if secondary.isEmpty { return primary }
             let balance = max(0, min(100, stratum?.poolBalance ?? 50))
             let secondaryBalance = max(0, 100 - balance)

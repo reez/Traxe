@@ -18,8 +18,8 @@ struct MetricCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                if icon != nil {
-                    Image(systemName: icon!)
+                if let icon {
+                    Image(systemName: icon)
                         .font(.caption)
                 }
                 Text(title).bold()

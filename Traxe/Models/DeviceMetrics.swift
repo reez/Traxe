@@ -173,7 +173,10 @@ extension DeviceMetrics {
             numericPart = String(trimmed.dropLast())
         }
 
-        let cleaned = numericPart.replacingOccurrences(of: ",", with: "")
+        let cleaned =
+            numericPart
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacing(",", with: "")
         guard let value = Double(cleaned) else { return 0.0 }
         if multiplier == 1.0, trimmed.last?.isNumber == true {
             // No suffix: treat as raw diff and normalize to millions.

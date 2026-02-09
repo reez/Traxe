@@ -5,7 +5,7 @@ import SwiftUI
 import UIKit
 
 struct DeviceSummaryView: View {
-    @StateObject var dashboardViewModel: DashboardViewModel
+    let dashboardViewModel: DashboardViewModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @State private var showingSettings = false
@@ -46,7 +46,7 @@ struct DeviceSummaryView: View {
                                 .foregroundStyle(.secondary)
                             if !poolSegments.isEmpty {
                                 VStack(alignment: .leading, spacing: 10) {
-                                    ForEach(Array(poolSegments.enumerated()), id: \.offset) {
+                                    ForEach(poolSegments.enumerated(), id: \.offset) {
                                         _,
                                         segment in
                                         HStack(spacing: 6) {
@@ -392,11 +392,11 @@ private struct BlockFoundToastView: View {
 }
 #Preview {
     let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: HistoricalDataPoint.self, configurations: config)
+    let container = makeDeviceSummaryPreviewContainer(config: config)
     let previewViewModel = DashboardViewModel(modelContext: container.mainContext)
 
     // Seed current device selection and AI enablement
-    let groupDefaults = UserDefaults(suiteName: "group.matthewramsden.traxe")!
+    let groupDefaults = previewSharedDefaults()
     groupDefaults.set("192.168.1.102", forKey: "bitaxeIPAddress")
     UserDefaults.standard.set(true, forKey: "ai_enabled")
     UserDefaults.standard.set(
@@ -464,11 +464,11 @@ private struct BlockFoundToastView: View {
 
 #Preview("Device Summary - Dual Pool") {
     let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: HistoricalDataPoint.self, configurations: config)
+    let container = makeDeviceSummaryPreviewContainer(config: config)
     let previewViewModel = DashboardViewModel(modelContext: container.mainContext)
 
     // Seed current device selection and AI enablement
-    let groupDefaults = UserDefaults(suiteName: "group.matthewramsden.traxe")!
+    let groupDefaults = previewSharedDefaults()
     groupDefaults.set("192.168.1.102", forKey: "bitaxeIPAddress")
     UserDefaults.standard.set(true, forKey: "ai_enabled")
     UserDefaults.standard.set(
@@ -533,4 +533,16 @@ private struct BlockFoundToastView: View {
             poolName: dualPoolName
         )
     }
+}
+
+private func makeDeviceSummaryPreviewContainer(config: ModelConfiguration) -> ModelContainer {
+    do {
+        return try ModelContainer(for: HistoricalDataPoint.self, configurations: config)
+    } catch {
+        fatalError("Failed to create device summary preview container: \(error)")
+    }
+}
+
+private func previewSharedDefaults() -> UserDefaults {
+    UserDefaults(suiteName: "group.matthewramsden.traxe") ?? .standard
 }
