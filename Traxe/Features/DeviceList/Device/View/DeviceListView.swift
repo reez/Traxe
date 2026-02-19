@@ -43,8 +43,8 @@ struct WhatsNewTip: Tip {
 struct DeviceListView: View {
     @Environment(\.dismiss) var dismiss
     @Environment(\.scenePhase) private var scenePhase
-    @StateObject private var viewModel: DeviceListViewModel
-    @StateObject var dashboardViewModel: DashboardViewModel
+    @State private var viewModel: DeviceListViewModel
+    private let dashboardViewModel: DashboardViewModel
     @Binding var navigateToDeviceList: Bool
 
     init(
@@ -52,12 +52,12 @@ struct DeviceListView: View {
         navigateToDeviceList: Binding<Bool>,
         mockUserDefaults: UserDefaults? = nil
     ) {
-        self._dashboardViewModel = StateObject(wrappedValue: dashboardViewModel)
+        self.dashboardViewModel = dashboardViewModel
         self._navigateToDeviceList = navigateToDeviceList
         if let mockDefaults = mockUserDefaults {
-            self._viewModel = StateObject(wrappedValue: DeviceListViewModel(defaults: mockDefaults))
+            self._viewModel = State(initialValue: DeviceListViewModel(defaults: mockDefaults))
         } else {
-            self._viewModel = StateObject(wrappedValue: DeviceListViewModel())
+            self._viewModel = State(initialValue: DeviceListViewModel())
         }
     }
     @State private var navigateToSummary = false
@@ -73,6 +73,17 @@ struct DeviceListView: View {
     @State private var showingSubscriptionExpiredAlert = false
     @State private var customerInfo: CustomerInfo? = nil
     private var whatsNewTip = WhatsNewTip()
+
+    private var subscriptionAccessPolicy: SubscriptionAccessPolicy {
+        let proIsActive = customerInfo?.entitlements["Pro"]?.isActive == true
+        let miners5IsActive = customerInfo?.entitlements["Miners_5"]?.isActive == true
+
+        return SubscriptionAccessPolicy(
+            proIsActive: proIsActive,
+            miners5IsActive: miners5IsActive,
+            hasLoadedSubscription: customerInfo != nil
+        )
+    }
 
     private var deviceGridView: some View {
         LazyVStack(spacing: 40) {
@@ -96,7 +107,7 @@ struct DeviceListView: View {
                     ],
                     spacing: 12
                 ) {
-                    ForEach(Array(viewModel.savedDevices.enumerated()), id: \.element.id) {
+                    ForEach(viewModel.savedDevices.enumerated(), id: \.element.id) {
                         index,
                         device in
                         deviceCardView(for: device, at: index)
@@ -119,21 +130,7 @@ struct DeviceListView: View {
     }
 
     private func deviceCardView(for device: SavedDevice, at index: Int) -> some View {
-        let proIsActive = self.customerInfo?.entitlements["Pro"]?.isActive == true
-        let miners5IsActive = self.customerInfo?.entitlements["Miners_5"]?.isActive == true
-        let hasLoadedCustomerInfo = customerInfo != nil
-        let isAccessible: Bool
-
-        if !hasLoadedCustomerInfo {
-            // Until RevenueCat responds, leave devices reachable instead of showing a premature lock
-            isAccessible = true
-        } else if proIsActive {
-            isAccessible = true
-        } else if miners5IsActive {
-            isAccessible = index < 5
-        } else {
-            isAccessible = index == 0
-        }
+        let isAccessible = subscriptionAccessPolicy.isDeviceAccessible(at: index)
 
         let metrics = viewModel.deviceMetrics[device.ipAddress]
         let hashRate = metrics?.hashrate ?? 0.0
@@ -147,57 +144,62 @@ struct DeviceListView: View {
             // In previews we seed cached metrics only; treat those as reachable for styling
             || (ProcessInfo.isPreview && metrics != nil)
 
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(metrics?.hostname ?? device.name)
-                        .font(.caption)
-                        .bold()
-                        .lineLimit(1)
+        return Button {
+            handleDeviceTap(device: device, isAccessible: isAccessible)
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(metrics?.hostname ?? device.name)
+                            .font(.caption)
+                            .bold()
+                            .lineLimit(1)
+                            .foregroundStyle(isReachable ? .primary : .secondary)
+
+                        Text(device.ipAddress)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    // Only show lock icon if we have data AND subscription info loaded AND user doesn't have access
+                    // Don't show lock when: data loading, subscription loading, or user has access
+                    if !isAccessible && metrics != nil && subscriptionAccessPolicy.shouldShowLocks {
+                        Image(systemName: "lock.fill")
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
+                    }
+                }
+
+                Spacer()
+
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(
+                            metrics != nil
+                                ? displayValue
+                                    .formatted(.number.precision(.fractionLength(1)))
+                                : "---"
+                        )
+                        .font(.title)
+                        .fontWeight(.bold)
+                        .fontDesign(.rounded)
+                        .contentTransition(.numericText())
+                        .animation(.spring, value: hashRate)
+                        .redacted(reason: metrics == nil ? .placeholder : [])
                         .foregroundStyle(isReachable ? .primary : .secondary)
 
-                    Text(device.ipAddress)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        Text(displayUnit)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
                 }
-
-                Spacer()
-
-                // Only show lock icon if we have data AND subscription info loaded AND user doesn't have access
-                // Don't show lock when: data loading, subscription loading, or user has access
-                if !isAccessible && metrics != nil && customerInfo != nil {
-                    Image(systemName: "lock.fill")
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
-                }
-            }
-
-            Spacer()
-
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(
-                        metrics != nil
-                            ? displayValue
-                                .formatted(.number.precision(.fractionLength(1)))
-                            : "---"
-                    )
-                    .font(.title)
-                    .fontWeight(.bold)
-                    .fontDesign(.rounded)
-                    .contentTransition(.numericText())
-                    .animation(.spring, value: hashRate)
-                    .redacted(reason: metrics == nil ? .placeholder : [])
-                    .foregroundStyle(isReachable ? .primary : .secondary)
-
-                    Text(displayUnit)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
             }
         }
+        .buttonStyle(.plain)
         .padding()
         //        .background(Color(.secondarySystemBackground))
         //        .background(
@@ -234,9 +236,6 @@ struct DeviceListView: View {
             y: 4
         )
         .contentShape(Rectangle())
-        .onTapGesture {
-            handleDeviceTap(device: device, isAccessible: isAccessible)
-        }
     }
 
     private func handleDeviceTap(device: SavedDevice, isAccessible: Bool) {
@@ -246,9 +245,7 @@ struct DeviceListView: View {
                 await connectAndNavigate(to: device)
             }
         } else {
-            let proIsActive = self.customerInfo?.entitlements["Pro"]?.isActive == true
-            let miners5IsActive = self.customerInfo?.entitlements["Miners_5"]?.isActive == true
-            if !proIsActive && !miners5IsActive {
+            if subscriptionAccessPolicy.shouldShowSubscriptionExpiredAlert {
                 showingSubscriptionExpiredAlert = true
             }
         }
@@ -300,7 +297,7 @@ struct DeviceListView: View {
             //            .padding(.top)
 
             List {
-                ForEach(Array(viewModel.savedDevices.enumerated()), id: \.element.id) {
+                ForEach(viewModel.savedDevices.enumerated(), id: \.element.id) {
                     index,
                     device in
                     editModeRow(for: device, at: index)
@@ -380,17 +377,12 @@ struct DeviceListView: View {
 
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
-                    let proIsActive = self.customerInfo?.entitlements["Pro"]?.isActive == true
-                    let miners5IsActive =
-                        self.customerInfo?.entitlements["Miners_5"]?.isActive == true
-
                     let deviceLimit: Int
-                    if proIsActive {
-                        deviceLimit = Int.max  // Unlimited for Pro Monthly
-                    } else if miners5IsActive {
-                        deviceLimit = 5  // 5 for Miners_5 (total, includes the 1 free)
+                    if customerInfo == nil {
+                        // Preserve previous UX for add flow while subscription is loading.
+                        deviceLimit = 1
                     } else {
-                        deviceLimit = 1  // 1 for free tier
+                        deviceLimit = subscriptionAccessPolicy.deviceLimit
                     }
 
                     if viewModel.savedDevices.count < deviceLimit {
@@ -576,21 +568,25 @@ private struct NetworkInfoView: View {
         "Block 000,000 • Difficulty 000"
     }
 
-    private var unavailableText: String {
-        "Block -- • Difficulty --"
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if let footerText {
-                Text(footerText)
-            } else if isLoading {
+        ZStack(alignment: .leading) {
+            if isLoading, footerText == nil {
                 Text(placeholderText)
                     .redacted(reason: .placeholder)
-            } else {
-                Text(unavailableText)
+                    .transition(.opacity)
+            }
+
+            if let footerText {
+                Text(footerText)
+                    .contentTransition(.numericText())
+                    .transition(
+                        .opacity.combined(
+                            with: .scale(scale: 0.98, anchor: .leading)
+                        )
+                    )
             }
         }
+        .animation(.snappy(duration: 0.35, extraBounce: 0), value: footerText != nil)
         .font(.caption)
         .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -599,11 +595,11 @@ private struct NetworkInfoView: View {
 
 #Preview {
     let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: HistoricalDataPoint.self, configurations: config)
+    let container = makeDeviceListPreviewContainer(config: config)
     let previewDashboardVM = DashboardViewModel(modelContext: container.mainContext)
 
     // Use the app group defaults so the view model and cache read the same store
-    let groupDefaults = UserDefaults(suiteName: "group.matthewramsden.traxe")!
+    let groupDefaults = previewGroupDefaults()
 
     // Seed devices
     let devices = [
@@ -613,7 +609,9 @@ private struct NetworkInfoView: View {
         SavedDevice(name: "lucky", ipAddress: "192.168.1.104"),
     ]
     let devEncoder = JSONEncoder()
-    groupDefaults.set(try! devEncoder.encode(devices), forKey: "savedDevices")
+    if let encodedDevices = try? devEncoder.encode(devices) {
+        groupDefaults.set(encodedDevices, forKey: "savedDevices")
+    }
 
     // Enable AI features for previews
     UserDefaults.standard.set(true, forKey: "ai_enabled")
@@ -635,7 +633,9 @@ private struct NetworkInfoView: View {
     ]
     let cacheEncoder = JSONEncoder()
     cacheEncoder.dateEncodingStrategy = .iso8601
-    groupDefaults.set(try! cacheEncoder.encode(cached), forKey: "cachedDeviceMetricsV2")
+    if let encodedCache = try? cacheEncoder.encode(cached) {
+        groupDefaults.set(encodedCache, forKey: "cachedDeviceMetricsV2")
+    }
 
     // Seed a cached fleet AI summary so the preview doesn't need networking
     struct _FleetSummaryCacheEntry: Codable {
@@ -647,18 +647,17 @@ private struct NetworkInfoView: View {
         "\(devices.count) miners producing a total of 10.1 TH/s, with a temperature range of 61-72°C, and consuming 2450W of power."
     let summaryEncoder = JSONEncoder()
     summaryEncoder.dateEncodingStrategy = .iso8601
-    groupDefaults.set(
-        try! summaryEncoder.encode(
-            _FleetSummaryCacheEntry(
-                content: summaryContent,
-                generatedAt: Date(),
-                deviceCount: devices.count
-            )
-        ),
-        forKey: "cachedFleetAISummaryV1"
-    )
+    if let encodedSummary = try? summaryEncoder.encode(
+        _FleetSummaryCacheEntry(
+            content: summaryContent,
+            generatedAt: Date(),
+            deviceCount: devices.count
+        )
+    ) {
+        groupDefaults.set(encodedSummary, forKey: "cachedFleetAISummaryV1")
+    }
 
-    return NavigationView {
+    return NavigationStack {
         // Important: do not pass mockUserDefaults; use app group store
         DeviceListView(
             dashboardViewModel: previewDashboardVM,
@@ -680,13 +679,13 @@ private struct NetworkInfoView: View {
     }()
 
     let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: HistoricalDataPoint.self, configurations: config)
+    let container = makeDeviceListPreviewContainer(config: config)
     let previewDashboardVM = DashboardViewModel(modelContext: container.mainContext)
 
-    let groupDefaults = UserDefaults(suiteName: "group.matthewramsden.traxe")!
+    let groupDefaults = previewGroupDefaults()
     groupDefaults.set("preview-previous-announcement", forKey: "lastSeenWhatsNewVersion")
 
-    return NavigationView {
+    return NavigationStack {
         DeviceListView(
             dashboardViewModel: previewDashboardVM,
             navigateToDeviceList: .constant(true),
@@ -694,4 +693,16 @@ private struct NetworkInfoView: View {
         )
     }
     .modelContainer(container)
+}
+
+private func makeDeviceListPreviewContainer(config: ModelConfiguration) -> ModelContainer {
+    do {
+        return try ModelContainer(for: HistoricalDataPoint.self, configurations: config)
+    } catch {
+        fatalError("Failed to create device list preview container: \(error)")
+    }
+}
+
+private func previewGroupDefaults() -> UserDefaults {
+    UserDefaults(suiteName: "group.matthewramsden.traxe") ?? .standard
 }

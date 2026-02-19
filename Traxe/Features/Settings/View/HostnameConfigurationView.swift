@@ -1,8 +1,9 @@
+import Observation
 import SwiftData
 import SwiftUI
 
 struct HostnameConfigurationView: View {
-    @ObservedObject var viewModel: SettingsViewModel
+    @Bindable var viewModel: SettingsViewModel
     @Environment(\.dismiss) var dismiss
 
     @State private var localHostname: String = ""
@@ -91,7 +92,7 @@ struct HostnameConfigurationView: View {
             )
             previewViewModel.hostname = "bitaxe"
 
-            return NavigationView {
+            return NavigationStack {
                 HostnameConfigurationView(viewModel: previewViewModel)
             }
         }

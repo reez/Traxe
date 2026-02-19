@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0823FFDC98D29E3D8C7A553F /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 00453112217A47D69D0DD0F1 /* XCTest.framework */; };
 		AE3213CC2DBC15DC00E17268 /* RevenueCat in Frameworks */ = {isa = PBXBuildFile; productRef = AE3213CB2DBC15DC00E17268 /* RevenueCat */; };
 		AE3213CE2DBC15DC00E17268 /* RevenueCatUI in Frameworks */ = {isa = PBXBuildFile; productRef = AE3213CD2DBC15DC00E17268 /* RevenueCatUI */; };
 		AE3213D02DBC162D00E17268 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AE3213CF2DBC162D00E17268 /* StoreKit.framework */; };
@@ -22,6 +23,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		A8DE2F85540F3A07C529596B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AE45A3172DAC951E0096641F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AE45A31E2DAC951E0096641F;
+			remoteInfo = Traxe;
+		};
 		AE45E1F72DB577980096A497 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = AE45A3172DAC951E0096641F /* Project object */;
@@ -82,6 +90,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		00453112217A47D69D0DD0F1 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
+		3C5234E7D88DC04A649E8EE4 /* TraxeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TraxeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AE0771532DAECFCB00634820 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		AE0771552DAECFCB00634820 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		AE3213CF2DBC162D00E17268 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
@@ -167,9 +177,22 @@
 			path = TraxeWatchWidget;
 			sourceTree = "<group>";
 		};
+		E59F88B02671C9DB6B2A31DB /* TraxeTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = TraxeTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		05A7CD6871AA84D79FFBE84C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0823FFDC98D29E3D8C7A553F /* XCTest.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AE45A31C2DAC951E0096641F /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -212,6 +235,7 @@
 		AE0771522DAECFCB00634820 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				00453112217A47D69D0DD0F1 /* XCTest.framework */,
 				AE3213CF2DBC162D00E17268 /* StoreKit.framework */,
 				AE0771532DAECFCB00634820 /* WidgetKit.framework */,
 				AE0771552DAECFCB00634820 /* SwiftUI.framework */,
@@ -226,6 +250,7 @@
 				AE45E2012DB57B590096A497 /* TraxeWidgetExtension.entitlements */,
 				AE45A4282DADA85F0096641F /* README.md */,
 				AE45A3212DAC951E0096641F /* Traxe */,
+				E59F88B02671C9DB6B2A31DB /* TraxeTests */,
 				AE45E1EF2DB577960096A497 /* TraxeWidget */,
 				AE8F8BB52E9B099700E4450C /* TraxeWatch Watch App */,
 				AE8F8BCD2E9B0B0F00E4450C /* TraxeWatchWidget */,
@@ -238,6 +263,7 @@
 			isa = PBXGroup;
 			children = (
 				AE45A31F2DAC951E0096641F /* Traxe.app */,
+				3C5234E7D88DC04A649E8EE4 /* TraxeTests.xctest */,
 				AE45E1EC2DB577960096A497 /* TraxeWidgetExtension.appex */,
 				AE8F8BB42E9B099700E4450C /* TraxeWatch Watch App.app */,
 				AE8F8BCA2E9B0B0F00E4450C /* TraxeWatchWidgetExtension.appex */,
@@ -345,6 +371,29 @@
 			productReference = AE8F8BCA2E9B0B0F00E4450C /* TraxeWatchWidgetExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		B3C7B02C3C26822D471A5B9D /* TraxeTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C2BD3C29099B163DC7FDEA79 /* Build configuration list for PBXNativeTarget "TraxeTests" */;
+			buildPhases = (
+				2CAAD7B387F1E293CDBFA8BD /* Sources */,
+				05A7CD6871AA84D79FFBE84C /* Frameworks */,
+				962ACB4A2ACAF1F10E700622 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				0B7D59852988D72D63D9E4A2 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				E59F88B02671C9DB6B2A31DB /* TraxeTests */,
+			);
+			name = TraxeTests;
+			packageProductDependencies = (
+			);
+			productName = TraxeTests;
+			productReference = 3C5234E7D88DC04A649E8EE4 /* TraxeTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -367,6 +416,10 @@
 					AE8F8BC92E9B0B0F00E4450C = {
 						CreatedOnToolsVersion = 26.0.1;
 					};
+					B3C7B02C3C26822D471A5B9D = {
+						CreatedOnToolsVersion = 26.0.1;
+						TestTargetID = AE45A31E2DAC951E0096641F;
+					};
 				};
 			};
 			buildConfigurationList = AE45A31A2DAC951E0096641F /* Build configuration list for PBXProject "Traxe" */;
@@ -388,6 +441,7 @@
 			projectRoot = "";
 			targets = (
 				AE45A31E2DAC951E0096641F /* Traxe */,
+				B3C7B02C3C26822D471A5B9D /* TraxeTests */,
 				AE45E1EB2DB577960096A497 /* TraxeWidgetExtension */,
 				AE8F8BB32E9B099700E4450C /* TraxeWatch Watch App */,
 				AE8F8BC92E9B0B0F00E4450C /* TraxeWatchWidgetExtension */,
@@ -396,6 +450,13 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		962ACB4A2ACAF1F10E700622 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AE45A31D2DAC951E0096641F /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -428,6 +489,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		2CAAD7B387F1E293CDBFA8BD /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AE45A31B2DAC951E0096641F /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -459,6 +527,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		0B7D59852988D72D63D9E4A2 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AE45A31E2DAC951E0096641F /* Traxe */;
+			targetProxy = A8DE2F85540F3A07C529596B /* PBXContainerItemProxy */;
+		};
 		AE45E1F82DB577980096A497 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = AE45E1EB2DB577960096A497 /* TraxeWidgetExtension */;
@@ -477,6 +550,61 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		3FFE3CA1656C14C1E86A9208 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 9G6M658RKZ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = TraxeTests;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.1.19;
+				PRODUCT_BUNDLE_IDENTIFIER = com.matthewramsden.TraxeTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Traxe.app/Traxe";
+				TEST_TARGET_NAME = Traxe;
+			};
+			name = Debug;
+		};
+		768C55975976712A06C52441 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 9G6M658RKZ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = TraxeTests;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.1.19;
+				PRODUCT_BUNDLE_IDENTIFIER = com.matthewramsden.TraxeTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Traxe.app/Traxe";
+				TEST_TARGET_NAME = Traxe;
+			};
+			name = Release;
+		};
 		AE45A3282DAC951F0096641F /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -624,7 +752,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.19;
+				MARKETING_VERSION = 1.1.20;
 				PRODUCT_BUNDLE_IDENTIFIER = com.matthewramsden.Traxe;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -661,7 +789,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.19;
+				MARKETING_VERSION = 1.1.20;
 				PRODUCT_BUNDLE_IDENTIFIER = com.matthewramsden.Traxe;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -693,7 +821,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1.19;
+				MARKETING_VERSION = 1.1.20;
 				PRODUCT_BUNDLE_IDENTIFIER = com.matthewramsden.Traxe.TraxeWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -722,7 +850,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1.19;
+				MARKETING_VERSION = 1.1.20;
 				PRODUCT_BUNDLE_IDENTIFIER = com.matthewramsden.Traxe.TraxeWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -750,7 +878,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.19;
+				MARKETING_VERSION = 1.1.20;
 				PRODUCT_BUNDLE_IDENTIFIER = com.matthewramsden.Traxe.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -784,7 +912,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.19;
+				MARKETING_VERSION = 1.1.20;
 				PRODUCT_BUNDLE_IDENTIFIER = com.matthewramsden.Traxe.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -819,7 +947,7 @@
 					"@executable_path/../../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1.19;
+				MARKETING_VERSION = 1.1.20;
 				PRODUCT_BUNDLE_IDENTIFIER = com.matthewramsden.Traxe.watchkitapp.TraxeWatchWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -853,7 +981,7 @@
 					"@executable_path/../../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1.19;
+				MARKETING_VERSION = 1.1.20;
 				PRODUCT_BUNDLE_IDENTIFIER = com.matthewramsden.Traxe.watchkitapp.TraxeWatchWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -916,6 +1044,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		C2BD3C29099B163DC7FDEA79 /* Build configuration list for PBXNativeTarget "TraxeTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3FFE3CA1656C14C1E86A9208 /* Debug */,
+				768C55975976712A06C52441 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -924,7 +1061,7 @@
 			repositoryURL = "https://github.com/sanzaru/SimpleToast.git";
 			requirement = {
 				kind = exactVersion;
-				version = 0.10.1;
+				version = 0.12.0;
 			};
 		};
 		AE3213CA2DBC15DC00E17268 /* XCRemoteSwiftPackageReference "purchases-ios" */ = {
@@ -932,7 +1069,7 @@
 			repositoryURL = "https://github.com/RevenueCat/purchases-ios.git";
 			requirement = {
 				kind = exactVersion;
-				version = 5.41.0;
+				version = 5.57.1;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

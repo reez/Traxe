@@ -1,17 +1,62 @@
 import Combine
 import Foundation
 import Network
+import Observation
 import SwiftData
 import SwiftUI
 
+@Observable
 @MainActor
-final class DashboardViewModel: ObservableObject {
-    @Published private(set) var currentMetrics = DeviceMetrics()
-    @Published var showErrorAlert = false
-    @Published var errorMessage = ""
-    @Published var errorDeviceInfo = ""
-    @Published private(set) var historicalData: [HistoricalDataPoint] = []
-    @Published private(set) var connectionState: ConnectionState = .connecting
+final class DashboardViewModel {
+    struct Dependencies {
+        struct NetworkClient {
+            var fetchSystemInfo:
+                @Sendable (_ ipAddressOverride: String?) async throws -> SystemInfoDTO
+
+            static func live(networkService: NetworkService) -> Self {
+                Self(
+                    fetchSystemInfo: { ipAddressOverride in
+                        try await networkService.fetchSystemInfo(
+                            ipAddressOverride: ipAddressOverride
+                        )
+                    }
+                )
+            }
+        }
+
+        var network: NetworkClient
+        var selectedDeviceID: @Sendable () -> String?
+        var notificationCenter: NotificationCenter
+        var makeNetworkMonitor: (@Sendable () -> NWPathMonitor)?
+        var networkMonitorQueue: DispatchQueue
+        var sleep: @Sendable (_ duration: Duration) async -> Void
+        var pollingInterval: Duration
+
+        static func live(networkService: NetworkService) -> Self {
+            Self(
+                network: .live(networkService: networkService),
+                selectedDeviceID: {
+                    UserDefaults(suiteName: "group.matthewramsden.traxe")?.string(
+                        forKey: "bitaxeIPAddress"
+                    )
+                },
+                notificationCenter: .default,
+                makeNetworkMonitor: { NWPathMonitor() },
+                networkMonitorQueue: DispatchQueue.global(),
+                sleep: { duration in
+                    try? await Task.sleep(for: duration)
+                },
+                pollingInterval: .seconds(5)
+            )
+        }
+    }
+
+    private(set) var currentMetrics = DeviceMetrics()
+    var showErrorAlert = false
+    var errorMessage = ""
+    var errorDeviceInfo = ""
+    private(set) var historicalData: [HistoricalDataPoint] = []
+    private(set) var connectionState: ConnectionState = .connecting
 
     var formattedSharesAccepted: String {
         let numberFormatter = NumberFormatter()
@@ -52,7 +97,7 @@ final class DashboardViewModel: ObservableObject {
         currentMetrics.bestDifficulty.formattedDifficulty()
     }
 
-    private let networkService: NetworkService
+    private let dependencies: Dependencies
     private let modelContext: ModelContext
     private var pollingTask: Task<Void, Never>?
     private var networkMonitor: NWPathMonitor?
@@ -66,16 +111,19 @@ final class DashboardViewModel: ObservableObject {
 
     init(
         networkService: NetworkService? = nil,
-        modelContext: ModelContext
+        modelContext: ModelContext,
+        dependencies: Dependencies? = nil
     ) {
-        self.networkService = networkService ?? NetworkService()
+        let resolvedNetworkService = networkService ?? NetworkService()
+        self.dependencies = dependencies ?? .live(networkService: resolvedNetworkService)
         self.modelContext = modelContext
         setupNetworkMonitoring()
         initializeDeviceTracking()
     }
 
     private func setupNetworkMonitoring() {
-        networkMonitor = NWPathMonitor()
+        guard let monitor = dependencies.makeNetworkMonitor?() else { return }
+        networkMonitor = monitor
         networkMonitor?.pathUpdateHandler = { [weak self] path in
             Task {
                 guard let self else { return }
@@ -91,12 +139,12 @@ final class DashboardViewModel: ObservableObject {
                 }
             }
         }
-        networkMonitor?.start(queue: DispatchQueue.global())
+        networkMonitor?.start(queue: dependencies.networkMonitorQueue)
     }
 
     private func initializeDeviceTracking() {
         // Subscribe to changes in the selected IP address
-        NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
+        dependencies.notificationCenter.publisher(for: UserDefaults.didChangeNotification)
             .sink { [weak self] _ in
                 guard let self else { return }
                 Task { await self.handleDeviceChange() }
@@ -105,8 +153,7 @@ final class DashboardViewModel: ObservableObject {
     }
 
     private func handleDeviceChange() async {
-        let sharedDefaults = UserDefaults(suiteName: "group.matthewramsden.traxe")
-        let newDeviceId = sharedDefaults?.string(forKey: "bitaxeIPAddress")
+        let newDeviceId = dependencies.selectedDeviceID()
 
         if newDeviceId != currentDeviceId {
             currentDeviceId = newDeviceId
@@ -121,8 +168,7 @@ final class DashboardViewModel: ObservableObject {
             self.connectionState = .connecting
         }
 
-        let sharedDefaults = UserDefaults(suiteName: "group.matthewramsden.traxe")
-        currentDeviceId = sharedDefaults?.string(forKey: "bitaxeIPAddress")
+        currentDeviceId = dependencies.selectedDeviceID()
 
         guard let deviceId = currentDeviceId, !deviceId.isEmpty else {
             await MainActor.run {
@@ -134,7 +180,7 @@ final class DashboardViewModel: ObservableObject {
         }
 
         do {
-            let info = try await networkService.fetchSystemInfo(ipAddressOverride: deviceId)
+            let info = try await dependencies.network.fetchSystemInfo(deviceId)
             let metrics = DeviceMetrics(from: info)
 
             await MainActor.run {
@@ -254,7 +300,7 @@ final class DashboardViewModel: ObservableObject {
         pollingTask?.cancel()
         pollingTask = Task {
             while !Task.isCancelled && connectionState == .connected {
-                try? await Task.sleep(for: .seconds(5))
+                await dependencies.sleep(dependencies.pollingInterval)
 
                 guard !Task.isCancelled else { continue }
 
@@ -262,7 +308,7 @@ final class DashboardViewModel: ObservableObject {
                 guard let deviceId = deviceId, !deviceId.isEmpty else { continue }
 
                 do {
-                    let info = try await networkService.fetchSystemInfo(ipAddressOverride: deviceId)
+                    let info = try await dependencies.network.fetchSystemInfo(deviceId)
                     let metrics = DeviceMetrics(from: info)
 
                     await MainActor.run {
@@ -392,11 +438,6 @@ final class DashboardViewModel: ObservableObject {
             historicalData = points
         } catch {
         }
-    }
-
-    deinit {
-        pollingTask?.cancel()
-        networkMonitor?.cancel()
     }
 
     #if DEBUG

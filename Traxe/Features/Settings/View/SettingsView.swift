@@ -1,3 +1,4 @@
+import Observation
 import RevenueCat
 import StoreKit
 import SwiftData
@@ -8,7 +9,7 @@ import SwiftUI
 #endif
 
 struct SettingsView: View {
-    @ObservedObject var viewModel: SettingsViewModel
+    @Bindable var viewModel: SettingsViewModel
     @State private var showingRestartConfirmation = false
     @State private var isAIEnabled = UserDefaults.standard.bool(forKey: "ai_enabled")
     @State private var showingPaywallSheet = false
@@ -55,7 +56,7 @@ struct SettingsView: View {
             )
             .ignoresSafeArea()
 
-            NavigationView {
+            NavigationStack {
                 Form {
 
                     Section {

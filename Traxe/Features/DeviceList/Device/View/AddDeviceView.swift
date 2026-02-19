@@ -2,7 +2,7 @@ import SwiftUI
 
 struct AddDeviceView: View {
     @Environment(\.dismiss) var dismiss
-    @StateObject private var viewModel = OnboardingViewModel()
+    @State private var viewModel = OnboardingViewModel()
 
     @State private var ipAddress: String = ""
     @State private var isSaving: Bool = false
@@ -10,6 +10,7 @@ struct AddDeviceView: View {
     @State private var errorMessage: String = ""
     @State private var showSettingsAlert = false
     @State private var selectedDevice: DiscoveredDevice?
+    @FocusState private var isIPAddressFocused: Bool
 
     private let ipRegex =
         #"^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"#
@@ -30,7 +31,7 @@ struct AddDeviceView: View {
             )
             .ignoresSafeArea()
 
-            NavigationView {
+            NavigationStack {
                 ScrollView {
                     VStack(spacing: 20) {
 
@@ -55,14 +56,7 @@ struct AddDeviceView: View {
                     }
                     .padding()
                 }
-                .onTapGesture {
-                    UIApplication.shared.sendAction(
-                        #selector(UIResponder.resignFirstResponder),
-                        to: nil,
-                        from: nil,
-                        for: nil
-                    )
-                }
+                .scrollDismissesKeyboard(.immediately)
                 .navigationTitle("Add Miner")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
@@ -123,12 +117,7 @@ struct AddDeviceView: View {
 
                 if #available(iOS 26.0, *) {
                     Button("Scan Network") {
-                        UIApplication.shared.sendAction(
-                            #selector(UIResponder.resignFirstResponder),
-                            to: nil,
-                            from: nil,
-                            for: nil
-                        )
+                        isIPAddressFocused = false
                         Task {
                             let result = await viewModel.startScan()
                             if result == .permissionDenied {
@@ -142,12 +131,7 @@ struct AddDeviceView: View {
 
                 } else {
                     Button("Scan Network") {
-                        UIApplication.shared.sendAction(
-                            #selector(UIResponder.resignFirstResponder),
-                            to: nil,
-                            from: nil,
-                            for: nil
-                        )
+                        isIPAddressFocused = false
                         Task {
                             let result = await viewModel.startScan()
                             if result == .permissionDenied {
@@ -242,7 +226,8 @@ struct AddDeviceView: View {
                 TextField("IP Address", text: $ipAddress)
                     .textFieldStyle(.plain)
                     .keyboardType(.decimalPad)
-                    .autocapitalization(.none)
+                    .textInputAutocapitalization(.never)
+                    .focused($isIPAddressFocused)
                     .onChange(of: ipAddress) {
                         if !ipAddress.isEmpty {
                             selectedDevice = nil
@@ -312,6 +297,7 @@ struct AddDeviceView: View {
     }
 
     private func addDevice() {
+        isIPAddressFocused = false
         if selectedDevice != nil {
             addSelectedDevice()
         } else if isValidIP(ipAddress) && !ipAddress.isEmpty {

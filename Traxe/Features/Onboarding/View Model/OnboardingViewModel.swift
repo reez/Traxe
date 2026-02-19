@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import Network
+import Observation
 import SwiftUI
 import WidgetKit
 
@@ -23,28 +24,74 @@ struct DiscoveredDevice: Identifiable {
     let networkDifficulty: Double?
 }
 
+@Observable
 @MainActor
-final class OnboardingViewModel: ObservableObject {
-    @Published var scanStatus: String = ""
-    @Published var isScanning: Bool = false
-    @Published var discoveredDevices: [DiscoveredDevice] = []
-    @Published var showErrorAlert: Bool = false
-    @Published var errorMessage: String = ""
-    @Published var deviceInfo: String = ""
-    @Published var problemField: String = ""
-    @Published var manualIPAddress: String = ""
-    @Published var navigateToDashboard: Bool = false
-    @Published var hasScanned: Bool = false
-    @Published var showManualEntry: Bool = false
-    @Published var hasLocalNetworkPermission: Bool = false
-    @Published var detectedNetworkInfo: String = ""
+final class OnboardingViewModel {
+    struct Dependencies {
+        struct DeviceManagementClient {
+            var checkDevice: @Sendable (_ ip: String) async throws -> DiscoveredDevice
+            var saveDevice: @Sendable (_ device: SavedDevice) throws -> Void
 
+            static let live = Self(
+                checkDevice: { ip in
+                    try await DeviceManagementService.checkDevice(ip: ip)
+                },
+                saveDevice: { device in
+                    try DeviceManagementService.saveDevice(device)
+                }
+            )
+        }
+
+        struct URLSessionClient {
+            var data: @Sendable (_ request: URLRequest) async throws -> (Data, URLResponse)
+
+            static let live = Self(
+                data: { request in
+                    try await URLSession.shared.data(for: request)
+                }
+            )
+        }
+
+        var deviceManagement: DeviceManagementClient
+        var urlSession: URLSessionClient
+        var notificationCenter: NotificationCenter
+        var sleep: @Sendable (_ duration: Duration) async -> Void
+        var scanTimeout: Duration
+        var localNetworkProbeIP: String
+        var networkInterfaces: (@Sendable () -> [String]?)?
+        var scanHostRange: ClosedRange<Int>
+
+        static let live = Self(
+            deviceManagement: .live,
+            urlSession: .live,
+            notificationCenter: .default,
+            sleep: { duration in
+                try? await Task.sleep(for: duration)
+            },
+            scanTimeout: .seconds(5),
+            localNetworkProbeIP: "192.168.4.254",
+            networkInterfaces: nil,
+            scanHostRange: 1...254
+        )
+    }
+
+    var scanStatus: String = ""
+    var isScanning: Bool = false
+    var discoveredDevices: [DiscoveredDevice] = []
+    var showErrorAlert: Bool = false
+    var errorMessage: String = ""
+    var deviceInfo: String = ""
+    var problemField: String = ""
+    var manualIPAddress: String = ""
+    var navigateToDashboard: Bool = false
+    var hasScanned: Bool = false
+    var showManualEntry: Bool = false
+    var hasLocalNetworkPermission: Bool = false
+    var detectedNetworkInfo: String = ""
+
+    private let dependencies: Dependencies
     private var browser: NWBrowser?
     private var cancellables = Set<AnyCancellable>()
-    private let queue = DispatchQueue(
-        label: "com.matthewramsden.traxe.discovery",
-        qos: .userInitiated
-    )
     private var permissionErrorDetected = false
 
     private actor ScanState {
@@ -61,13 +108,14 @@ final class OnboardingViewModel: ObservableObject {
     }
     private let scanState = ScanState()
 
-    init() {
+    init(dependencies: Dependencies = .live) {
+        self.dependencies = dependencies
         Task {
             _ = await checkLocalNetworkPermission()
             await checkAndUpdatePermission()
         }
 
-        NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
+        dependencies.notificationCenter.publisher(for: UIApplication.didBecomeActiveNotification)
             .sink { [weak self] _ in
                 guard let self = self else { return }
 
@@ -97,12 +145,14 @@ final class OnboardingViewModel: ObservableObject {
     }
 
     private func checkLocalNetworkPermission() async -> Bool {
-        let url = URL(string: "http://192.168.4.254")!
+        guard let url = URL(string: "http://\(dependencies.localNetworkProbeIP)") else {
+            return false
+        }
         var request = URLRequest(url: url)
         request.timeoutInterval = 1.0
 
         do {
-            let (_, _) = try await URLSession.shared.data(for: request)
+            let (_, _) = try await dependencies.urlSession.data(request)
             return true
         } catch {
             if let urlError = error as? URLError {
@@ -120,7 +170,7 @@ final class OnboardingViewModel: ObservableObject {
     }
 
     private func checkAPMode() async -> Bool {
-        let apIP = "192.168.4.254"
+        let apIP = dependencies.localNetworkProbeIP
         let urlString = "http://\(apIP)/api/system/info"
         guard let url = URL(string: urlString) else {
             return false
@@ -131,7 +181,7 @@ final class OnboardingViewModel: ObservableObject {
                 var request = URLRequest(url: url)
                 request.timeoutInterval = 5.0
 
-                let (data, response) = try await URLSession.shared.data(for: request)
+                let (data, response) = try await dependencies.urlSession.data(request)
 
                 guard let httpResponse = response as? HTTPURLResponse else {
                     continue
@@ -331,7 +381,7 @@ final class OnboardingViewModel: ObservableObject {
         if foundInAPMode {
         }
 
-        if let interfaces = getNetworkInterfaces() {
+        if let interfaces = dependencies.networkInterfaces?() ?? getNetworkInterfaces() {
             if let localNetwork = interfaces.first {
                 let detectedBaseIP = localNetwork.split(separator: ".").dropLast().joined(
                     separator: "."
@@ -348,7 +398,7 @@ final class OnboardingViewModel: ObservableObject {
                 }
 
                 for subnetBaseIP in subnetsToScan {
-                    for i in 1...254 {
+                    for i in dependencies.scanHostRange {
                         let ip = "\(subnetBaseIP).\(i)"
                         let task = Task { [weak self] in
                             guard let self = self, !Task.isCancelled else {
@@ -358,7 +408,7 @@ final class OnboardingViewModel: ObservableObject {
 
                             do {
                                 let discoveredDevice =
-                                    try await DeviceManagementService.checkDevice(ip: ip)
+                                    try await self.dependencies.deviceManagement.checkDevice(ip)
                                 await MainActor.run {
                                     if self.isScanning,
                                         !self.discoveredDevices.contains(where: { $0.ip == ip })
@@ -472,11 +522,11 @@ final class OnboardingViewModel: ObservableObject {
             return .permissionDenied
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
-            guard let self = self, self.isScanning else { return }
-            Task { [weak self] in
-                await self?.scanState.cancelAll()
-            }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.dependencies.sleep(self.dependencies.scanTimeout)
+            guard self.isScanning else { return }
+            await self.scanState.cancelAll()
             if self.discoveredDevices.isEmpty {
                 self.handleError(
                     """
@@ -498,7 +548,7 @@ final class OnboardingViewModel: ObservableObject {
         let savedDevice = SavedDevice(name: device.name, ipAddress: device.ip)
 
         do {
-            try DeviceManagementService.saveDevice(savedDevice)
+            try dependencies.deviceManagement.saveDevice(savedDevice)
         } catch {
             handleError("Failed to save the selected miner. Please try again.")
         }
@@ -515,13 +565,13 @@ final class OnboardingViewModel: ObservableObject {
         }
 
         do {
-            let discoveredDevice = try await DeviceManagementService.checkDevice(ip: ip)
+            let discoveredDevice = try await dependencies.deviceManagement.checkDevice(ip)
 
             let deviceToSave = SavedDevice(
                 name: discoveredDevice.name,
                 ipAddress: discoveredDevice.ip
             )
-            try DeviceManagementService.saveDevice(deviceToSave)
+            try dependencies.deviceManagement.saveDevice(deviceToSave)
 
             await MainActor.run {
                 if !discoveredDevices.contains(where: { $0.ip == ip }) {
@@ -603,10 +653,7 @@ final class OnboardingViewModel: ObservableObject {
 
     private func handlePermissionIssueIfNeeded(for code: URLError.Code) async -> Bool {
         let permissionCodes: Set<URLError.Code> = [
-            .notConnectedToInternet,
-            .networkConnectionLost,
-            .timedOut,
-            .cannotConnectToHost,
+            .notConnectedToInternet
         ]
         guard permissionCodes.contains(code), !permissionErrorDetected else { return false }
 
@@ -638,7 +685,10 @@ final class OnboardingViewModel: ObservableObject {
             defer { ptr = ptr?.pointee.ifa_next }
 
             let interface = ptr?.pointee
-            let addrFamily = interface?.ifa_addr.pointee.sa_family
+            guard let socketAddress = interface?.ifa_addr else {
+                continue
+            }
+            let addrFamily = socketAddress.pointee.sa_family
 
             if addrFamily == UInt8(AF_INET) {
                 guard let nameBytes = interface?.ifa_name,
@@ -648,8 +698,8 @@ final class OnboardingViewModel: ObservableObject {
                 }
                 var rawHostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
                 if getnameinfo(
-                    interface?.ifa_addr,
-                    socklen_t((interface?.ifa_addr.pointee.sa_len)!),
+                    socketAddress,
+                    socklen_t(socketAddress.pointee.sa_len),
                     &rawHostname,
                     socklen_t(rawHostname.count),
                     nil,
@@ -661,8 +711,8 @@ final class OnboardingViewModel: ObservableObject {
                 if name == "en0" || name == "en1" {
                     var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
                     if getnameinfo(
-                        interface?.ifa_addr,
-                        socklen_t((interface?.ifa_addr.pointee.sa_len)!),
+                        socketAddress,
+                        socklen_t(socketAddress.pointee.sa_len),
                         &hostname,
                         socklen_t(hostname.count),
                         nil,
@@ -682,18 +732,6 @@ final class OnboardingViewModel: ObservableObject {
             return nil
         }
         return addresses
-    }
-
-    private func getAllInterfaceNames(_ ifaddr: UnsafeMutablePointer<ifaddrs>?) -> [String] {
-        var names: [String] = []
-        var ptr = ifaddr
-        while ptr != nil {
-            defer { ptr = ptr?.pointee.ifa_next }
-            if let name = ptr?.pointee.ifa_name {
-                names.append(String(cString: name))
-            }
-        }
-        return names.sorted()
     }
 
     private func handleError(_ message: String) {

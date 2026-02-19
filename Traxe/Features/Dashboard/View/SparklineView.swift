@@ -10,6 +10,7 @@ struct SparklineView: View {
     @State private var selectedValue: Double?
     @State private var selectedTimestamp: Date?
     @State private var selectedIndex: Int?
+    @State private var pulseTask: Task<Void, Never>?
     private let hapticGenerator = UISelectionFeedbackGenerator()
 
     private let fixedBarWidth: CGFloat = 4.0
@@ -52,7 +53,7 @@ struct SparklineView: View {
                     let range = max(maxValue - minValue, 0.01)
                     let startX = barAreaStartX(geometry: geometry)
 
-                    ForEach(Array(sampledData.enumerated()), id: \.element.timestamp) {
+                    ForEach(sampledData.enumerated(), id: \.element.timestamp) {
                         index,
                         dataPoint in
                         let value = dataPoint[keyPath: valueKey]
@@ -194,11 +195,17 @@ struct SparklineView: View {
                 isPulsing = true
             }
 
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            pulseTask?.cancel()
+            pulseTask = Task {
+                try? await Task.sleep(for: .milliseconds(300))
+                guard !Task.isCancelled else { return }
                 withAnimation(.easeOut(duration: 0.3)) {
                     isPulsing = false
                 }
             }
+        }
+        .onDisappear {
+            pulseTask?.cancel()
         }
     }
 

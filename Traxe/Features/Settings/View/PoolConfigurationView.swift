@@ -1,8 +1,9 @@
+import Observation
 import SwiftData
 import SwiftUI
 
 struct PoolConfigurationView: View {
-    @ObservedObject var viewModel: SettingsViewModel
+    @Bindable var viewModel: SettingsViewModel
     @Environment(\.dismiss) var dismiss
 
     @State private var selectedPoolIndex: Int = 0
@@ -209,7 +210,7 @@ struct PoolConfigurationView: View {
             previewViewModel.poolMode = 1
             previewViewModel.isDualPool = true
 
-            return NavigationView {
+            return NavigationStack {
                 PoolConfigurationView(viewModel: previewViewModel)
             }
         }

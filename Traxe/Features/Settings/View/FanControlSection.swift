@@ -1,7 +1,8 @@
+import Observation
 import SwiftUI
 
 struct FanControlSection: View {
-    @ObservedObject var viewModel: SettingsViewModel
+    @Bindable var viewModel: SettingsViewModel
 
     private var isControlDisabled: Bool {
         viewModel.isAutoFan || viewModel.isUpdatingFan

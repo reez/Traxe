@@ -1,30 +1,71 @@
 import Combine
+import Observation
 import StoreKit
 import SwiftUI
 import TipKit
 import UIKit
 import WidgetKit
 
+@Observable
 @MainActor
-final class DeviceListViewModel: ObservableObject {
-    @Published var savedDevices: [SavedDevice] = []
-    @Published var totalHashRate: Double = 0.0
-    @Published var totalPower: Double = 0.0
-    @Published var bestOverallDiff: Double = 0.0
-    @Published var isLoadingAggregatedStats = false
-    @Published var deviceMetrics: [String: DeviceMetrics] = [:]
-    @Published var isEditMode = false
-    @Published var fleetAISummary: AISummary?
-    @Published var lastDataUpdate: Date = Date()
-    @Published var reachableIPs: Set<String> = []
-    @Published var lastSeenWhatsNewVersion: String? = nil
+final class DeviceListViewModel {
+    struct Dependencies {
+        struct DeviceManagementClient {
+            var checkDevice: @Sendable (_ ip: String) async throws -> DiscoveredDevice
+            var deleteDevice: @Sendable (_ ipAddressToDelete: String) throws -> Void
+            var reorderDevices: @Sendable (_ devices: [SavedDevice]) throws -> Void
 
+            static let live = Self(
+                checkDevice: { ip in
+                    try await DeviceManagementService.checkDevice(
+                        ip: ip,
+                        timeout: 2.0,
+                        retryOnTimeout: false
+                    )
+                },
+                deleteDevice: { ipAddressToDelete in
+                    try DeviceManagementService.deleteDevice(ipAddressToDelete: ipAddressToDelete)
+                },
+                reorderDevices: { devices in
+                    try DeviceManagementService.reorderDevices(devices)
+                }
+            )
+        }
+
+        var deviceManagement: DeviceManagementClient
+        var reloadWidget: @Sendable () -> Void
+        var autoRefreshOnLoad: Bool
+
+        static let live = Self(
+            deviceManagement: .live,
+            reloadWidget: {
+                WidgetCenter.shared.reloadTimelines(ofKind: "TraxeWidget")
+            },
+            autoRefreshOnLoad: true
+        )
+    }
+
+    var savedDevices: [SavedDevice] = []
+    var totalHashRate: Double = 0.0
+    var totalPower: Double = 0.0
+    var bestOverallDiff: Double = 0.0
+    var isLoadingAggregatedStats = false
+    var deviceMetrics: [String: DeviceMetrics] = [:]
+    var isEditMode = false
+    var fleetAISummary: AISummary?
+    var lastDataUpdate: Date = Date()
+    var reachableIPs: Set<String> = []
+    var lastSeenWhatsNewVersion: String? = nil
+
+    private let dependencies: Dependencies
     private let defaults: UserDefaults
     private var aiAnalysisService: AIAnalysisService?
     private let metricsCache = DeviceMetricsCache()
+    private var cachedNetworkSnapshot: (blockHeight: Int?, networkDifficulty: Double?)? = nil
 
     private enum StorageKeys {
         static let lastSeenWhatsNewVersion = "lastSeenWhatsNewVersion"
+        static let cachedNetworkSnapshot = "cachedNetworkSnapshotV1"
     }
 
     private enum Support {
@@ -37,6 +78,12 @@ final class DeviceListViewModel: ObservableObject {
     }
 
     var networkSnapshot: (blockHeight: Int?, networkDifficulty: Double?)? {
+        currentNetworkSnapshotFromMetrics() ?? cachedNetworkSnapshot
+    }
+
+    private func currentNetworkSnapshotFromMetrics() -> (
+        blockHeight: Int?, networkDifficulty: Double?
+    )? {
         for device in savedDevices {
             if let metrics = deviceMetrics[device.ipAddress],
                 metrics.blockHeight != nil || metrics.networkDifficulty != nil
@@ -55,12 +102,15 @@ final class DeviceListViewModel: ObservableObject {
     }
 
     init(
-        defaults: UserDefaults = UserDefaults(suiteName: "group.matthewramsden.traxe") ?? .standard
+        defaults: UserDefaults = UserDefaults(suiteName: "group.matthewramsden.traxe") ?? .standard,
+        dependencies: Dependencies = .live
     ) {
+        self.dependencies = dependencies
         self.defaults = defaults
         if #available(iOS 18.0, macOS 15.0, *) {
             self.aiAnalysisService = AIAnalysisService()
         }
+        self.cachedNetworkSnapshot = loadCachedNetworkSnapshot()
         self.lastSeenWhatsNewVersion = defaults.string(
             forKey: StorageKeys.lastSeenWhatsNewVersion
         )
@@ -83,7 +133,7 @@ final class DeviceListViewModel: ObservableObject {
         guard let data = defaults.data(forKey: "savedDevices") else {
             self.savedDevices = []
             saveIPsAndReloadWidget()
-            Task { await updateAggregatedStats() }
+            scheduleAggregatedStatsRefreshIfNeeded()
             return
         }
 
@@ -91,12 +141,17 @@ final class DeviceListViewModel: ObservableObject {
             let decoder = JSONDecoder()
             self.savedDevices = try decoder.decode([SavedDevice].self, from: data)
             saveIPsAndReloadWidget()
-            Task { await updateAggregatedStats() }
+            scheduleAggregatedStatsRefreshIfNeeded()
         } catch {
             self.savedDevices = []
             saveIPsAndReloadWidget()
-            Task { await updateAggregatedStats() }
+            scheduleAggregatedStatsRefreshIfNeeded()
         }
+    }
+
+    private func scheduleAggregatedStatsRefreshIfNeeded() {
+        guard dependencies.autoRefreshOnLoad else { return }
+        Task { await updateAggregatedStats() }
     }
 
     func loadCacheAndComputeTotals() {
@@ -215,7 +270,7 @@ final class DeviceListViewModel: ObservableObject {
 
         for device in devicesToDelete {
             do {
-                try DeviceManagementService.deleteDevice(ipAddressToDelete: device.ipAddress)
+                try dependencies.deviceManagement.deleteDevice(device.ipAddress)
                 savedDevices.removeAll { $0.id == device.id }
                 deviceMetrics.removeValue(forKey: device.ipAddress)
                 saveIPsAndReloadWidget()
@@ -242,6 +297,7 @@ final class DeviceListViewModel: ObservableObject {
 
         // Capture current IPs to avoid touching actor state off the main actor
         let devicesSnapshot = savedDevices
+        let checkDevice = dependencies.deviceManagement.checkDevice
 
         // Perform network fetches off the main actor, then apply results on main
         let fetchedResults: [(String, DeviceMetrics?)] = await Task.detached(
@@ -251,11 +307,7 @@ final class DeviceListViewModel: ObservableObject {
                 for device in devicesSnapshot {
                     group.addTask {
                         do {
-                            let discoveredDevice = try await DeviceManagementService.checkDevice(
-                                ip: device.ipAddress,
-                                timeout: 2.0,
-                                retryOnTimeout: false
-                            )
+                            let discoveredDevice = try await checkDevice(device.ipAddress)
                             // Inline parse to avoid touching main-actor method
                             let parsedDifficulty: Double = {
                                 let multipliers: [Character: Double] = [
@@ -269,16 +321,21 @@ final class DeviceListViewModel: ObservableObject {
                                     in: .whitespacesAndNewlines
                                 )
                                 guard !trimmed.isEmpty else { return 0.0 }
-                                let lastChar = trimmed.last!
+                                guard let lastChar = trimmed.last else { return 0.0 }
                                 var numeric = trimmed
                                 var mult: Double = 1.0
-                                if let m = multipliers[lastChar.uppercased().first!] {
+                                if let suffix = lastChar.uppercased().first,
+                                    let m = multipliers[suffix]
+                                {
                                     mult = m
                                     numeric = String(trimmed.dropLast())
                                 } else if lastChar.isLetter {
                                     return 0.0
                                 }
-                                let cleaned = numeric.replacingOccurrences(of: ",", with: "")
+                                let cleaned =
+                                    numeric
+                                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                                    .replacing(",", with: "")
                                 guard let value = Double(cleaned) else { return 0.0 }
                                 return value / 1_000_000.0 * mult
                             }()
@@ -331,12 +388,23 @@ final class DeviceListViewModel: ObservableObject {
 
         isLoadingAggregatedStats = false
 
+        if let snapshot = currentNetworkSnapshotFromMetrics() {
+            cachedNetworkSnapshot = snapshot
+            saveCachedNetworkSnapshot(snapshot)
+        } else if successfulFetchCount > 0,
+            let mempoolSnapshot = await fetchMempoolNetworkSnapshot()
+        {
+            // Firmware responded but does not expose network fields; source them from mempool.
+            cachedNetworkSnapshot = mempoolSnapshot
+            saveCachedNetworkSnapshot(mempoolSnapshot)
+        }
+
         // Save all current metrics to cache
         saveCacheFromCurrentMetrics()
         // No need to regenerate summary here; computeTotals() already keeps it in sync
 
         if successfulFetchCount > 0 {
-            WidgetCenter.shared.reloadTimelines(ofKind: "TraxeWidget")
+            dependencies.reloadWidget()
         }
     }
 
@@ -366,12 +434,12 @@ final class DeviceListViewModel: ObservableObject {
 
         guard !trimmedString.isEmpty else { return 0.0 }
 
-        let lastChar = trimmedString.last!
+        guard let lastChar = trimmedString.last else { return 0.0 }
 
         var numericPartString = trimmedString
         var multiplier: Double = 1.0
 
-        if let mult = multipliers[lastChar.uppercased().first!] {
+        if let suffix = lastChar.uppercased().first, let mult = multipliers[suffix] {
             multiplier = mult
             numericPartString = String(trimmedString.dropLast())
         } else if lastChar.isLetter {
@@ -379,7 +447,7 @@ final class DeviceListViewModel: ObservableObject {
         }
 
         // Remove commas from numeric part before parsing
-        let cleanedNumericString = numericPartString.replacingOccurrences(of: ",", with: "")
+        let cleanedNumericString = numericPartString.replacing(",", with: "")
         guard let numericValue = Double(cleanedNumericString) else {
             return 0.0
         }
@@ -392,14 +460,14 @@ final class DeviceListViewModel: ObservableObject {
     private func saveIPsAndReloadWidget() {
         let ipAddresses = savedDevices.map { $0.ipAddress }
         defaults.set(ipAddresses, forKey: "savedDeviceIPs")
-        WidgetCenter.shared.reloadTimelines(ofKind: "TraxeWidget")
+        dependencies.reloadWidget()
     }
 
     func reorderDevices(from source: IndexSet, to destination: Int) {
         savedDevices.move(fromOffsets: source, toOffset: destination)
 
         do {
-            try DeviceManagementService.reorderDevices(savedDevices)
+            try dependencies.deviceManagement.reorderDevices(savedDevices)
         } catch {
             // If reordering fails, revert the local change
             loadDevices()
@@ -454,6 +522,72 @@ final class DeviceListViewModel: ObservableObject {
             defaults.set(data, forKey: "cachedFleetAISummaryV1")
         } catch {
             // Best-effort cache; ignore errors
+        }
+    }
+
+    private struct NetworkSnapshotCacheEntry: Codable {
+        let blockHeight: Int?
+        let networkDifficulty: Double?
+    }
+
+    private func loadCachedNetworkSnapshot() -> (blockHeight: Int?, networkDifficulty: Double?)? {
+        guard let data = defaults.data(forKey: StorageKeys.cachedNetworkSnapshot) else {
+            return nil
+        }
+        do {
+            let entry = try JSONDecoder().decode(NetworkSnapshotCacheEntry.self, from: data)
+            guard entry.blockHeight != nil || entry.networkDifficulty != nil else { return nil }
+            return (entry.blockHeight, entry.networkDifficulty)
+        } catch {
+            return nil
+        }
+    }
+
+    private func saveCachedNetworkSnapshot(
+        _ snapshot: (blockHeight: Int?, networkDifficulty: Double?)?
+    ) {
+        guard let snapshot, snapshot.blockHeight != nil || snapshot.networkDifficulty != nil else {
+            defaults.removeObject(forKey: StorageKeys.cachedNetworkSnapshot)
+            return
+        }
+
+        let entry = NetworkSnapshotCacheEntry(
+            blockHeight: snapshot.blockHeight,
+            networkDifficulty: snapshot.networkDifficulty
+        )
+        do {
+            let data = try JSONEncoder().encode(entry)
+            defaults.set(data, forKey: StorageKeys.cachedNetworkSnapshot)
+        } catch {
+            // Best-effort cache; ignore errors
+        }
+    }
+
+    private struct MempoolBlockDTO: Decodable {
+        let height: Int
+        let difficulty: Double
+    }
+
+    private func fetchMempoolNetworkSnapshot() async -> (
+        blockHeight: Int?, networkDifficulty: Double?
+    )? {
+        guard let url = URL(string: "https://mempool.space/api/blocks") else { return nil }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 5.0
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200
+            else {
+                return nil
+            }
+
+            let blocks = try JSONDecoder().decode([MempoolBlockDTO].self, from: data)
+            guard let tip = blocks.first else { return nil }
+            return (blockHeight: tip.height, networkDifficulty: tip.difficulty)
+        } catch {
+            return nil
         }
     }
 

@@ -3,6 +3,8 @@
 //  Created by Matthew Ramsden.
 //
 
+import AppIntents
+import Observation
 import RevenueCat
 import SwiftData
 import SwiftUI
@@ -27,7 +29,7 @@ struct TraxeApp: App {
         }
     }()
 
-    @StateObject private var dashboardViewModel: DashboardViewModel
+    @State private var dashboardViewModel: DashboardViewModel
 
     init() {
         // Register default settings
@@ -37,6 +39,7 @@ struct TraxeApp: App {
 
         Purchases.logLevel = .error
         Purchases.configure(withAPIKey: "appl_qmpDjLonGDKmmzmItMjeuLZLYLj")
+        TraxeShortcutsProvider.updateAppShortcutParameters()
         Task {
             do {
                 _ = try await Purchases.shared.syncPurchases()
@@ -50,8 +53,8 @@ struct TraxeApp: App {
         #endif
 
         let modelContext = sharedModelContainer.mainContext
-        _dashboardViewModel = StateObject(
-            wrappedValue: DashboardViewModel(modelContext: modelContext)
+        _dashboardViewModel = State(
+            initialValue: DashboardViewModel(modelContext: modelContext)
         )
     }
 

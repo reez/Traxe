@@ -1,8 +1,9 @@
+import Observation
 import SwiftData
 import SwiftUI
 
 struct MetricsSummaryGrid: View {
-    @ObservedObject var viewModel: DashboardViewModel
+    @Bindable var viewModel: DashboardViewModel
 
     private let columns = [
         GridItem(.flexible(), spacing: 8),
@@ -190,8 +191,16 @@ struct MetricSummaryItem: View {
 
 #Preview {
     let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: HistoricalDataPoint.self, configurations: config)
+    let container = makeMetricsSummaryPreviewContainer(config: config)
     let previewViewModel = DashboardViewModel(modelContext: container.mainContext)
 
     return MetricsSummaryGrid(viewModel: previewViewModel)
+}
+
+private func makeMetricsSummaryPreviewContainer(config: ModelConfiguration) -> ModelContainer {
+    do {
+        return try ModelContainer(for: HistoricalDataPoint.self, configurations: config)
+    } catch {
+        fatalError("Failed to create metrics summary preview container: \(error)")
+    }
 }

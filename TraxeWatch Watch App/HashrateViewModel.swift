@@ -97,9 +97,10 @@ final class HashrateViewModel {
         let summariesWithHashrate = cache.map {
             (ip, metrics) -> (summary: WatchMinerSummary, hashrate: Double) in
             let formatted = metrics.hashrate.formattedHashRateWithUnit()
+            let displayName = metrics.hostname?.isEmpty == false ? (metrics.hostname ?? ip) : ip
             let summary = WatchMinerSummary(
                 id: ip,
-                name: metrics.hostname?.isEmpty == false ? metrics.hostname! : ip,
+                name: displayName,
                 ipAddress: ip,
                 hashrateValue: formatted.value,
                 hashrateUnit: formatted.unit,

@@ -112,7 +112,7 @@ final class WatchSessionManager: NSObject, WCSessionDelegate {
             )
         }
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             NotificationCenter.default.post(name: .watchHashrateDidUpdate, object: nil)
             WidgetCenter.shared.reloadTimelines(ofKind: "TraxeWatchWidget")
         }
