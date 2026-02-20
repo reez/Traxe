@@ -15,10 +15,10 @@ jobs:
       matrix:
         include:
           - repo: bitaxeorg/ESP-Miner
-            title: Release Watch: bitaxeorg/ESP-Miner
+            title: "Release Watch: bitaxeorg/ESP-Miner"
             include_prereleases: true
           - repo: shufps/ESP-Miner-NerdQAxePlus
-            title: Release Watch: shufps/ESP-Miner-NerdQAxePlus
+            title: "Release Watch: shufps/ESP-Miner-NerdQAxePlus"
             include_prereleases: true
     steps:
       - uses: actions/checkout@v4
