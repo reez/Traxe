@@ -1,6 +1,7 @@
 import Combine
 import Observation
 import StoreKit
+import SwiftData
 import SwiftUI
 import TipKit
 import UIKit
@@ -62,6 +63,8 @@ final class DeviceListViewModel {
     private var aiAnalysisService: AIAnalysisService?
     private let metricsCache = DeviceMetricsCache()
     private var cachedNetworkSnapshot: (blockHeight: Int?, networkDifficulty: Double?)? = nil
+    private var modelContext: ModelContext?
+    private let historicalDataRetentionInterval: TimeInterval = 60 * 60 * 24 * 30
 
     private enum StorageKeys {
         static let lastSeenWhatsNewVersion = "lastSeenWhatsNewVersion"
@@ -152,6 +155,12 @@ final class DeviceListViewModel {
     private func scheduleAggregatedStatsRefreshIfNeeded() {
         guard dependencies.autoRefreshOnLoad else { return }
         Task { await updateAggregatedStats() }
+    }
+
+    func configureModelContextIfNeeded(_ modelContext: ModelContext) -> Bool {
+        guard self.modelContext == nil else { return false }
+        self.modelContext = modelContext
+        return true
     }
 
     func loadCacheAndComputeTotals() {
@@ -373,6 +382,7 @@ final class DeviceListViewModel {
 
         var newReachables: Set<String> = []
         var successfulFetchCount = 0
+        var successfulSamples: [(deviceId: String, metrics: DeviceMetrics)] = []
         for (ipAddress, metrics) in fetchedResults {
             guard activeIPs.contains(ipAddress) else { continue }
 
@@ -380,11 +390,13 @@ final class DeviceListViewModel {
                 deviceMetrics[ipAddress] = metrics
                 newReachables.insert(ipAddress)
                 successfulFetchCount += 1
+                successfulSamples.append((deviceId: ipAddress, metrics: metrics))
             }
         }
         // Atomically update reachable set to avoid mid-refresh greying
         reachableIPs = newReachables
         computeTotals()
+        persistHistoricalSamples(successfulSamples)
 
         isLoadingAggregatedStats = false
 
@@ -419,6 +431,51 @@ final class DeviceListViewModel {
         #if os(iOS)
             WatchSyncManager.shared.updateCacheMetrics(cacheMetrics)
         #endif
+    }
+
+    private func persistHistoricalSamples(_ samples: [(deviceId: String, metrics: DeviceMetrics)]) {
+        guard let modelContext, !samples.isEmpty else { return }
+
+        let timestamp = Date()
+        let retentionCutoff = Date(timeIntervalSinceNow: -historicalDataRetentionInterval)
+
+        do {
+            for sample in samples {
+                let dataPoint = HistoricalDataPoint(
+                    timestamp: timestamp,
+                    hashrate: sample.metrics.hashrate,
+                    temperature: sample.metrics.temperature,
+                    deviceId: sample.deviceId
+                )
+                modelContext.insert(dataPoint)
+            }
+
+            let sampledDeviceIDs = Set(samples.map { $0.deviceId })
+            for deviceID in sampledDeviceIDs {
+                try pruneHistoricalData(for: deviceID, olderThan: retentionCutoff, in: modelContext)
+            }
+
+            try modelContext.save()
+        } catch {
+        }
+    }
+
+    private func pruneHistoricalData(
+        for deviceID: String,
+        olderThan cutoff: Date,
+        in modelContext: ModelContext
+    ) throws {
+        let descriptor = FetchDescriptor<HistoricalDataPoint>(
+            predicate: #Predicate<HistoricalDataPoint> { data in
+                data.deviceId == deviceID && data.timestamp < cutoff
+            }
+        )
+        let staleEntries = try modelContext.fetch(descriptor)
+        guard !staleEntries.isEmpty else { return }
+
+        for entry in staleEntries {
+            modelContext.delete(entry)
+        }
     }
 
     private func parseDifficultyString(_ diffString: String) -> Double {

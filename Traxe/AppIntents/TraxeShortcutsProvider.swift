@@ -8,6 +8,8 @@ struct TraxeShortcutsProvider: AppShortcutsProvider {
                 "How is \(\.$miner) doing in \(.applicationName)",
                 "Check \(\.$miner) in \(.applicationName)",
                 "What is the status of \(\.$miner) in \(.applicationName)",
+                "Get status for \(\.$miner) in \(.applicationName)",
+                "Is \(\.$miner) online in \(.applicationName)",
             ],
             shortTitle: "Miner Status",
             systemImageName: "cpu"
@@ -19,6 +21,8 @@ struct TraxeShortcutsProvider: AppShortcutsProvider {
                 "How are my miners doing in \(.applicationName)",
                 "Check my miner fleet in \(.applicationName)",
                 "What is my total hashrate in \(.applicationName)",
+                "Get fleet status in \(.applicationName)",
+                "How many miners are online in \(.applicationName)",
             ],
             shortTitle: "Fleet Status",
             systemImageName: "bolt.fill"

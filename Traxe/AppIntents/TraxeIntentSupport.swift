@@ -1,6 +1,12 @@
 import Foundation
 import RevenueCat
 
+struct FleetIntentContext {
+    let allDevices: [SavedDevice]
+    let accessPolicy: SubscriptionAccessPolicy
+    let accessibleDevices: [SavedDevice]
+}
+
 struct TraxeIntentSupport {
     private static let appGroupSuiteName = "group.matthewramsden.traxe"
     private static let savedDevicesKey = "savedDevices"
@@ -38,6 +44,18 @@ struct TraxeIntentSupport {
         } catch {
             return .accommodatingFallback
         }
+    }
+
+    static func loadFleetContext() async -> FleetIntentContext {
+        let allDevices = loadSavedDevices()
+        let accessPolicy = await resolveSubscriptionAccessPolicy()
+        let accessibleDevices = accessPolicy.accessibleDevices(from: allDevices)
+
+        return FleetIntentContext(
+            allDevices: allDevices,
+            accessPolicy: accessPolicy,
+            accessibleDevices: accessibleDevices
+        )
     }
 
     static func formattedUptime(from uptime: TimeInterval) -> String {

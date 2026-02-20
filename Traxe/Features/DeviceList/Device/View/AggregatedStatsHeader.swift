@@ -60,61 +60,65 @@ struct AggregatedStatsHeader: View {
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background {
-                if #available(iOS 26.0, *) {
-                    ConcentricRectangle(corners: .concentric(minimum: 20))
-                        .fill(Color(.secondarySystemBackground))
-                    //                        .fill(
-                    //                            LinearGradient(
-                    //                                colors: [
-                    //                                    Color(.tertiarySystemBackground),
-                    //                                    Color(.secondarySystemBackground)
-                    //                                ],
-                    //                                startPoint: .bottom,
-                    //                                endPoint: .top
-                    //                            )
-                    //                        )
-                    //                        .overlay(
-                    //                            ConcentricRectangle(corners: .concentric(minimum: 20))
-                    //                                .fill(
-                    //                                    LinearGradient(
-                    //                                        colors: [
-                    //                                            Color.traxeGold.opacity(0.08),
-                    //                                            Color.clear
-                    //                                        ],
-                    //                                        startPoint: .bottom,
-                    //                                        endPoint: .top
-                    //                                    )
-                    //                                )
-                    //                        )
-                } else {
-                    RoundedRectangle(cornerRadius: 20)
-                        .fill(Color(.secondarySystemBackground))
-                    //                        .fill(
-                    //                            LinearGradient(
-                    //                                colors: [
-                    //                                    Color(.tertiarySystemBackground),
-                    //                                    Color(.secondarySystemBackground)
-                    //                                ],
-                    //                                startPoint: .bottom,
-                    //                                endPoint: .top
-                    //                            )
-                    //                        )
-                    //                        .overlay(
-                    //                            RoundedRectangle(cornerRadius: 20)
-                    //                                .fill(
-                    //                                    LinearGradient(
-                    //                                        colors: [
-                    //                                            Color.traxeGold.opacity(0.08),
-                    //                                            Color.clear
-                    //                                        ],
-                    //                                        startPoint: .bottom,
-                    //                                        endPoint: .top
-                    //                                    )
-                    //                                )
-                    //                        )
-                }
-            }
+            //            .background {
+            //                if #available(iOS 26.0, *) {
+            //                    ConcentricRectangle(corners: .concentric(minimum: 20))
+            //                        .fill(Color(.secondarySystemBackground))
+            //                    //                        .fill(
+            //                    //                            LinearGradient(
+            //                    //                                colors: [
+            //                    //                                    Color(.tertiarySystemBackground),
+            //                    //                                    Color(.secondarySystemBackground)
+            //                    //                                ],
+            //                    //                                startPoint: .bottom,
+            //                    //                                endPoint: .top
+            //                    //                            )
+            //                    //                        )
+            //                    //                        .overlay(
+            //                    //                            ConcentricRectangle(corners: .concentric(minimum: 20))
+            //                    //                                .fill(
+            //                    //                                    LinearGradient(
+            //                    //                                        colors: [
+            //                    //                                            Color.traxeGold.opacity(0.08),
+            //                    //                                            Color.clear
+            //                    //                                        ],
+            //                    //                                        startPoint: .bottom,
+            //                    //                                        endPoint: .top
+            //                    //                                    )
+            //                    //                                )
+            //                    //                        )
+            //                } else {
+            //                    RoundedRectangle(cornerRadius: 20)
+            //                        .fill(Color(.secondarySystemBackground))
+            //                    //                        .fill(
+            //                    //                            LinearGradient(
+            //                    //                                colors: [
+            //                    //                                    Color(.tertiarySystemBackground),
+            //                    //                                    Color(.secondarySystemBackground)
+            //                    //                                ],
+            //                    //                                startPoint: .bottom,
+            //                    //                                endPoint: .top
+            //                    //                            )
+            //                    //                        )
+            //                    //                        .overlay(
+            //                    //                            RoundedRectangle(cornerRadius: 20)
+            //                    //                                .fill(
+            //                    //                                    LinearGradient(
+            //                    //                                        colors: [
+            //                    //                                            Color.traxeGold.opacity(0.08),
+            //                    //                                            Color.clear
+            //                    //                                        ],
+            //                    //                                        startPoint: .bottom,
+            //                    //                                        endPoint: .top
+            //                    //                                    )
+            //                    //                                )
+            //                    //                        )
+            //                }
+            //            }
+            .overlay(
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(Color.primary.opacity(0.1), lineWidth: 0.5)
+            )
 
         }
         .frame(maxWidth: .infinity, alignment: .leading)

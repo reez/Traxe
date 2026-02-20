@@ -53,7 +53,7 @@ struct SparklineView: View {
                     let range = max(maxValue - minValue, 0.01)
                     let startX = barAreaStartX(geometry: geometry)
 
-                    ForEach(sampledData.enumerated(), id: \.element.timestamp) {
+                    ForEach(Array(sampledData.enumerated()), id: \.element.timestamp) {
                         index,
                         dataPoint in
                         let value = dataPoint[keyPath: valueKey]

@@ -42,6 +42,7 @@ struct WhatsNewTip: Tip {
 
 struct DeviceListView: View {
     @Environment(\.dismiss) var dismiss
+    @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @State private var viewModel: DeviceListViewModel
     private let dashboardViewModel: DashboardViewModel
@@ -61,6 +62,7 @@ struct DeviceListView: View {
         }
     }
     @State private var navigateToSummary = false
+    @State private var showingFleetWeeklyRecap = false
     @State private var selectedDevice: SavedDevice? = nil
     @State private var showingWhatsNew = false
     @State private var showConnectionErrorAlert = false
@@ -94,6 +96,11 @@ struct DeviceListView: View {
                 AggregatedStatsHeader(viewModel: viewModel)
             }
 
+            if !viewModel.savedDevices.isEmpty {
+                weeklyRecapEntry
+                    .padding(.top, viewModel.savedDevices.count > 1 ? -46 : 0)
+            }
+
             VStack(alignment: .leading, spacing: 16) {
                 Text("Miners")
                     .font(.title2)
@@ -107,7 +114,7 @@ struct DeviceListView: View {
                     ],
                     spacing: 12
                 ) {
-                    ForEach(viewModel.savedDevices.enumerated(), id: \.element.id) {
+                    ForEach(Array(viewModel.savedDevices.enumerated()), id: \.element.id) {
                         index,
                         device in
                         deviceCardView(for: device, at: index)
@@ -127,6 +134,38 @@ struct DeviceListView: View {
             }
         }
         .padding(.bottom, 40)
+    }
+
+    private var weeklyRecapEntry: some View {
+        Button {
+            showingFleetWeeklyRecap = true
+        } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Weekly Recap")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Text("View all miners from the last 7 days")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                //                Image(systemName: "chevron.right")
+                //                    .font(.caption)
+                //                    .foregroundStyle(.secondary)
+            }
+            .padding(12)
+            .background(
+                Color(uiColor: .secondarySystemBackground),
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.primary.opacity(0.1), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal)
     }
 
     private func deviceCardView(for device: SavedDevice, at index: Int) -> some View {
@@ -298,7 +337,7 @@ struct DeviceListView: View {
             //            .padding(.top)
 
             List {
-                ForEach(viewModel.savedDevices.enumerated(), id: \.element.id) {
+                ForEach(Array(viewModel.savedDevices.enumerated()), id: \.element.id) {
                     index,
                     device in
                     editModeRow(for: device, at: index)
@@ -399,6 +438,12 @@ struct DeviceListView: View {
             }
         }
         .onAppear {
+            let didConfigureModelContext = viewModel.configureModelContextIfNeeded(modelContext)
+            if didConfigureModelContext {
+                Task {
+                    await viewModel.updateAggregatedStats()
+                }
+            }
         }
         .onChange(of: scenePhase) { oldPhase, newPhase in
             if newPhase == .active {
@@ -462,6 +507,18 @@ struct DeviceListView: View {
             } else {
                 Text("Error: No miner selected")
             }
+        }
+        .navigationDestination(isPresented: $showingFleetWeeklyRecap) {
+            WeeklyRecapView(
+                scope: .fleet(
+                    devices: viewModel.savedDevices.map { device in
+                        WeeklyRecapFleetDevice(
+                            id: device.ipAddress,
+                            name: viewModel.deviceMetrics[device.ipAddress]?.hostname ?? device.name
+                        )
+                    }
+                )
+            )
         }
         .alert("Connection Failed", isPresented: $showConnectionErrorAlert) {
             Button("OK") {}
