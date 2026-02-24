@@ -198,6 +198,8 @@ struct DeviceListView: View {
                     Spacer()
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .padding()
@@ -235,7 +237,6 @@ struct DeviceListView: View {
             x: 0,
             y: 4
         )
-        .contentShape(Rectangle())
     }
 
     private func handleDeviceTap(device: SavedDevice, isAccessible: Bool) {
