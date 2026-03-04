@@ -13,6 +13,10 @@ struct GetMinerStatusIntent: AppIntent {
     @Parameter(title: "Miner")
     var miner: MinerEntity
 
+    static var parameterSummary: some ParameterSummary {
+        Summary("Get status for \(\.$miner)")
+    }
+
     init() {}
 
     init(miner: MinerEntity) {
@@ -20,7 +24,8 @@ struct GetMinerStatusIntent: AppIntent {
     }
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        let allDevices = TraxeIntentSupport.loadSavedDevices()
+        let fleetContext = await TraxeIntentSupport.loadFleetContext()
+        let allDevices = fleetContext.allDevices
         guard !allDevices.isEmpty else {
             return .result(dialog: "You do not have any miners saved in Traxe yet.")
         }
@@ -29,8 +34,7 @@ struct GetMinerStatusIntent: AppIntent {
             return .result(dialog: "I could not find that miner in Traxe.")
         }
 
-        let accessPolicy = await TraxeIntentSupport.resolveSubscriptionAccessPolicy()
-        let accessibleDevices = accessPolicy.accessibleDevices(from: allDevices)
+        let accessibleDevices = fleetContext.accessibleDevices
 
         guard accessibleDevices.contains(where: { $0.ipAddress == targetDevice.ipAddress }) else {
             return .result(

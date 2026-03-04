@@ -10,14 +10,19 @@ struct GetFleetStatusIntent: AppIntent {
 
     static var openAppWhenRun: Bool = false
 
+    static var parameterSummary: some ParameterSummary {
+        Summary("Get fleet status")
+    }
+
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        let allDevices = TraxeIntentSupport.loadSavedDevices()
+        let fleetContext = await TraxeIntentSupport.loadFleetContext()
+        let allDevices = fleetContext.allDevices
         guard !allDevices.isEmpty else {
             return .result(dialog: "You do not have any miners saved in Traxe yet.")
         }
 
-        let accessPolicy = await TraxeIntentSupport.resolveSubscriptionAccessPolicy()
-        let accessibleDevices = accessPolicy.accessibleDevices(from: allDevices)
+        let accessPolicy = fleetContext.accessPolicy
+        let accessibleDevices = fleetContext.accessibleDevices
         guard !accessibleDevices.isEmpty else {
             return .result(dialog: "I could not find any accessible miners to check.")
         }

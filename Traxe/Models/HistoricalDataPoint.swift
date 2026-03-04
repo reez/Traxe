@@ -3,6 +3,8 @@ import SwiftData
 
 @Model
 final class HistoricalDataPoint {
+    #Index<HistoricalDataPoint>([\.timestamp], [\.deviceId, \.timestamp])
+
     var timestamp: Date
     var hashrate: Double
     var temperature: Double

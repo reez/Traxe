@@ -62,7 +62,7 @@ public struct WhatsNewContent: Sendable, Equatable {
 
 public enum WhatsNewConfig {
     /// Toggle this flag when you want the TipKit surface to appear for the current build.
-    public static var isEnabledForCurrentBuild = false
+    public static var isEnabledForCurrentBuild = true  //false
 
     /// A stable identifier for a "What's New" announcement.
     ///
@@ -79,16 +79,16 @@ public enum WhatsNewConfig {
         highlights: [
             WhatsNewHighlight(
                 badgeTint: .orange,
-                iconSystemName: "circle.grid.3x3",
-                title: "256 Foundation",
+                iconSystemName: "calendar",
+                title: "Weekly Recap",
                 detail:
-                    "Added Pool icon for upcoming Telehash (learn more at [dash.256f.org](https://dash.256f.org))."
+                    "Added Weekly Recap views for fleet and individual miners, with charts & key stats."
             ),
             WhatsNewHighlight(
                 badgeTint: .green,
-                iconSystemName: "clock.arrow.circlepath",
-                title: "Previous Updates",
-                detail: "Dual pool support for NerdQAxe."
+                iconSystemName: "macbook",
+                title: "Open Source Contributors",
+                detail: "Thanks to @joeycast for your recent code contributions to Traxe!"
             ),
         ]
     )

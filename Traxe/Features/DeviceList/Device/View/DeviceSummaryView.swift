@@ -9,6 +9,7 @@ struct DeviceSummaryView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @State private var showingSettings = false
+    @State private var showingWeeklyRecap = false
     @State private var showBlockFoundToast = false
     @State private var lastBlockFoundValue: Int? = nil
     let deviceName: String
@@ -46,7 +47,7 @@ struct DeviceSummaryView: View {
                                 .foregroundStyle(.secondary)
                             if !poolSegments.isEmpty {
                                 VStack(alignment: .leading, spacing: 10) {
-                                    ForEach(poolSegments.enumerated(), id: \.offset) {
+                                    ForEach(Array(poolSegments.enumerated()), id: \.offset) {
                                         _,
                                         segment in
                                         HStack(spacing: 6) {
@@ -159,6 +160,36 @@ struct DeviceSummaryView: View {
                         .padding(.horizontal)
                     }
 
+                    Button {
+                        showingWeeklyRecap = true
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Weekly Recap")
+                                    .font(.headline)
+                                    .foregroundStyle(.primary)
+                                Text("View last 7 days with full charts")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(12)
+                        .background(
+                            Color(uiColor: .secondarySystemBackground),
+                            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(Color.primary.opacity(0.1), lineWidth: 0.5)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal)
+
                     VStack(alignment: .leading, spacing: 16) {
                         Text("Stats")
                             .font(.title2)
@@ -182,7 +213,6 @@ struct DeviceSummaryView: View {
                     showingSettings = true
                 } label: {
                     Image(systemName: "gearshape")
-                    //                        .foregroundColor(.traxeGold)
                 }
             }
         }
@@ -205,7 +235,9 @@ struct DeviceSummaryView: View {
             lastBlockFoundValue = newValue
 
             guard dashboardViewModel.connectionState == .connected else { return }
-            guard newValue == 1, previousValue != 1 else { return }
+            let previousCount = previousValue ?? 0
+            let currentCount = newValue ?? 0
+            guard currentCount > previousCount else { return }
             showBlockFoundToast = true
         }
         .simpleToast(
@@ -227,6 +259,15 @@ struct DeviceSummaryView: View {
             guard !ProcessInfo.isPreview else { return }
             await dashboardViewModel.connect()
             dashboardViewModel.loadHistoricalData()
+        }
+        .navigationDestination(isPresented: $showingWeeklyRecap) {
+            WeeklyRecapView(
+                scope: .device(
+                    deviceID: deviceIP,
+                    deviceName: deviceName,
+                    poolName: displayPoolName
+                )
+            )
         }
     }
 
