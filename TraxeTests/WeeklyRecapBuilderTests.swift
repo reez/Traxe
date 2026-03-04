@@ -9,7 +9,11 @@ final class WeeklyRecapBuilderTests: XCTestCase {
         calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .current
         let now = makeDate(year: 2026, month: 3, day: 1, hour: 12, calendar: calendar)
 
-        let recap = WeeklyRecapBuilder.build(from: [], now: now, calendar: calendar)
+        let recap = WeeklyRecapBuilder.build(
+            from: [HistoricalDataPoint](),
+            now: now,
+            calendar: calendar
+        )
 
         XCTAssertNil(recap)
     }
@@ -93,6 +97,51 @@ final class WeeklyRecapBuilderTests: XCTestCase {
         XCTAssertEqual(recap?.averageTemperature ?? 0, 62, accuracy: 0.001)
         XCTAssertEqual(recap?.minTemperature ?? 0, 61, accuracy: 0.001)
         XCTAssertEqual(recap?.maxTemperature ?? 0, 63, accuracy: 0.001)
+    }
+
+    func testPoolAllocationBuilderUsesFullHashrateForSinglePool() {
+        let allocations = WeeklyRecapPoolAllocationBuilder.build(
+            from: "mine.ocean.xyz",
+            totalHashrate: 13_400
+        )
+
+        XCTAssertEqual(allocations.count, 1)
+        XCTAssertEqual(allocations.first?.name, "Ocean")
+        XCTAssertEqual(allocations.first?.logoName, "ocean")
+        XCTAssertEqual(allocations.first?.estimatedHashrate ?? 0, 13_400, accuracy: 0.001)
+    }
+
+    func testPoolAllocationBuilderSplitsDualPoolHashrateByPercent() {
+        let allocations = WeeklyRecapPoolAllocationBuilder.build(
+            from: "mine.ocean.xyz (65%) • publicpool.io (35%)",
+            totalHashrate: 20_600
+        )
+
+        XCTAssertEqual(allocations.count, 2)
+        XCTAssertEqual(allocations[0].name, "Ocean")
+        XCTAssertEqual(allocations[0].configuredPercent ?? 0, 65, accuracy: 0.001)
+        XCTAssertEqual(allocations[0].estimatedHashrate, 13_390, accuracy: 0.001)
+        XCTAssertEqual(allocations[1].name, "Public Pool")
+        XCTAssertEqual(allocations[1].configuredPercent ?? 0, 35, accuracy: 0.001)
+        XCTAssertEqual(allocations[1].estimatedHashrate, 7_210, accuracy: 0.001)
+    }
+
+    func testPoolAllocationBuilderAggregatesFleetTotalsAcrossDevices() {
+        let allocations = WeeklyRecapPoolAllocationBuilder.buildFleetTotals(
+            from: [
+                (
+                    poolDisplayName: "mine.ocean.xyz (65%) • publicpool.io (35%)",
+                    totalHashrate: 20_600
+                ),
+                (poolDisplayName: "mine.ocean.xyz", totalHashrate: 720),
+            ]
+        )
+
+        XCTAssertEqual(allocations.count, 2)
+        XCTAssertEqual(allocations[0].name, "Ocean")
+        XCTAssertEqual(allocations[0].estimatedHashrate, 14_110, accuracy: 0.001)
+        XCTAssertEqual(allocations[1].name, "Public Pool")
+        XCTAssertEqual(allocations[1].estimatedHashrate, 7_210, accuracy: 0.001)
     }
 
     private func makeDate(

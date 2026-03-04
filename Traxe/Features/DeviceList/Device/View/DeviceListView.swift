@@ -514,7 +514,11 @@ struct DeviceListView: View {
                     devices: viewModel.savedDevices.map { device in
                         WeeklyRecapFleetDevice(
                             id: device.ipAddress,
-                            name: viewModel.deviceMetrics[device.ipAddress]?.hostname ?? device.name
+                            name: viewModel.deviceMetrics[device.ipAddress]?.hostname
+                                ?? device.name,
+                            poolName: viewModel.deviceMetrics[device.ipAddress]?.poolURL,
+                            currentHashrate: viewModel.deviceMetrics[device.ipAddress]?.hashrate
+                                ?? 0
                         )
                     }
                 )
