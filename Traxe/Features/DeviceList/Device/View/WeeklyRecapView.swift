@@ -6,12 +6,16 @@ import SwiftUI
 struct WeeklyRecapFleetDevice: Identifiable, Hashable, Sendable {
     let id: String
     let name: String
+    let poolName: String?
+    let currentHashrate: Double
 }
 
 struct WeeklyRecapView: View {
     private struct FleetDeviceRecap: Identifiable, Sendable {
         let id: String
         let name: String
+        let poolName: String?
+        let currentHashrate: Double
         let recap: WeeklyRecap?
     }
 
@@ -76,26 +80,54 @@ struct WeeklyRecapView: View {
 
             switch scope {
             case .device(_, let deviceName, let poolName):
+                let devicePoolAllocations = WeeklyRecapPoolAllocationBuilder.build(
+                    from: poolName,
+                    totalHashrate: 0
+                )
+
                 Text(deviceName)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                if let poolName, !poolName.isEmpty {
+
+                if !devicePoolAllocations.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(devicePoolAllocations) { allocation in
+                            devicePoolRow(allocation)
+                        }
+                    }
+                    .padding(.top, 2)
+                } else if let poolName, !poolName.isEmpty {
                     Text(poolName)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
             case .fleet(let devices):
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 10) {
                     let names = fleetMinerNames(from: devices)
-                    if names.isEmpty {
-                        Text("No miners")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(Array(names.enumerated()), id: \.offset) { _, name in
-                            Text(name)
+
+                    headerSectionLabel("Miners")
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        if names.isEmpty {
+                            Text("No miners")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(Array(names.enumerated()), id: \.offset) { _, name in
+                                Text(name)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+
+                    if !fleetHeaderPoolAllocations.isEmpty {
+                        headerSectionLabel("Pools")
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(fleetHeaderPoolAllocations) { allocation in
+                                poolAllocationRow(allocation)
+                            }
                         }
                     }
                 }
@@ -141,6 +173,11 @@ struct WeeklyRecapView: View {
                                     fleetDeviceHeader(
                                         name: deviceRecap.name,
                                         ipAddress: deviceRecap.id,
+                                        poolAllocations: WeeklyRecapPoolAllocationBuilder.build(
+                                            from: deviceRecap.poolName,
+                                            totalHashrate: deviceRecap.recap?.averageHashrate
+                                                ?? deviceRecap.currentHashrate
+                                        ),
                                         isExpanded: isExpanded
                                     )
                                 }
@@ -311,8 +348,13 @@ struct WeeklyRecapView: View {
         }
     }
 
-    private func fleetDeviceHeader(name: String, ipAddress: String, isExpanded: Bool) -> some View {
-        HStack(spacing: 12) {
+    private func fleetDeviceHeader(
+        name: String,
+        ipAddress: String,
+        poolAllocations: [WeeklyRecapPoolAllocation],
+        isExpanded: Bool
+    ) -> some View {
+        HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(name)
                     .font(.title3)
@@ -321,16 +363,115 @@ struct WeeklyRecapView: View {
                 Text(ipAddress)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+
+                if !poolAllocations.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(poolAllocations) { allocation in
+                            poolAllocationRow(allocation)
+                        }
+                    }
+                    .padding(.top, 2)
+                }
             }
             Spacer()
             Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
+                .padding(.top, 4)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
         .padding(.horizontal)
         .padding(.vertical, 8)
+    }
+
+    private var fleetHeaderPoolAllocations: [WeeklyRecapPoolAllocation] {
+        let sources: [(poolDisplayName: String?, totalHashrate: Double)]
+
+        if fleetRecaps.isEmpty {
+            switch scope {
+            case .fleet(let devices):
+                sources = devices.map { device in
+                    (poolDisplayName: device.poolName, totalHashrate: device.currentHashrate)
+                }
+            case .device:
+                sources = []
+            }
+        } else {
+            sources = fleetRecaps.map { recap in
+                (
+                    poolDisplayName: recap.poolName,
+                    totalHashrate: recap.recap?.averageHashrate ?? recap.currentHashrate
+                )
+            }
+        }
+
+        return WeeklyRecapPoolAllocationBuilder.buildFleetTotals(from: sources)
+    }
+
+    private func poolAllocationRow(_ allocation: WeeklyRecapPoolAllocation) -> some View {
+        HStack(spacing: 8) {
+            poolIcon(for: allocation.logoName)
+                .foregroundStyle(.secondary)
+
+            Text(allocation.name)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Spacer()
+
+            Text(formattedHashrate(allocation.estimatedHashrate))
+                .font(.caption.weight(.medium))
+                .monospacedDigit()
+                .foregroundStyle(.primary)
+        }
+    }
+
+    private func devicePoolRow(_ allocation: WeeklyRecapPoolAllocation) -> some View {
+        HStack(spacing: 8) {
+            poolIcon(for: allocation.logoName)
+                .foregroundStyle(.secondary)
+
+            Text(devicePoolLabel(for: allocation))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func headerSectionLabel(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.tertiary)
+    }
+
+    private func devicePoolLabel(for allocation: WeeklyRecapPoolAllocation) -> String {
+        guard let configuredPercent = allocation.configuredPercent else {
+            return allocation.name
+        }
+
+        return "\(allocation.name) (\(formattedPoolPercent(configuredPercent))%)"
+    }
+
+    private func formattedPoolPercent(_ percent: Double) -> String {
+        let precision: FloatingPointFormatStyle<Double>.Configuration.Precision =
+            percent == percent.rounded()
+            ? .fractionLength(0)
+            : .fractionLength(1)
+        return percent.formatted(.number.precision(precision))
+    }
+
+    @ViewBuilder
+    private func poolIcon(for logoName: String?) -> some View {
+        if let logoName {
+            Image(logoName)
+                .resizable()
+                .renderingMode(.original)
+                .scaledToFit()
+                .frame(width: 12, height: 12)
+        } else {
+            Image(systemName: "hammer.fill")
+                .font(.caption2)
+        }
     }
 
     private func hashrateRangeChartCard(points: [WeeklyRecapPoint], xAxisDates: [Date]) -> some View
@@ -740,7 +881,13 @@ struct WeeklyRecapView: View {
                             now: now,
                             calendar: calendar
                         )
-                        return FleetDeviceRecap(id: device.id, name: device.name, recap: recap)
+                        return FleetDeviceRecap(
+                            id: device.id,
+                            name: device.name,
+                            poolName: device.poolName,
+                            currentHashrate: device.currentHashrate,
+                            recap: recap
+                        )
                     }
                 }.value
                 fleetRecaps = loadedFleetRecaps
@@ -854,4 +1001,77 @@ struct WeeklyRecapView: View {
     private var deviceHistoryEmptyStateText: String {
         "Not enough device history yet. Keep the app open while mining to generate weekly recap data."
     }
+}
+
+#Preview("Weekly Recap - Fleet Pools") {
+    let container = makeWeeklyRecapPreviewContainer()
+    seedWeeklyRecapPreviewData(in: container.mainContext)
+
+    return NavigationStack {
+        WeeklyRecapView(
+            scope: .fleet(
+                devices: [
+                    WeeklyRecapFleetDevice(
+                        id: "192.168.1.101",
+                        name: "nerdqaxe++",
+                        poolName: "mine.ocean.xyz (65%) • publicpool.io (35%)",
+                        currentHashrate: 20_600
+                    ),
+                    WeeklyRecapFleetDevice(
+                        id: "192.168.1.102",
+                        name: "bitaxe",
+                        poolName: "solo.ckpool.org",
+                        currentHashrate: 720
+                    ),
+                ]
+            )
+        )
+    }
+    .modelContainer(container)
+}
+
+private func makeWeeklyRecapPreviewContainer() -> ModelContainer {
+    let config = ModelConfiguration(isStoredInMemoryOnly: true)
+
+    do {
+        return try ModelContainer(for: HistoricalDataPoint.self, configurations: config)
+    } catch {
+        fatalError("Failed to create weekly recap preview container: \(error)")
+    }
+}
+
+private func seedWeeklyRecapPreviewData(in modelContext: ModelContext) {
+    let calendar = Calendar.current
+    let today = calendar.startOfDay(for: Date())
+    let previewDevices: [(id: String, baseHashrate: Double, baseTemperature: Double)] = [
+        ("192.168.1.101", 20_600, 60),
+        ("192.168.1.102", 720, 64),
+    ]
+
+    for dayOffset in 0..<7 {
+        guard let day = calendar.date(byAdding: .day, value: dayOffset - 6, to: today) else {
+            continue
+        }
+
+        for device in previewDevices {
+            for sampleIndex in 0..<3 {
+                let hourOffset = 8 + (sampleIndex * 4)
+                let timestamp = calendar.date(byAdding: .hour, value: hourOffset, to: day) ?? day
+                let hashrateDrift = Double((dayOffset + sampleIndex) % 3 - 1)
+                let temperatureDrift = Double((dayOffset + sampleIndex) % 4 - 1)
+
+                modelContext.insert(
+                    HistoricalDataPoint(
+                        timestamp: timestamp,
+                        hashrate: device.baseHashrate
+                            + (hashrateDrift * device.baseHashrate * 0.025),
+                        temperature: device.baseTemperature + temperatureDrift,
+                        deviceId: device.id
+                    )
+                )
+            }
+        }
+    }
+
+    try? modelContext.save()
 }
