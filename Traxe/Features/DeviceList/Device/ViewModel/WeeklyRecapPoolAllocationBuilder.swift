@@ -4,6 +4,7 @@ struct WeeklyRecapPoolAllocation: Identifiable, Equatable, Sendable {
     let id: String
     let name: String
     let logoName: String?
+    let poolSlug: String?
     let configuredPercent: Double?
     let estimatedHashrate: Double
 }
@@ -12,6 +13,7 @@ enum WeeklyRecapPoolAllocationBuilder {
     private struct ParsedPoolSegment: Sendable {
         let displayName: String
         let logoName: String?
+        let poolSlug: String?
         let percent: Double?
     }
 
@@ -28,6 +30,7 @@ enum WeeklyRecapPoolAllocationBuilder {
             let allocationID = [
                 segment.displayName.lowercased(),
                 segment.logoName?.lowercased() ?? "none",
+                segment.poolSlug?.lowercased() ?? "none",
             ]
             .joined(separator: "|")
 
@@ -35,6 +38,7 @@ enum WeeklyRecapPoolAllocationBuilder {
                 id: allocationID,
                 name: segment.displayName,
                 logoName: segment.logoName,
+                poolSlug: segment.poolSlug,
                 configuredPercent: segment.percent,
                 estimatedHashrate: referenceHashrate * weights[index]
             )
@@ -56,6 +60,7 @@ enum WeeklyRecapPoolAllocationBuilder {
                         id: existing.id,
                         name: existing.name,
                         logoName: existing.logoName,
+                        poolSlug: existing.poolSlug ?? allocation.poolSlug,
                         configuredPercent: nil,
                         estimatedHashrate: existing.estimatedHashrate + allocation.estimatedHashrate
                     )
@@ -83,10 +88,11 @@ enum WeeklyRecapPoolAllocationBuilder {
             .filter { !$0.isEmpty }
             .map { segment in
                 let trimmedSegment = removingTrailingPercent(from: segment)
-                let host = normalizedHost(from: trimmedSegment)
+                let metadata = PoolHostPresenter.metadata(from: trimmedSegment)
                 return ParsedPoolSegment(
-                    displayName: displayName(for: trimmedSegment, host: host),
-                    logoName: host.flatMap(poolLogoName(for:)),
+                    displayName: metadata?.displayName ?? trimmedSegment,
+                    logoName: metadata?.logoName,
+                    poolSlug: metadata?.poolSlug,
                     percent: trailingPercent(in: segment)
                 )
             }
@@ -138,56 +144,4 @@ enum WeeklyRecapPoolAllocationBuilder {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private static func displayName(for rawName: String, host: String?) -> String {
-        guard let host else { return rawName }
-
-        if host.contains("ocean") {
-            return "Ocean"
-        }
-        if host.contains("public-pool") || host.contains("publicpool") {
-            return "Public Pool"
-        }
-        if host.contains("parasite") {
-            return "Parasite"
-        }
-        if host.contains("256foundation") {
-            return "256 Foundation"
-        }
-
-        return host.replacingOccurrences(of: "www.", with: "")
-    }
-
-    private static func poolLogoName(for host: String) -> String? {
-        if host.contains("ocean") {
-            return "ocean"
-        }
-        if host.contains("public-pool") || host.contains("publicpool") {
-            return "publicpool"
-        }
-        if host.contains("parasite") {
-            return "parasite"
-        }
-        if host.contains("256foundation") {
-            return "256-foundation"
-        }
-        return nil
-    }
-
-    private static func normalizedHost(from raw: String) -> String? {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-
-        if let url = URL(string: trimmed), let host = url.host {
-            return host.lowercased()
-        }
-
-        if let url = URL(string: "stratum://\(trimmed)"), let host = url.host {
-            return host.lowercased()
-        }
-
-        let hostPort = trimmed.split(separator: "/").first ?? ""
-        let host = hostPort.split(separator: ":").first ?? ""
-        let normalized = host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return normalized.isEmpty ? nil : normalized
-    }
 }

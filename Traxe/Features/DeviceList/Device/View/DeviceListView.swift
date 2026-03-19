@@ -69,8 +69,6 @@ struct DeviceListView: View {
     @State private var connectionErrorMessage = ""
     @State private var connectionErrorDeviceInfo = ""
     @State private var showingAddSheet = false
-    @State private var showingDeleteConfirmation = false
-    @State private var indexSetToDelete: IndexSet? = nil
     @State private var showingPaywallSheet = false
     @State private var showingSubscriptionExpiredAlert = false
     @State private var customerInfo: CustomerInfo? = nil
@@ -87,197 +85,6 @@ struct DeviceListView: View {
         )
     }
 
-    private var deviceGridView: some View {
-        LazyVStack(spacing: 40) {
-            // Add some top spacing to allow for proper scroll detection
-            Spacer().frame(height: 10)
-
-            if viewModel.savedDevices.count > 1 {
-                AggregatedStatsHeader(viewModel: viewModel)
-            }
-
-            if !viewModel.savedDevices.isEmpty {
-                weeklyRecapEntry
-                    .padding(.top, viewModel.savedDevices.count > 1 ? -46 : 0)
-            }
-
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Miners")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                    .padding(.horizontal)
-
-                LazyVGrid(
-                    columns: [
-                        GridItem(.flexible(), spacing: 12),
-                        GridItem(.flexible(), spacing: 12),
-                    ],
-                    spacing: 12
-                ) {
-                    ForEach(Array(viewModel.savedDevices.enumerated()), id: \.element.id) {
-                        index,
-                        device in
-                        deviceCardView(for: device, at: index)
-                    }
-                }
-                .padding(.horizontal)
-            }
-
-            if !viewModel.savedDevices.isEmpty {
-                NetworkInfoView(
-                    blockHeight: viewModel.networkSnapshot?.blockHeight,
-                    networkDifficulty: viewModel.networkSnapshot?.networkDifficulty,
-                    isLoading: viewModel.isLoadingAggregatedStats
-                )
-                .padding(.horizontal, 20)
-                .padding(.top, 20)
-            }
-        }
-        .padding(.bottom, 40)
-    }
-
-    private var weeklyRecapEntry: some View {
-        Button {
-            showingFleetWeeklyRecap = true
-        } label: {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Weekly Recap")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                    Text("View all miners from the last 7 days")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                //                Image(systemName: "chevron.right")
-                //                    .font(.caption)
-                //                    .foregroundStyle(.secondary)
-            }
-            .padding(12)
-            .background(
-                Color(uiColor: .secondarySystemBackground),
-                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.primary.opacity(0.1), lineWidth: 0.5)
-            )
-        }
-        .buttonStyle(.plain)
-        .padding(.horizontal)
-    }
-
-    private func deviceCardView(for device: SavedDevice, at index: Int) -> some View {
-        let isAccessible = subscriptionAccessPolicy.isDeviceAccessible(at: index)
-
-        let metrics = viewModel.deviceMetrics[device.ipAddress]
-        let hashRate = metrics?.hashrate ?? 0.0
-        let displayValue = hashRate >= 1000 ? hashRate / 1000 : hashRate
-        let displayUnit = hashRate >= 1000 ? "TH/s" : "GH/s"
-        // While refreshing, keep devices styled as reachable.
-        // After refresh completes, gray only devices that did not respond (not in reachableIPs).
-        let isReachable =
-            viewModel.isLoadingAggregatedStats
-            || viewModel.reachableIPs.contains(device.ipAddress)
-            // In previews we seed cached metrics only; treat those as reachable for styling
-            || (ProcessInfo.isPreview && metrics != nil)
-
-        return Button {
-            handleDeviceTap(device: device, isAccessible: isAccessible)
-        } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(metrics?.hostname ?? device.name)
-                            .font(.caption)
-                            .bold()
-                            .lineLimit(1)
-                            .foregroundStyle(isReachable ? .primary : .secondary)
-
-                        Text(device.ipAddress)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    // Only show lock icon if we have data AND subscription info loaded AND user doesn't have access
-                    // Don't show lock when: data loading, subscription loading, or user has access
-                    if !isAccessible && metrics != nil && subscriptionAccessPolicy.shouldShowLocks {
-                        Image(systemName: "lock.fill")
-                            .foregroundStyle(.secondary)
-                            .font(.caption)
-                    }
-                }
-
-                Spacer()
-
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(
-                            metrics != nil
-                                ? displayValue
-                                    .formatted(.number.precision(.fractionLength(1)))
-                                : "---"
-                        )
-                        .font(.title)
-                        .fontWeight(.bold)
-                        .fontDesign(.rounded)
-                        .contentTransition(.numericText())
-                        .animation(.spring, value: hashRate)
-                        .redacted(reason: metrics == nil ? .placeholder : [])
-                        .foregroundStyle(isReachable ? .primary : .secondary)
-
-                        Text(displayUnit)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .padding()
-        //        .background(Color(.secondarySystemBackground))
-        //        .background(
-        //            LinearGradient(
-        //                colors: [
-        //                    Color(.tertiarySystemBackground),
-        //                    Color(.secondarySystemBackground)
-        //                ],
-        //                startPoint: .bottom,
-        //                endPoint: .top
-        //            )
-        //        )
-        .background(Color(.secondarySystemBackground))
-        //        .background(
-        //            LinearGradient(
-        //                colors: [
-        //                    Color(.tertiarySystemBackground),
-        //                    Color(.secondarySystemBackground)
-        //                ],
-        //                startPoint: .top,
-        //                endPoint: .bottom
-        //            )
-        //        )
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                //                .stroke(Color.secondary.opacity(0.25), lineWidth: 0.5)
-                .stroke(Color.primary.opacity(0.1), lineWidth: 0.5)
-        )
-        .shadow(
-            color: Color.primary.opacity(0.08),
-            radius: 8,
-            x: 0,
-            y: 4
-        )
-    }
-
     private func handleDeviceTap(device: SavedDevice, isAccessible: Bool) {
         if isAccessible {
             selectedDevice = device
@@ -289,67 +96,6 @@ struct DeviceListView: View {
                 showingSubscriptionExpiredAlert = true
             }
         }
-    }
-
-    private func editModeRow(for device: SavedDevice, at index: Int) -> some View {
-        HStack(alignment: .center) {
-            Text("\(index + 1)")
-                .font(.system(.title2, design: .rounded))
-                .fontWeight(.semibold)
-                .foregroundStyle(index < 9 ? .primary : .secondary)
-                .frame(width: 30)
-
-            VStack(alignment: .leading) {
-                Text(viewModel.deviceMetrics[device.ipAddress]?.hostname ?? device.name)
-                    .font(.headline)
-                Text(device.ipAddress)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                if let metrics = viewModel.deviceMetrics[device.ipAddress] {
-                    let displayValue =
-                        metrics.hashrate >= 1000 ? metrics.hashrate / 1000 : metrics.hashrate
-                    let displayUnit = metrics.hashrate >= 1000 ? "TH/s" : "GH/s"
-                    Text(
-                        "\(displayValue.formatted(.number.precision(.fractionLength(1)))) \(displayUnit)"
-                    )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
-            }
-
-            Spacer()
-
-            Image(systemName: "line.3.horizontal")
-                .foregroundStyle(.secondary)
-                .font(.title2)
-        }
-        .padding(.vertical, 8)
-    }
-
-    private var editModeOverlay: some View {
-        VStack {
-            //            HStack {
-            //                Text("Drag to reorder")
-            //                    .italic()
-            //                    .padding(.leading)
-            //                Spacer()
-            //            }
-            //            .padding(.top)
-
-            List {
-                ForEach(Array(viewModel.savedDevices.enumerated()), id: \.element.id) {
-                    index,
-                    device in
-                    editModeRow(for: device, at: index)
-                }
-                .onMove(perform: viewModel.reorderDevices)
-                .onDelete(perform: viewModel.deleteDevice)
-            }
-            .scrollContentBackground(.hidden)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(UIColor.systemBackground))
-        .transition(.opacity)
     }
 
     private var whatsNewTipSection: some View {
@@ -385,9 +131,14 @@ struct DeviceListView: View {
 
             VStack(spacing: 0) {
                 ScrollView {
-                    VStack(spacing: 0) {
-                        deviceGridView
-                    }
+                    DeviceGridSectionView(
+                        viewModel: viewModel,
+                        subscriptionAccessPolicy: subscriptionAccessPolicy,
+                        showFleetWeeklyRecap: {
+                            showingFleetWeeklyRecap = true
+                        },
+                        handleSelection: handleDeviceTap(device:isAccessible:)
+                    )
                 }
                 .refreshable {
                     await viewModel.updateAggregatedStats()
@@ -399,7 +150,10 @@ struct DeviceListView: View {
             }
 
             if viewModel.isEditMode {
-                editModeOverlay
+                DeviceEditModeOverlayView(
+                    viewModel: viewModel,
+                    subscriptionAccessPolicy: subscriptionAccessPolicy
+                )
             }
         }
         .navigationTitle("Traxe")
@@ -533,19 +287,6 @@ struct DeviceListView: View {
             }
             return Text(message)
         }
-        .alert("Delete Miner", isPresented: $showingDeleteConfirmation) {
-            Button("Delete", role: .destructive) {
-                if let indexSet = indexSetToDelete {
-                    viewModel.deleteDevice(at: indexSet)
-                }
-                indexSetToDelete = nil
-            }
-            Button("Cancel", role: .cancel) {
-                indexSetToDelete = nil
-            }
-        } message: {
-            Text("Are you sure you want to delete this miner?")
-        }
         .alert("Monthly Subscription Expired", isPresented: $showingSubscriptionExpiredAlert) {
             Button("OK") {}
         } message: {
@@ -591,67 +332,6 @@ struct DeviceListView: View {
             showConnectionErrorAlert = true
             navigateToSummary = false
         }
-    }
-}
-
-private struct NetworkInfoView: View {
-    let blockHeight: Int?
-    let networkDifficulty: Double?
-    let isLoading: Bool
-
-    private var formattedBlockHeight: String? {
-        guard let blockHeight else { return nil }
-        let currentBlockHeight = max(blockHeight - 1, 0)
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        return formatter.string(from: NSNumber(value: currentBlockHeight))
-            ?? "\(currentBlockHeight)"
-    }
-
-    private var formattedNetworkDifficulty: (value: String, unit: String)? {
-        guard let networkDifficulty else { return nil }
-        return networkDifficulty.formattedWithSuffix()
-    }
-
-    private var footerText: String? {
-        switch (formattedBlockHeight, formattedNetworkDifficulty) {
-        case (nil, nil):
-            return nil
-        case let (blockHeight?, nil):
-            return "Block \(blockHeight)"
-        case let (nil, difficulty?):
-            return "Difficulty \(difficulty.value) \(difficulty.unit)"
-        case let (blockHeight?, difficulty?):
-            return "Block \(blockHeight) • Difficulty \(difficulty.value) \(difficulty.unit)"
-        }
-    }
-
-    private var placeholderText: String {
-        "Block 000,000 • Difficulty 000"
-    }
-
-    var body: some View {
-        ZStack(alignment: .leading) {
-            if isLoading, footerText == nil {
-                Text(placeholderText)
-                    .redacted(reason: .placeholder)
-                    .transition(.opacity)
-            }
-
-            if let footerText {
-                Text(footerText)
-                    .contentTransition(.numericText())
-                    .transition(
-                        .opacity.combined(
-                            with: .scale(scale: 0.98, anchor: .leading)
-                        )
-                    )
-            }
-        }
-        .animation(.snappy(duration: 0.35, extraBounce: 0), value: footerText != nil)
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

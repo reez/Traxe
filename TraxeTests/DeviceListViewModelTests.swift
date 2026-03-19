@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 import XCTest
 
 @testable import Traxe
@@ -73,6 +74,52 @@ final class DeviceListViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.deviceMetrics["192.168.1.21"])
     }
 
+    func testUpdateAggregatedStatsPersistsHistoricalSamplesWhenModelContextConfigured() async throws
+    {
+        let responses: [String: DiscoveredDevice] = [
+            "192.168.1.30": makeDiscoveredDevice(
+                ip: "192.168.1.30",
+                name: "Miner A",
+                hashrate: 1000,
+                power: 20,
+                bestDiff: "5 M"
+            ),
+            "192.168.1.31": makeDiscoveredDevice(
+                ip: "192.168.1.31",
+                name: "Miner B",
+                hashrate: 800,
+                power: 16,
+                bestDiff: "7 M"
+            ),
+        ]
+
+        var dependencies = makeDependencies(responses: responses)
+        dependencies.autoRefreshOnLoad = false
+
+        let defaults = makeIsolatedDefaults(suiteName: "DeviceListViewModelTests.history")
+        let viewModel = DeviceListViewModel(defaults: defaults, dependencies: dependencies)
+        let modelContainer = try makeInMemoryModelContainer()
+
+        XCTAssertTrue(viewModel.configureModelContextIfNeeded(modelContainer.mainContext))
+
+        viewModel.savedDevices = [
+            SavedDevice(name: "Miner A", ipAddress: "192.168.1.30"),
+            SavedDevice(name: "Miner B", ipAddress: "192.168.1.31"),
+        ]
+        viewModel.deviceMetrics = [:]
+
+        await viewModel.updateAggregatedStats()
+
+        let descriptor = FetchDescriptor<HistoricalDataPoint>(
+            sortBy: [SortDescriptor(\.deviceId), SortDescriptor(\.timestamp)]
+        )
+        let rows = try modelContainer.mainContext.fetch(descriptor)
+
+        XCTAssertEqual(rows.count, 2)
+        XCTAssertEqual(rows.compactMap(\.deviceId), ["192.168.1.30", "192.168.1.31"])
+        XCTAssertEqual(rows.map(\.hashrate), [1000, 800])
+    }
+
     private func makeDependencies(responses: [String: DiscoveredDevice])
         -> DeviceListViewModel.Dependencies
     {
@@ -99,6 +146,12 @@ final class DeviceListViewModelTests: XCTestCase {
         }
         defaults.removePersistentDomain(forName: uniqueSuiteName)
         return defaults
+    }
+
+    private func makeInMemoryModelContainer() throws -> ModelContainer {
+        let schema = Schema([HistoricalDataPoint.self])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        return try ModelContainer(for: schema, configurations: [configuration])
     }
 
     private func makeDiscoveredDevice(

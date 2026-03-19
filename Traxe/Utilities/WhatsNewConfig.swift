@@ -2,7 +2,7 @@
 //  WhatsNewConfig.swift
 //  Traxe
 //
-//  Created by Codex on 11/17/24.
+//  Created by Matthew Ramsden on 11/17/24.
 //
 
 import Foundation
