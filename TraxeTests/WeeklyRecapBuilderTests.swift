@@ -1,9 +1,128 @@
 import Foundation
+import SwiftData
 import XCTest
 
 @testable import Traxe
 
 final class WeeklyRecapBuilderTests: XCTestCase {
+    @MainActor
+    func testHistoryQueryForDeviceExcludesOtherDevicesAndOutOfRangeRows() throws {
+        let modelContainer = try makeInMemoryModelContainer()
+        let modelContext = modelContainer.mainContext
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let startDate = makeDate(year: 2026, month: 2, day: 24, hour: 0, calendar: calendar)
+        let endDateExclusive = makeDate(year: 2026, month: 3, day: 3, hour: 0, calendar: calendar)
+
+        modelContext.insert(
+            HistoricalDataPoint(
+                timestamp: makeDate(year: 2026, month: 2, day: 24, hour: 10, calendar: calendar),
+                hashrate: 100,
+                temperature: 60,
+                deviceId: "miner-a"
+            )
+        )
+        modelContext.insert(
+            HistoricalDataPoint(
+                timestamp: makeDate(year: 2026, month: 2, day: 26, hour: 10, calendar: calendar),
+                hashrate: 125,
+                temperature: 61,
+                deviceId: "miner-a"
+            )
+        )
+        modelContext.insert(
+            HistoricalDataPoint(
+                timestamp: makeDate(year: 2026, month: 2, day: 25, hour: 10, calendar: calendar),
+                hashrate: 900,
+                temperature: 80,
+                deviceId: "miner-b"
+            )
+        )
+        modelContext.insert(
+            HistoricalDataPoint(
+                timestamp: makeDate(year: 2026, month: 2, day: 20, hour: 10, calendar: calendar),
+                hashrate: 777,
+                temperature: 70,
+                deviceId: "miner-a"
+            )
+        )
+        try modelContext.save()
+
+        let records = try WeeklyRecapHistoryQuery.fetchSampleRecords(
+            in: modelContext,
+            for: "miner-a",
+            startDate: startDate,
+            endDateExclusive: endDateExclusive
+        )
+
+        XCTAssertEqual(records.count, 2)
+        XCTAssertEqual(records.map(\.deviceID), ["miner-a", "miner-a"])
+        XCTAssertEqual(records.map(\.hashrate), [100, 125])
+    }
+
+    @MainActor
+    func testHistoryQueryForFleetExcludesUnselectedDevicesAndPreservesChronologicalOrder() throws {
+        let modelContainer = try makeInMemoryModelContainer()
+        let modelContext = modelContainer.mainContext
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let startDate = makeDate(year: 2026, month: 2, day: 24, hour: 0, calendar: calendar)
+        let endDateExclusive = makeDate(year: 2026, month: 3, day: 3, hour: 0, calendar: calendar)
+
+        let timestamps = [
+            makeDate(year: 2026, month: 2, day: 24, hour: 8, calendar: calendar),
+            makeDate(year: 2026, month: 2, day: 24, hour: 9, calendar: calendar),
+            makeDate(year: 2026, month: 2, day: 24, hour: 10, calendar: calendar),
+        ]
+
+        modelContext.insert(
+            HistoricalDataPoint(
+                timestamp: timestamps[1],
+                hashrate: 200,
+                temperature: 61,
+                deviceId: "miner-a"
+            )
+        )
+        modelContext.insert(
+            HistoricalDataPoint(
+                timestamp: timestamps[2],
+                hashrate: 300,
+                temperature: 62,
+                deviceId: "miner-b"
+            )
+        )
+        modelContext.insert(
+            HistoricalDataPoint(
+                timestamp: timestamps[0],
+                hashrate: 150,
+                temperature: 60,
+                deviceId: "miner-a"
+            )
+        )
+        modelContext.insert(
+            HistoricalDataPoint(
+                timestamp: makeDate(year: 2026, month: 2, day: 24, hour: 11, calendar: calendar),
+                hashrate: 999,
+                temperature: 75,
+                deviceId: "miner-c"
+            )
+        )
+        try modelContext.save()
+
+        let records = try WeeklyRecapHistoryQuery.fetchSampleRecords(
+            in: modelContext,
+            for: ["miner-b", "miner-a", "miner-b"],
+            startDate: startDate,
+            endDateExclusive: endDateExclusive
+        )
+
+        XCTAssertEqual(records.count, 3)
+        XCTAssertEqual(records.map(\.deviceID), ["miner-a", "miner-a", "miner-b"])
+        XCTAssertEqual(records.map(\.timestamp), timestamps)
+    }
+
     func testBuildReturnsNilWhenNoSamplesInRange() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .current
@@ -108,6 +227,7 @@ final class WeeklyRecapBuilderTests: XCTestCase {
         XCTAssertEqual(allocations.count, 1)
         XCTAssertEqual(allocations.first?.name, "Ocean")
         XCTAssertEqual(allocations.first?.logoName, "ocean")
+        XCTAssertEqual(allocations.first?.poolSlug, "ocean")
         XCTAssertEqual(allocations.first?.estimatedHashrate ?? 0, 13_400, accuracy: 0.001)
     }
 
@@ -120,9 +240,11 @@ final class WeeklyRecapBuilderTests: XCTestCase {
         XCTAssertEqual(allocations.count, 2)
         XCTAssertEqual(allocations[0].name, "Ocean")
         XCTAssertEqual(allocations[0].configuredPercent ?? 0, 65, accuracy: 0.001)
+        XCTAssertEqual(allocations[0].poolSlug, "ocean")
         XCTAssertEqual(allocations[0].estimatedHashrate, 13_390, accuracy: 0.001)
         XCTAssertEqual(allocations[1].name, "Public Pool")
         XCTAssertEqual(allocations[1].configuredPercent ?? 0, 35, accuracy: 0.001)
+        XCTAssertEqual(allocations[1].poolSlug, "publicpool")
         XCTAssertEqual(allocations[1].estimatedHashrate, 7_210, accuracy: 0.001)
     }
 
@@ -139,9 +261,23 @@ final class WeeklyRecapBuilderTests: XCTestCase {
 
         XCTAssertEqual(allocations.count, 2)
         XCTAssertEqual(allocations[0].name, "Ocean")
+        XCTAssertEqual(allocations[0].poolSlug, "ocean")
         XCTAssertEqual(allocations[0].estimatedHashrate, 14_110, accuracy: 0.001)
         XCTAssertEqual(allocations[1].name, "Public Pool")
+        XCTAssertEqual(allocations[1].poolSlug, "publicpool")
         XCTAssertEqual(allocations[1].estimatedHashrate, 7_210, accuracy: 0.001)
+    }
+
+    func testPoolAllocationBuilderResolvesSupportedPoolSlugsAndLeavesUnknownsNil() {
+        let allocations = WeeklyRecapPoolAllocationBuilder.build(
+            from: "solo.ckpool.org • stratum.unknownpool.example",
+            totalHashrate: 2_000
+        )
+
+        XCTAssertEqual(allocations.count, 2)
+        XCTAssertEqual(allocations[0].name, "Solo CK")
+        XCTAssertEqual(allocations[0].poolSlug, "solock")
+        XCTAssertEqual(allocations[1].poolSlug, nil)
     }
 
     private func makeDate(
@@ -161,5 +297,11 @@ final class WeeklyRecapBuilderTests: XCTestCase {
         components.minute = 0
         components.second = 0
         return components.date ?? Date()
+    }
+
+    private func makeInMemoryModelContainer() throws -> ModelContainer {
+        let schema = Schema([HistoricalDataPoint.self])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        return try ModelContainer(for: schema, configurations: [configuration])
     }
 }

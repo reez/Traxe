@@ -1,0 +1,170 @@
+// Generated from /Users/matthewramsden/Developer/release-tools.
+// Do not edit repo-local copies directly; rerender them with sync-workflow.
+{
+  "env": {
+    "ASC_ACCOUNT": "personal",
+    "ASC_PROFILE_PRIMARY": "Traxe Personal",
+    "ASC_PROFILE_FALLBACK": "",
+    "APP_ID": "6744660207",
+    "BUNDLE_ID": "com.matthewramsden.Traxe",
+    "PROJECT_PATH": "Traxe.xcodeproj",
+    "SCHEME": "Traxe",
+    "CONFIGURATION": "Release",
+    "ARTIFACTS_DIR": ".asc/artifacts",
+    "RUN_RETENTION_DAYS": "14",
+    "ARTIFACT_RETENTION_DAYS": "7",
+    "ASC_RETRY_ATTEMPTS": "8",
+    "ASC_RETRY_DELAY_SECONDS": "5",
+    "ASC_RETRY_JITTER_SECONDS": "2",
+    "ASC_UPLOAD_TIMEOUT": "600s",
+    "ASC_UPLOAD_RETRY_ATTEMPTS": "3",
+    "ASC_UPLOAD_RETRY_DELAY_SECONDS": "15",
+    "ASC_UPLOAD_RETRY_JITTER_SECONDS": "10",
+    "ASC_BUILD_DISCOVERY_ATTEMPTS": "6",
+    "ASC_BUILD_DISCOVERY_DELAY_SECONDS": "10",
+    "LOCALE": "en-US",
+    "INITIAL_BUILD_NUMBER": "1",
+    "BUILD_NUMBER": "",
+    "WAIT_FOR_PROCESSING": "1",
+    "TESTFLIGHT_GROUP": "",
+    "TESTFLIGHT_GROUP_INTERNAL": "1",
+    "TESTFLIGHT_TESTER_EMAILS": "",
+    "TESTFLIGHT_TEST_NOTES": "",
+    "NOTIFY_TESTERS": "0"
+  },
+  "workflows": {
+    "testflight": {
+      "description": "Archive, export, upload, and optionally distribute Traxe to a TestFlight group.",
+      "steps": [
+        {
+          "name": "validate_inputs",
+          "run": "set -euo pipefail; for cmd in asc git jq xcodebuild plutil security; do if ! command -v \"$cmd\" >/dev/null 2>&1; then echo \"Missing required command: $cmd\" >&2; exit 1; fi; done; if [ ! -d \"$PROJECT_PATH\" ]; then echo \"PROJECT_PATH does not exist: $PROJECT_PATH\" >&2; exit 1; fi; if [ ! -x \".asc/bin/export-ipa-with-fallback.sh\" ]; then echo \"Missing export helper: .asc/bin/export-ipa-with-fallback.sh\" >&2; exit 1; fi; if [ ! -x \".asc/bin/asc-json-with-retry.sh\" ]; then echo \"Missing ASC retry helper: .asc/bin/asc-json-with-retry.sh\" >&2; exit 1; fi; if [ ! -x \".asc/bin/asc-upload-with-retry.sh\" ]; then echo \"Missing ASC upload helper: .asc/bin/asc-upload-with-retry.sh\" >&2; exit 1; fi"
+        },
+        {
+          "name": "resolve_auth_profile",
+          "run": "set -euo pipefail; PROFILE=\"$ASC_PROFILE_PRIMARY\"; if [ -z \"$PROFILE\" ]; then PROFILE=\"$ASC_PROFILE_FALLBACK\"; fi; if [ -z \"$PROFILE\" ] && [ \"$ASC_ACCOUNT\" = \"business\" ]; then PROFILE=\"Business\"; fi; jq -n --arg asc_profile \"$PROFILE\" '{asc_profile:$asc_profile}'",
+          "outputs": {
+            "ASC_PROFILE": "$.asc_profile"
+          }
+        },
+        {
+          "name": "fetch_git_remote",
+          "run": "set -euo pipefail; git fetch --all --prune >/dev/null 2>&1 || true; CURRENT_BRANCH=\"$(git rev-parse --abbrev-ref HEAD)\"; UPSTREAM=\"$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || true)\"; if [ -z \"$UPSTREAM\" ]; then ORIGIN_HEAD=\"$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null || true)\"; if [ -n \"$ORIGIN_HEAD\" ]; then UPSTREAM=\"${ORIGIN_HEAD#refs/remotes/}\"; fi; fi; jq -n --arg current_branch \"$CURRENT_BRANCH\" --arg upstream \"$UPSTREAM\" '{current_branch:$current_branch, upstream:$upstream}'",
+          "outputs": {
+            "UPSTREAM": "$.upstream"
+          }
+        },
+        {
+          "name": "guard_git_state",
+          "run": "set -euo pipefail; UPSTREAM=\"${steps.fetch_git_remote.UPSTREAM}\"; if [ -z \"$UPSTREAM\" ]; then echo \"Could not resolve a git upstream or origin default branch for the TestFlight workflow.\" >&2; exit 1; fi; DIRTY_STATUS=\"$(git status --porcelain || true)\"; FILTERED_DIRTY=\"$(printf '%s\\n' \"$DIRTY_STATUS\" | grep -vE '^.. \\.asc/(workflow\\.json|runs/|artifacts/)' || true)\"; DIRTY=0; if [ -n \"$FILTERED_DIRTY\" ]; then DIRTY=1; fi; COUNTS=\"$(git rev-list --left-right --count \"HEAD...$UPSTREAM\")\"; AHEAD=\"$(printf '%s' \"$COUNTS\" | awk '{print $1}')\"; BEHIND=\"$(printf '%s' \"$COUNTS\" | awk '{print $2}')\"; LOCAL_HEAD=\"$(git log --oneline -n 1 HEAD)\"; UPSTREAM_HEAD=\"$(git log --oneline -n 1 \"$UPSTREAM\")\"; if [ \"$DIRTY\" = \"1\" ]; then echo \"Git worktree has non-workflow changes. Commit or stash changes before running the TestFlight workflow.\" >&2; exit 1; fi; if [ \"$BEHIND\" -gt 0 ]; then echo \"Current branch is behind $UPSTREAM by $BEHIND commit(s). Pull or rebase before running the TestFlight workflow.\" >&2; exit 1; fi; jq -n --arg upstream \"$UPSTREAM\" --arg local_head \"$LOCAL_HEAD\" --arg upstream_head \"$UPSTREAM_HEAD\" --arg ahead \"$AHEAD\" --arg behind \"$BEHIND\" --arg dirty \"$DIRTY\" '{upstream:$upstream, local_head:$local_head, upstream_head:$upstream_head, ahead:$ahead, behind:$behind, dirty:$dirty}'"
+        },
+        {
+          "name": "resolve_version",
+          "run": "set -euo pipefail; VERSION=\"$(xcodebuild -showBuildSettings -project \"$PROJECT_PATH\" -scheme \"$SCHEME\" 2>/dev/null | awk -F'= ' '/MARKETING_VERSION/ {print $2; exit}' || true)\"; if [ -z \"$VERSION\" ] && [ -f \"$PROJECT_PATH/project.pbxproj\" ]; then VERSION=\"$(awk -F'= ' -v bundle=\"$BUNDLE_ID\" 'function clean(v) { gsub(/[;\"[:space:]]/, \"\", v); return v } /MARKETING_VERSION/ { version = clean($2) } /PRODUCT_BUNDLE_IDENTIFIER/ { product = clean($2) } /^[[:space:]]*};/ { if (product == bundle && version != \"\") { print version; exit } version = \"\"; product = \"\" }' \"$PROJECT_PATH/project.pbxproj\")\"; fi; if [ -z \"$VERSION\" ]; then echo \"Could not resolve MARKETING_VERSION from Xcode build settings or project.pbxproj.\" >&2; exit 1; fi; jq -n --arg version \"$VERSION\" '{version:$version}'",
+          "outputs": {
+            "VERSION": "$.version"
+          }
+        },
+        {
+          "name": "detect_today_commits",
+          "run": "set -euo pipefail; TODAY_COMMIT_COUNT=\"$(git rev-list --count --since='today 00:00' HEAD)\"; SHOULD_SKIP=0; SKIP_REASON=\"\"; if [ \"$TODAY_COMMIT_COUNT\" -eq 0 ]; then SHOULD_SKIP=1; SKIP_REASON=\"No commits today, skipping TestFlight build.\"; fi; jq -n --arg today_commit_count \"$TODAY_COMMIT_COUNT\" --arg should_skip \"$SHOULD_SKIP\" --arg skip_reason \"$SKIP_REASON\" '{today_commit_count:$today_commit_count, should_skip:$should_skip, skip_reason:$skip_reason}'",
+          "outputs": {
+            "SHOULD_SKIP": "$.should_skip",
+            "SKIP_REASON": "$.skip_reason"
+          }
+        },
+        {
+          "name": "cleanup_stale_outputs",
+          "run": "set -euo pipefail; cleanup_dir() { DIR=\"$1\"; RETENTION_DAYS=\"$2\"; [ -d \"$DIR\" ] || return 0; case \"$RETENTION_DAYS\" in ''|*[!0-9]*) return 0 ;; esac; find \"$DIR\" -mindepth 1 -maxdepth 1 -mtime \"+$RETENTION_DAYS\" -exec rm -rf {} +; }; cleanup_dir \".asc/runs\" \"$RUN_RETENTION_DAYS\"; cleanup_dir \"$ARTIFACTS_DIR\" \"$ARTIFACT_RETENTION_DAYS\""
+        },
+        {
+          "name": "resolve_app",
+          "run": "set -euo pipefail; PROFILE=${steps.resolve_auth_profile.ASC_PROFILE}; ASC_CMD=(asc); if [ -n \"$PROFILE\" ]; then ASC_CMD+=(--profile \"$PROFILE\"); fi; if [ \"${steps.detect_today_commits.SHOULD_SKIP}\" = \"1\" ]; then jq -n '{app_id:\"\"}'; exit 0; fi; RESOLVED_APP_ID=\"$APP_ID\"; if [ -z \"$RESOLVED_APP_ID\" ]; then if ! APP_JSON=\"$(./.asc/bin/asc-json-with-retry.sh \"${ASC_CMD[@]}\" apps list --bundle-id \"$BUNDLE_ID\" --output json)\"; then echo \"Could not query App Store Connect app list for bundle ID: $BUNDLE_ID\" >&2; exit 1; fi; RESOLVED_APP_ID=\"$(printf '%s' \"$APP_JSON\" | jq -r --arg bundle \"$BUNDLE_ID\" '[.. | objects | select((.bundleId? // .bundle_id? // .attributes.bundleId? // .attributes.bundle_id? // \"\") == $bundle) | (.id? // .app_id? // empty)] | map(select(type == \"string\" and length > 0)) | .[0] // empty')\"; fi; if [ -z \"$RESOLVED_APP_ID\" ]; then echo \"Could not resolve App Store Connect app ID for bundle ID: $BUNDLE_ID\" >&2; exit 1; fi; jq -n --arg app_id \"$RESOLVED_APP_ID\" '{app_id:$app_id}'",
+          "outputs": {
+            "APP_ID": "$.app_id"
+          }
+        },
+        {
+          "name": "guard_version_not_ready_for_sale",
+          "run": "set -euo pipefail; PROFILE=${steps.resolve_auth_profile.ASC_PROFILE}; ASC_CMD=(asc); if [ -n \"$PROFILE\" ]; then ASC_CMD+=(--profile \"$PROFILE\"); fi; SHOULD_SKIP=${steps.detect_today_commits.SHOULD_SKIP}; RESOLVED_APP_ID=${steps.resolve_app.APP_ID}; VERSION=${steps.resolve_version.VERSION}; if [ \"$SHOULD_SKIP\" = \"1\" ]; then exit 0; fi; if ! VERSION_JSON=\"$(./.asc/bin/asc-json-with-retry.sh \"${ASC_CMD[@]}\" versions list --app $RESOLVED_APP_ID --platform IOS --paginate --output json)\"; then echo \"Could not query App Store version state for app ID: $RESOLVED_APP_ID\" >&2; exit 1; fi; READY_FOR_SALE_COUNT=\"$(printf '%s' \"$VERSION_JSON\" | jq -r --arg version \"$VERSION\" '[.. | objects | select((.versionString? // .attributes.versionString? // \"\") == $version) | (.appStoreState? // .attributes.appStoreState? // .state? // empty) | select(type == \"string\" and . == \"READY_FOR_SALE\")] | length')\"; case \"$READY_FOR_SALE_COUNT\" in ''|*[!0-9]*) echo \"Could not parse App Store version state for version $VERSION.\" >&2; exit 1 ;; esac; if [ \"$READY_FOR_SALE_COUNT\" -gt 0 ]; then echo \"MARKETING_VERSION $VERSION is already READY_FOR_SALE in App Store Connect. Bump the app version before sending another TestFlight build.\" >&2; exit 1; fi"
+        },
+        {
+          "name": "resolve_team",
+          "run": "set -euo pipefail; if [ \"${steps.detect_today_commits.SHOULD_SKIP}\" = \"1\" ]; then jq -n '{team_id:\"\"}'; exit 0; fi; TEAM_ID=\"$(xcodebuild -showBuildSettings -project \"$PROJECT_PATH\" -scheme \"$SCHEME\" 2>/dev/null | awk -F'= ' '/DEVELOPMENT_TEAM/ {print $2; exit}' || true)\"; if [ -z \"$TEAM_ID\" ] && [ -f \"$PROJECT_PATH/project.pbxproj\" ]; then TEAM_ID=\"$(awk -F'= ' -v bundle=\"$BUNDLE_ID\" 'function clean(v) { gsub(/[;\"[:space:]]/, \"\", v); return v } /DEVELOPMENT_TEAM/ { team = clean($2); if (fallback == \"\" && team != \"\") fallback = team } /PRODUCT_BUNDLE_IDENTIFIER/ { product = clean($2) } /^[[:space:]]*};/ { if (product == bundle && team != \"\") { print team; found = 1; exit } team = \"\"; product = \"\" } END { if (!found && fallback != \"\") print fallback }' \"$PROJECT_PATH/project.pbxproj\")\"; fi; if [ -z \"$TEAM_ID\" ]; then echo \"Could not resolve DEVELOPMENT_TEAM from Xcode build settings or project.pbxproj.\" >&2; exit 1; fi; jq -n --arg team_id \"$TEAM_ID\" '{team_id:$team_id}'",
+          "outputs": {
+            "TEAM_ID": "$.team_id"
+          }
+        },
+        {
+          "name": "resolve_build_number",
+          "run": "set -euo pipefail; PROFILE=${steps.resolve_auth_profile.ASC_PROFILE}; ASC_CMD=(asc); if [ -n \"$PROFILE\" ]; then ASC_CMD+=(--profile \"$PROFILE\"); fi; SHOULD_SKIP=${steps.detect_today_commits.SHOULD_SKIP}; RESOLVED_APP_ID=${steps.resolve_app.APP_ID}; VERSION=${steps.resolve_version.VERSION}; if [ \"$SHOULD_SKIP\" = \"1\" ]; then jq -n '{build_number:\"\"}'; exit 0; fi; if [ -n \"$BUILD_NUMBER\" ]; then NEXT_BUILD=\"$BUILD_NUMBER\"; else if ! BUILD_JSON=\"$(./.asc/bin/asc-json-with-retry.sh \"${ASC_CMD[@]}\" builds latest --app $RESOLVED_APP_ID --version $VERSION --platform IOS --next --initial-build-number \"$INITIAL_BUILD_NUMBER\" --output json)\"; then echo \"Could not query latest build number for app ID: $RESOLVED_APP_ID version: $VERSION\" >&2; exit 1; fi; NEXT_BUILD=\"$(printf '%s' \"$BUILD_JSON\" | jq -r '[.. | objects | .nextBuildNumber?] | map(select((type == \"string\" or type == \"number\") and tostring != \"\")) | .[0] // empty')\"; fi; if [ -z \"$NEXT_BUILD\" ]; then echo \"Could not determine build number.\" >&2; exit 1; fi; jq -n --arg build_number \"$NEXT_BUILD\" '{build_number:$build_number}'",
+          "outputs": {
+            "BUILD_NUMBER": "$.build_number"
+          }
+        },
+        {
+          "name": "prepare_artifacts",
+          "run": "set -euo pipefail; SHOULD_SKIP=${steps.detect_today_commits.SHOULD_SKIP}; VERSION=${steps.resolve_version.VERSION}; BUILD_NUMBER=${steps.resolve_build_number.BUILD_NUMBER}; if [ \"$SHOULD_SKIP\" = \"1\" ]; then jq -n '{archive_path:\"\", ipa_path:\"\", export_options_path:\"\"}'; exit 0; fi; mkdir -p \"$ARTIFACTS_DIR\"; ARCHIVE_PATH=\"$ARTIFACTS_DIR/$SCHEME-$VERSION-$BUILD_NUMBER.xcarchive\"; IPA_PATH=\"$ARTIFACTS_DIR/$SCHEME-$VERSION-$BUILD_NUMBER.ipa\"; EXPORT_OPTIONS_PATH=\"$ARTIFACTS_DIR/ExportOptions-$VERSION-$BUILD_NUMBER.plist\"; jq -n --arg archive_path \"$ARCHIVE_PATH\" --arg ipa_path \"$IPA_PATH\" --arg export_options_path \"$EXPORT_OPTIONS_PATH\" '{archive_path:$archive_path, ipa_path:$ipa_path, export_options_path:$export_options_path}'",
+          "outputs": {
+            "ARCHIVE_PATH": "$.archive_path",
+            "IPA_PATH": "$.ipa_path",
+            "EXPORT_OPTIONS_PATH": "$.export_options_path"
+          }
+        },
+        {
+          "name": "resolve_test_notes",
+          "run": "set -euo pipefail; SHOULD_SKIP=${steps.detect_today_commits.SHOULD_SKIP}; VERSION=${steps.resolve_version.VERSION}; BUILD_NUMBER=${steps.resolve_build_number.BUILD_NUMBER}; NOTES_PATH=\"$ARTIFACTS_DIR/TestNotes-$VERSION-$BUILD_NUMBER.txt\"; if [ \"$SHOULD_SKIP\" = \"1\" ]; then jq -n --arg test_notes_path \"\" '{test_notes_path:$test_notes_path}'; exit 0; fi; mkdir -p \"$ARTIFACTS_DIR\"; if [ -n \"$TESTFLIGHT_TEST_NOTES\" ]; then printf '%s\\n' \"$TESTFLIGHT_TEST_NOTES\" > \"$NOTES_PATH\"; jq -n --arg test_notes_path \"$NOTES_PATH\" '{test_notes_path:$test_notes_path}'; exit 0; fi; COMMITS=\"$(git log --reverse --pretty=format:'%h%x09%s' --since='today 00:00' HEAD)\"; if [ -z \"$COMMITS\" ]; then jq -n --arg test_notes_path \"\" '{test_notes_path:$test_notes_path}'; exit 0; fi; TAB=\"$(printf '\\t')\"; DISPLAY_COMMITS=\"$({ printf '%s\\n' \"$COMMITS\" | while IFS=\"$TAB\" read -r commit_hash subject; do if printf '%s\\n' \"$subject\" | grep -Eqi '^[a-z]+\\((release|workflow|ci|automation|testflight|signing|project|build)\\):|asc workflow|testflight'; then continue; fi; printf '%s\\t%s\\n' \"$commit_hash\" \"$subject\"; done; })\"; if [ -z \"$DISPLAY_COMMITS\" ]; then DISPLAY_COMMITS=\"$COMMITS\"; SUMMARY=\"Internal infrastructure and release workflow updates.\"; else FIRST_DESC=\"$(printf '%s\\n' \"$DISPLAY_COMMITS\" | head -n 1 | cut -f2- | sed -E 's/^[a-z]+(\\([^)]+\\))?: //')\"; FIRST_DESC=\"$(printf '%s' \"$FIRST_DESC\" | awk 'NF { print toupper(substr($0, 1, 1)) substr($0, 2) }')\"; EXTRA_COUNT=$(( $(printf '%s\\n' \"$DISPLAY_COMMITS\" | wc -l | tr -d ' ') - 1 )); if [ \"$EXTRA_COUNT\" -gt 0 ]; then SUMMARY=\"$FIRST_DESC and $EXTRA_COUNT other change(s).\"; else SUMMARY=\"$FIRST_DESC.\"; fi; fi; FOCUS_LINES=\"$(printf '%s\\n' \"$DISPLAY_COMMITS\" | head -n 3 | cut -f2- | sed -E 's/^[a-z]+(\\([^)]+\\))?: //' | awk 'NF { print \"- \" toupper(substr($0, 1, 1)) substr($0, 2) }')\"; REFERENCE_LINES=\"$({ printf '%s\\n' \"$COMMITS\" | tail -n 6 | while IFS=\"$TAB\" read -r commit_hash subject; do [ -n \"$commit_hash\" ] || continue; printf '%s\\n' \"- $commit_hash $subject\"; done; })\"; TEST_NOTES=\"Summary: $SUMMARY\"; if [ -n \"$FOCUS_LINES\" ]; then TEST_NOTES=\"$(printf '%s\\n\\nFocus:\\n%s' \"$TEST_NOTES\" \"$FOCUS_LINES\")\"; fi; if [ -n \"$REFERENCE_LINES\" ]; then TEST_NOTES=\"$(printf '%s\\n\\nReference:\\n%s' \"$TEST_NOTES\" \"$REFERENCE_LINES\")\"; fi; printf '%s\\n' \"$TEST_NOTES\" > \"$NOTES_PATH\"; jq -n --arg test_notes_path \"$NOTES_PATH\" '{test_notes_path:$test_notes_path}'",
+          "outputs": {
+            "TEST_NOTES_PATH": "$.test_notes_path"
+          }
+        },
+        {
+          "name": "write_export_options",
+          "run": "set -euo pipefail; SHOULD_SKIP=${steps.detect_today_commits.SHOULD_SKIP}; EXPORT_OPTIONS_PATH=${steps.prepare_artifacts.EXPORT_OPTIONS_PATH}; TEAM_ID=${steps.resolve_team.TEAM_ID}; if [ \"$SHOULD_SKIP\" = \"1\" ]; then jq -n '{export_options_path:\"\"}'; exit 0; fi; cat > \"$EXPORT_OPTIONS_PATH\" <<EOF\n<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict>\n  <key>destination</key>\n  <string>export</string>\n  <key>manageAppVersionAndBuildNumber</key>\n  <false/>\n  <key>method</key>\n  <string>app-store-connect</string>\n  <key>signingStyle</key>\n  <string>automatic</string>\n  <key>stripSwiftSymbols</key>\n  <true/>\n  <key>teamID</key>\n  <string>$TEAM_ID</string>\n  <key>uploadBitcode</key>\n  <false/>\n</dict>\n</plist>\nEOF\njq -n --arg export_options_path \"$EXPORT_OPTIONS_PATH\" '{export_options_path:$export_options_path}'",
+          "outputs": {
+            "EXPORT_OPTIONS_PATH": "$.export_options_path"
+          }
+        },
+        {
+          "name": "archive_app",
+          "run": "set -euo pipefail; PROFILE=${steps.resolve_auth_profile.ASC_PROFILE}; ASC_CMD=(asc); if [ -n \"$PROFILE\" ]; then ASC_CMD+=(--profile \"$PROFILE\"); fi; SHOULD_SKIP=${steps.detect_today_commits.SHOULD_SKIP}; ARCHIVE_PATH=${steps.prepare_artifacts.ARCHIVE_PATH}; VERSION=${steps.resolve_version.VERSION}; BUILD_NUMBER=${steps.resolve_build_number.BUILD_NUMBER}; if [ \"$SHOULD_SKIP\" = \"1\" ]; then jq -n --arg archive_path \"\" --arg version \"$VERSION\" --arg build_number \"\" '{archive_path:$archive_path, version:$version, build_number:$build_number}'; exit 0; fi; \"${ASC_CMD[@]}\" xcode archive --project \"$PROJECT_PATH\" --scheme \"$SCHEME\" --configuration \"$CONFIGURATION\" --archive-path \"$ARCHIVE_PATH\" --clean --overwrite --xcodebuild-flag=-destination --xcodebuild-flag=generic/platform=iOS --xcodebuild-flag=-allowProvisioningUpdates --xcodebuild-flag=MARKETING_VERSION=$VERSION --xcodebuild-flag=CURRENT_PROJECT_VERSION=$BUILD_NUMBER --output json >/dev/null; jq -n --arg archive_path \"$ARCHIVE_PATH\" --arg version \"$VERSION\" --arg build_number \"$BUILD_NUMBER\" '{archive_path:$archive_path, version:$version, build_number:$build_number}'",
+          "outputs": {
+            "ARCHIVE_PATH": "$.archive_path",
+            "BUILD_NUMBER": "$.build_number"
+          }
+        },
+        {
+          "name": "export_ipa",
+          "run": "set -euo pipefail; SHOULD_SKIP=${steps.detect_today_commits.SHOULD_SKIP}; ARCHIVE_PATH=${steps.archive_app.ARCHIVE_PATH}; EXPORT_OPTIONS_PATH=${steps.write_export_options.EXPORT_OPTIONS_PATH}; IPA_PATH=${steps.prepare_artifacts.IPA_PATH}; VERSION=${steps.resolve_version.VERSION}; BUILD_NUMBER=${steps.archive_app.BUILD_NUMBER}; TEAM_ID=${steps.resolve_team.TEAM_ID}; if [ \"$SHOULD_SKIP\" = \"1\" ]; then jq -n --arg ipa_path \"\" --arg version \"$VERSION\" --arg build_number \"\" '{ipa_path:$ipa_path, version:$version, build_number:$build_number}'; exit 0; fi; ./.asc/bin/export-ipa-with-fallback.sh --archive-path \"$ARCHIVE_PATH\" --export-options \"$EXPORT_OPTIONS_PATH\" --ipa-path \"$IPA_PATH\" --team-id \"$TEAM_ID\"; jq -n --arg ipa_path \"$IPA_PATH\" --arg version \"$VERSION\" --arg build_number \"$BUILD_NUMBER\" '{ipa_path:$ipa_path, version:$version, build_number:$build_number}'",
+          "outputs": {
+            "IPA_PATH": "$.ipa_path",
+            "BUILD_NUMBER": "$.build_number"
+          }
+        },
+        {
+          "name": "ensure_testflight_group",
+          "run": "set -euo pipefail; PROFILE=${steps.resolve_auth_profile.ASC_PROFILE}; ASC_CMD=(asc); if [ -n \"$PROFILE\" ]; then ASC_CMD+=(--profile \"$PROFILE\"); fi; SHOULD_SKIP=${steps.detect_today_commits.SHOULD_SKIP}; RESOLVED_APP_ID=${steps.resolve_app.APP_ID}; if [ \"$SHOULD_SKIP\" = \"1\" ] || [ -z \"$TESTFLIGHT_GROUP\" ]; then jq -n '{group_id:\"\"}'; exit 0; fi; GROUPS_JSON=\"$(./.asc/bin/asc-json-with-retry.sh \"${ASC_CMD[@]}\" testflight groups list --app $RESOLVED_APP_ID --paginate --output json)\"; GROUP_ID=\"$(printf '%s' \"$GROUPS_JSON\" | jq -r --arg name \"$TESTFLIGHT_GROUP\" '[.. | objects | select((.name? // .attributes.name? // \"\") == $name) | .id?] | map(select(type == \"string\" and length > 0)) | .[0] // empty')\"; if [ -z \"$GROUP_ID\" ]; then CREATE_ARGS=(\"${ASC_CMD[@]}\" testflight groups create --app $RESOLVED_APP_ID --name \"$TESTFLIGHT_GROUP\" --output json); if [ \"$TESTFLIGHT_GROUP_INTERNAL\" = \"1\" ]; then CREATE_ARGS+=(--internal); fi; CREATE_JSON=\"$(\"${CREATE_ARGS[@]}\")\"; GROUP_ID=\"$(printf '%s' \"$CREATE_JSON\" | jq -r '[.. | objects | .id?] | map(select(type == \"string\" and length > 0)) | .[0] // empty')\"; fi; if [ -z \"$GROUP_ID\" ]; then echo \"Could not resolve TestFlight group ID for group: $TESTFLIGHT_GROUP\" >&2; exit 1; fi; jq -n --arg group_id \"$GROUP_ID\" '{group_id:$group_id}'",
+          "outputs": {
+            "GROUP_ID": "$.group_id"
+          }
+        },
+        {
+          "name": "add_group_testers",
+          "run": "set -euo pipefail; PROFILE=${steps.resolve_auth_profile.ASC_PROFILE}; ASC_CMD=(asc); if [ -n \"$PROFILE\" ]; then ASC_CMD+=(--profile \"$PROFILE\"); fi; SHOULD_SKIP=${steps.detect_today_commits.SHOULD_SKIP}; RESOLVED_APP_ID=${steps.resolve_app.APP_ID}; GROUP_ID=${steps.ensure_testflight_group.GROUP_ID}; if [ \"$SHOULD_SKIP\" = \"1\" ] || [ -z \"$TESTFLIGHT_GROUP\" ] || [ -z \"$TESTFLIGHT_TESTER_EMAILS\" ]; then exit 0; fi; IFS=',' read -ra EMAILS <<< \"$TESTFLIGHT_TESTER_EMAILS\"; for EMAIL in \"${EMAILS[@]}\"; do EMAIL=\"${EMAIL// /}\"; [ -z \"$EMAIL\" ] && continue; \"${ASC_CMD[@]}\" testflight testers add --app $RESOLVED_APP_ID --email \"$EMAIL\" --group $GROUP_ID >/dev/null; done"
+        },
+        {
+          "name": "upload_or_publish",
+          "run": "set -euo pipefail; PROFILE=${steps.resolve_auth_profile.ASC_PROFILE}; SHOULD_SKIP=${steps.detect_today_commits.SHOULD_SKIP}; SKIP_REASON=${steps.detect_today_commits.SKIP_REASON}; RESOLVED_APP_ID=${steps.resolve_app.APP_ID}; IPA_PATH=${steps.export_ipa.IPA_PATH}; VERSION=${steps.resolve_version.VERSION}; BUILD_NUMBER=${steps.export_ipa.BUILD_NUMBER}; GROUP_ID=${steps.ensure_testflight_group.GROUP_ID}; TEST_NOTES_PATH=${steps.resolve_test_notes.TEST_NOTES_PATH}; if [ \"$SHOULD_SKIP\" = \"1\" ]; then jq -n --arg status \"skipped\" --arg skip_reason \"$SKIP_REASON\" --arg version \"$VERSION\" --arg build_number \"\" --arg ipa_path \"\" '{status:$status, skip_reason:$skip_reason, version:$version, build_number:$build_number, ipa_path:$ipa_path, result_json:\"\"}'; exit 0; fi; HELPER=(./.asc/bin/asc-upload-with-retry.sh --app \"$RESOLVED_APP_ID\" --ipa \"$IPA_PATH\" --version \"$VERSION\" --build-number \"$BUILD_NUMBER\" --wait-for-processing \"$WAIT_FOR_PROCESSING\"); if [ -n \"$PROFILE\" ]; then HELPER+=(--profile \"$PROFILE\"); fi; if [ -n \"$TESTFLIGHT_GROUP\" ]; then HELPER+=(--mode publish --group \"$GROUP_ID\" --notify-testers \"$NOTIFY_TESTERS\"); STATUS=\"published\"; else HELPER+=(--mode upload); STATUS=\"uploaded\"; fi; if [ -n \"$TEST_NOTES_PATH\" ] && [ -f \"$TEST_NOTES_PATH\" ]; then HELPER+=(--test-notes-path \"$TEST_NOTES_PATH\" --locale \"$LOCALE\"); fi; RESULT_JSON=\"$(\"${HELPER[@]}\")\"; jq -n --arg status \"$STATUS\" --arg skip_reason \"\" --arg version \"$VERSION\" --arg build_number \"$BUILD_NUMBER\" --arg ipa_path \"$IPA_PATH\" --arg result_json \"$RESULT_JSON\" '{status:$status, skip_reason:$skip_reason, version:$version, build_number:$build_number, ipa_path:$ipa_path, result_json:$result_json}'",
+          "outputs": {
+            "STATUS": "$.status",
+            "SKIP_REASON": "$.skip_reason",
+            "VERSION": "$.version",
+            "BUILD_NUMBER": "$.build_number",
+            "IPA_PATH": "$.ipa_path",
+            "RESULT_JSON": "$.result_json"
+          }
+        }
+      ]
+    }
+  }
+}

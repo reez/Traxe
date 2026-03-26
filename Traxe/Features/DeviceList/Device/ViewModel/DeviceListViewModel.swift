@@ -62,13 +62,11 @@ final class DeviceListViewModel {
     private let defaults: UserDefaults
     private var aiAnalysisService: AIAnalysisService?
     private let metricsCache = DeviceMetricsCache()
-    private var cachedNetworkSnapshot: (blockHeight: Int?, networkDifficulty: Double?)? = nil
     private var modelContext: ModelContext?
-    private let historicalDataRetentionInterval: TimeInterval = 60 * 60 * 24 * 30
+    private var historicalDataRetentionController: HistoricalDataRetentionController?
 
     private enum StorageKeys {
         static let lastSeenWhatsNewVersion = "lastSeenWhatsNewVersion"
-        static let cachedNetworkSnapshot = "cachedNetworkSnapshotV1"
     }
 
     private enum Support {
@@ -78,23 +76,6 @@ final class DeviceListViewModel {
 
     private enum OpenSource {
         static let repoURL = "https://github.com/reez/Traxe"
-    }
-
-    var networkSnapshot: (blockHeight: Int?, networkDifficulty: Double?)? {
-        currentNetworkSnapshotFromMetrics() ?? cachedNetworkSnapshot
-    }
-
-    private func currentNetworkSnapshotFromMetrics() -> (
-        blockHeight: Int?, networkDifficulty: Double?
-    )? {
-        for device in savedDevices {
-            if let metrics = deviceMetrics[device.ipAddress],
-                metrics.blockHeight != nil || metrics.networkDifficulty != nil
-            {
-                return (metrics.blockHeight, metrics.networkDifficulty)
-            }
-        }
-        return nil
     }
 
     // Minimal cached fleet summary entry for instant display on launch
@@ -113,7 +94,6 @@ final class DeviceListViewModel {
         if #available(iOS 18.0, macOS 15.0, *) {
             self.aiAnalysisService = AIAnalysisService()
         }
-        self.cachedNetworkSnapshot = loadCachedNetworkSnapshot()
         self.lastSeenWhatsNewVersion = defaults.string(
             forKey: StorageKeys.lastSeenWhatsNewVersion
         )
@@ -160,6 +140,9 @@ final class DeviceListViewModel {
     func configureModelContextIfNeeded(_ modelContext: ModelContext) -> Bool {
         guard self.modelContext == nil else { return false }
         self.modelContext = modelContext
+        self.historicalDataRetentionController = HistoricalDataRetentionController(
+            modelContext: modelContext
+        )
         return true
     }
 
@@ -400,17 +383,6 @@ final class DeviceListViewModel {
 
         isLoadingAggregatedStats = false
 
-        if let snapshot = currentNetworkSnapshotFromMetrics() {
-            cachedNetworkSnapshot = snapshot
-            saveCachedNetworkSnapshot(snapshot)
-        } else if successfulFetchCount > 0,
-            let mempoolSnapshot = await fetchMempoolNetworkSnapshot()
-        {
-            // Firmware responded but does not expose network fields; source them from mempool.
-            cachedNetworkSnapshot = mempoolSnapshot
-            saveCachedNetworkSnapshot(mempoolSnapshot)
-        }
-
         // Save all current metrics to cache
         saveCacheFromCurrentMetrics()
         // No need to regenerate summary here; computeTotals() already keeps it in sync
@@ -434,10 +406,11 @@ final class DeviceListViewModel {
     }
 
     private func persistHistoricalSamples(_ samples: [(deviceId: String, metrics: DeviceMetrics)]) {
-        guard let modelContext, !samples.isEmpty else { return }
+        guard let modelContext, let historicalDataRetentionController, !samples.isEmpty else {
+            return
+        }
 
         let timestamp = Date()
-        let retentionCutoff = Date(timeIntervalSinceNow: -historicalDataRetentionInterval)
 
         do {
             for sample in samples {
@@ -450,31 +423,10 @@ final class DeviceListViewModel {
                 modelContext.insert(dataPoint)
             }
 
-            let sampledDeviceIDs = Set(samples.map { $0.deviceId })
-            for deviceID in sampledDeviceIDs {
-                try pruneHistoricalData(for: deviceID, olderThan: retentionCutoff, in: modelContext)
-            }
-
-            try modelContext.save()
+            try historicalDataRetentionController.savePendingChanges(
+                pruningIfNeededFor: samples.map(\.deviceId)
+            )
         } catch {
-        }
-    }
-
-    private func pruneHistoricalData(
-        for deviceID: String,
-        olderThan cutoff: Date,
-        in modelContext: ModelContext
-    ) throws {
-        let descriptor = FetchDescriptor<HistoricalDataPoint>(
-            predicate: #Predicate<HistoricalDataPoint> { data in
-                data.deviceId == deviceID && data.timestamp < cutoff
-            }
-        )
-        let staleEntries = try modelContext.fetch(descriptor)
-        guard !staleEntries.isEmpty else { return }
-
-        for entry in staleEntries {
-            modelContext.delete(entry)
         }
     }
 
@@ -579,72 +531,6 @@ final class DeviceListViewModel {
             defaults.set(data, forKey: "cachedFleetAISummaryV1")
         } catch {
             // Best-effort cache; ignore errors
-        }
-    }
-
-    private struct NetworkSnapshotCacheEntry: Codable {
-        let blockHeight: Int?
-        let networkDifficulty: Double?
-    }
-
-    private func loadCachedNetworkSnapshot() -> (blockHeight: Int?, networkDifficulty: Double?)? {
-        guard let data = defaults.data(forKey: StorageKeys.cachedNetworkSnapshot) else {
-            return nil
-        }
-        do {
-            let entry = try JSONDecoder().decode(NetworkSnapshotCacheEntry.self, from: data)
-            guard entry.blockHeight != nil || entry.networkDifficulty != nil else { return nil }
-            return (entry.blockHeight, entry.networkDifficulty)
-        } catch {
-            return nil
-        }
-    }
-
-    private func saveCachedNetworkSnapshot(
-        _ snapshot: (blockHeight: Int?, networkDifficulty: Double?)?
-    ) {
-        guard let snapshot, snapshot.blockHeight != nil || snapshot.networkDifficulty != nil else {
-            defaults.removeObject(forKey: StorageKeys.cachedNetworkSnapshot)
-            return
-        }
-
-        let entry = NetworkSnapshotCacheEntry(
-            blockHeight: snapshot.blockHeight,
-            networkDifficulty: snapshot.networkDifficulty
-        )
-        do {
-            let data = try JSONEncoder().encode(entry)
-            defaults.set(data, forKey: StorageKeys.cachedNetworkSnapshot)
-        } catch {
-            // Best-effort cache; ignore errors
-        }
-    }
-
-    private struct MempoolBlockDTO: Decodable {
-        let height: Int
-        let difficulty: Double
-    }
-
-    private func fetchMempoolNetworkSnapshot() async -> (
-        blockHeight: Int?, networkDifficulty: Double?
-    )? {
-        guard let url = URL(string: "https://mempool.space/api/blocks") else { return nil }
-
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 5.0
-
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200
-            else {
-                return nil
-            }
-
-            let blocks = try JSONDecoder().decode([MempoolBlockDTO].self, from: data)
-            guard let tip = blocks.first else { return nil }
-            return (blockHeight: tip.height, networkDifficulty: tip.difficulty)
-        } catch {
-            return nil
         }
     }
 

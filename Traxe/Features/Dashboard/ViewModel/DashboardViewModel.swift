@@ -99,6 +99,7 @@ final class DashboardViewModel {
 
     private let dependencies: Dependencies
     private let modelContext: ModelContext
+    private let historicalDataRetentionController: HistoricalDataRetentionController
     private var pollingTask: Task<Void, Never>?
     private var networkMonitor: NWPathMonitor?
 
@@ -106,8 +107,6 @@ final class DashboardViewModel {
     private(set) var initialFetchComplete = false
     private var isConnecting = false
     private var currentDeviceId: String?
-    // Persist a rolling 30-day window per device so mining history covers roughly a month while staying bounded
-    private let historicalDataRetentionInterval: TimeInterval = 60 * 60 * 24 * 30
 
     init(
         networkService: NetworkService? = nil,
@@ -117,6 +116,9 @@ final class DashboardViewModel {
         let resolvedNetworkService = networkService ?? NetworkService()
         self.dependencies = dependencies ?? .live(networkService: resolvedNetworkService)
         self.modelContext = modelContext
+        self.historicalDataRetentionController = HistoricalDataRetentionController(
+            modelContext: modelContext
+        )
         setupNetworkMonitoring()
         initializeDeviceTracking()
     }
@@ -352,11 +354,11 @@ final class DashboardViewModel {
         modelContext.insert(dataPoint)
 
         let selectedDeviceId = currentDeviceId
-        let retentionCutoff = Date(timeIntervalSinceNow: -historicalDataRetentionInterval)
-        Task {
+        Task { @MainActor in
             do {
-                try pruneHistoricalData(for: selectedDeviceId, olderThan: retentionCutoff)
-                try modelContext.save()
+                try historicalDataRetentionController.savePendingChanges(
+                    pruningIfNeededFor: selectedDeviceId
+                )
             } catch {
             }
         }
@@ -395,29 +397,6 @@ final class DashboardViewModel {
             // Keep only the most recent 100 while preserving ascending order
             historicalData = Array(allData.suffix(100))
         } catch {
-        }
-    }
-
-    private func pruneHistoricalData(for deviceId: String?, olderThan cutoff: Date) throws {
-        let predicate: Predicate<HistoricalDataPoint>
-
-        if let deviceId {
-            predicate = #Predicate<HistoricalDataPoint> { data in
-                data.deviceId == deviceId && data.timestamp < cutoff
-            }
-        } else {
-            predicate = #Predicate<HistoricalDataPoint> { data in
-                data.deviceId == nil && data.timestamp < cutoff
-            }
-        }
-
-        let descriptor = FetchDescriptor<HistoricalDataPoint>(predicate: predicate)
-        let staleEntries = try modelContext.fetch(descriptor)
-
-        guard !staleEntries.isEmpty else { return }
-
-        for entry in staleEntries {
-            modelContext.delete(entry)
         }
     }
 

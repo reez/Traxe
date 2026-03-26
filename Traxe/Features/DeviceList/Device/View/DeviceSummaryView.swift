@@ -2,11 +2,9 @@ import Foundation
 import SimpleToast
 import SwiftData
 import SwiftUI
-import UIKit
 
 struct DeviceSummaryView: View {
     let dashboardViewModel: DashboardViewModel
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @State private var showingSettings = false
     @State private var showingWeeklyRecap = false
@@ -18,10 +16,10 @@ struct DeviceSummaryView: View {
 
     @State private var deviceAISummary: AISummary?
     @State private var isGeneratingDeviceSummary = false
+
     private var displayPoolName: String? { dashboardViewModel.currentMetrics.poolURL ?? poolName }
-    private var poolSegments: [PoolDisplaySegment] {
-        guard let poolName = displayPoolName else { return [] }
-        return poolSegments(from: poolName)
+    private var poolRows: [PoolDisplayLineViewData] {
+        PoolDisplayPresenter.makeRows(from: displayPoolName)
     }
 
     var body: some View {
@@ -38,87 +36,31 @@ struct DeviceSummaryView: View {
 
             ScrollView {
                 VStack(spacing: 40) {
-                    // Device info header
-                    HStack {
-                        VStack(alignment: .leading, spacing: 10) {
-                            //                        Text(deviceIP)
-                            //                            .foregroundStyle(.primary)
-                            Text(deviceName)
-                                .foregroundStyle(.secondary)
-                            if !poolSegments.isEmpty {
-                                VStack(alignment: .leading, spacing: 10) {
-                                    ForEach(Array(poolSegments.enumerated()), id: \.offset) {
-                                        _,
-                                        segment in
-                                        HStack(spacing: 6) {
-                                            poolIcon(for: segment.logoName)
-                                            Text(segment.text)
-                                        }
-                                    }
-                                }
-                                .foregroundStyle(.secondary)
-                            }
-                        }
-                        .font(.footnote)
-                        Spacer()
-                    }
-                    .padding()
+                    DeviceSummaryHeaderView(
+                        deviceName: deviceName,
+                        poolRows: poolRows
+                    )
 
-                    // Device AI Summary Section with animation
                     if AIFeatureFlags.isAvailable,
                         AIFeatureFlags.isEnabledByUser
                     {
-                        VStack(alignment: .leading, spacing: 16) {
-                            Text("Summary")
-                                .font(.title2)
-                                .fontWeight(.semibold)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-
-                            // Calculate fixed height for 3 lines of body text to prevent layout shifts
-                            let lineCount = 3
-                            let lineHeight = UIFont.preferredFont(forTextStyle: .body).lineHeight
-                            let fixedHeight = lineHeight * CGFloat(lineCount)
-
-                            ZStack(alignment: .topLeading) {
-                                if let summary = deviceAISummary {
-                                    if #available(iOS 18.0, *) {
-                                        AnimatedAISummaryText(
-                                            content: summary.content,
-                                            isDataLoaded: dashboardViewModel.connectionState
-                                                == .connected
-                                        )
-                                        .lineLimit(lineCount)
-                                        .truncationMode(.tail)
-                                        .transition(.opacity)
-                                    } else {
-                                        FallbackAISummaryText(content: summary.content)
-                                            .lineLimit(lineCount)
-                                            .truncationMode(.tail)
-                                            .transition(.opacity)
-                                    }
-                                } else {
-                                    // Lightweight placeholder while generating
-                                    TypingDots()
-                                        .transition(.opacity)
-                                }
-                            }
-                            .frame(height: fixedHeight)
-                        }
+                        DeviceAISummarySectionView(
+                            summary: deviceAISummary,
+                            isDataLoaded: dashboardViewModel.connectionState == .connected
+                        )
                         .padding(.horizontal)
                         .onAppear {
                             if deviceAISummary == nil {
-                                // Delay AI summary generation to prioritize data loading
                                 Task {
                                     try? await Task.sleep(for: .milliseconds(500))
                                     if ProcessInfo.isPreview {
-                                        // In previews, use a seed if provided
                                         let seeded = UserDefaults.standard.string(
                                             forKey: "preview_device_summary"
                                         )
                                         let content =
                                             seeded
                                             ?? "Hashrate steady around 2.5 TH/s; temps mid‑60s °C; power ~620W."
-                                        self.deviceAISummary = AISummary(content: content)
+                                        deviceAISummary = AISummary(content: content)
                                     } else {
                                         generateDeviceAISummary()
                                     }
@@ -127,67 +69,18 @@ struct DeviceSummaryView: View {
                         }
                     }
 
-                    if dashboardViewModel.connectionState == .connected
-                        && !dashboardViewModel.historicalData.isEmpty
+                    if dashboardViewModel.connectionState == .connected,
+                        !dashboardViewModel.historicalData.isEmpty
                     {
-                        VStack(alignment: .leading, spacing: 16) {
-                            Text("Hash Rate")
-                                .font(.title2)
-                                .fontWeight(.semibold)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-
-                            //                    VStack(alignment: .center, spacing: 8) {
-                            //                        SparklineView(
-                            //                            data: dashboardViewModel.historicalData,
-                            //                            valueKey: \.hashrate,
-                            //                            style: .bars
-                            //                        )
-                            //                        .frame(height: 60)
-                            //                    }
-
-                            HStack(alignment: .center, spacing: 8) {
-                                Spacer()
-                                SparklineView(
-                                    data: dashboardViewModel.historicalData,
-                                    valueKey: \.hashrate,
-                                    style: .bars
-                                )
-                                .frame(height: 60)
-                                Spacer()
-                            }
-
-                        }
+                        DeviceSummaryHashrateSectionView(
+                            historicalData: dashboardViewModel.historicalData
+                        )
                         .padding(.horizontal)
                     }
 
-                    Button {
+                    WeeklyRecapNavigationTile(viewData: .device) {
                         showingWeeklyRecap = true
-                    } label: {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Weekly Recap")
-                                    .font(.headline)
-                                    .foregroundStyle(.primary)
-                                Text("View last 7 days with full charts")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(12)
-                        .background(
-                            Color(uiColor: .secondarySystemBackground),
-                            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(Color.primary.opacity(0.1), lineWidth: 0.5)
-                        )
                     }
-                    .buttonStyle(.plain)
                     .padding(.horizontal)
 
                     VStack(alignment: .leading, spacing: 16) {
@@ -197,6 +90,15 @@ struct DeviceSummaryView: View {
                             .padding(.horizontal)
 
                         MetricsSummaryGrid(viewModel: dashboardViewModel)
+                    }
+
+                    if dashboardViewModel.connectionState == .connected {
+                        DeviceSummaryNetworkInfoView(
+                            blockHeight: dashboardViewModel.currentMetrics.blockHeight,
+                            networkDifficulty: dashboardViewModel.currentMetrics.networkDifficulty
+                        )
+                        .padding(.horizontal)
+                        .padding(.bottom)
                     }
                 }
                 .animation(.easeInOut(duration: 0.4), value: deviceAISummary != nil)
@@ -216,7 +118,6 @@ struct DeviceSummaryView: View {
                 }
             }
         }
-
         .sheet(isPresented: $showingSettings) {
             let sharedDefaults = UserDefaults(
                 suiteName: SettingsViewModel.sharedUserDefaultsSuiteName
@@ -254,7 +155,6 @@ struct DeviceSummaryView: View {
             )
             .padding(.horizontal, 24)
         }
-        // Keep the dashboard connected while the settings sheet is presented
         .task {
             guard !ProcessInfo.isPreview else { return }
             await dashboardViewModel.connect()
@@ -274,12 +174,10 @@ struct DeviceSummaryView: View {
     private func generateDeviceAISummary() {
         guard #available(iOS 18.0, macOS 15.0, *) else { return }
 
-        // Get the current device IP from UserDefaults
         guard let sharedDefaults = UserDefaults(suiteName: "group.matthewramsden.traxe"),
             let deviceIP = sharedDefaults.string(forKey: "bitaxeIPAddress"),
             !deviceIP.isEmpty
         else {
-            // No device IP available for AI summary
             return
         }
 
@@ -295,89 +193,16 @@ struct DeviceSummaryView: View {
 
                 await MainActor.run {
                     withAnimation(.easeInOut(duration: 0.4)) {
-                        self.deviceAISummary = summary
-                        self.isGeneratingDeviceSummary = false
+                        deviceAISummary = summary
+                        isGeneratingDeviceSummary = false
                     }
                 }
             } catch {
-                // Failed to generate device AI summary
                 await MainActor.run {
-                    self.isGeneratingDeviceSummary = false
+                    isGeneratingDeviceSummary = false
                 }
             }
         }
-    }
-
-    private struct PoolDisplaySegment: Identifiable {
-        let id = UUID()
-        let text: String
-        let logoName: String?
-    }
-
-    private func poolSegments(from poolDisplayName: String) -> [PoolDisplaySegment] {
-        let segments =
-            poolDisplayName
-            .components(separatedBy: "\u{2022}")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-
-        return segments.map { segment in
-            let host = normalizedHost(from: segment)
-            return PoolDisplaySegment(
-                text: segment,
-                logoName: host.flatMap(poolLogoName(for:))
-            )
-        }
-    }
-
-    @ViewBuilder
-    private func poolIcon(for logoName: String?) -> some View {
-        let iconSize = UIFont.preferredFont(forTextStyle: .caption2).pointSize
-        if let logoName, let image = UIImage(named: logoName) {
-            Image(uiImage: image)
-                .resizable()
-                .renderingMode(.original)
-                .scaledToFit()
-                .frame(width: iconSize, height: iconSize)
-        } else {
-            Image(systemName: "hammer.fill")
-                .font(.caption2)
-        }
-    }
-
-    private func poolLogoName(for host: String) -> String? {
-        if host.contains("ocean") {
-            return "ocean"
-        }
-        if host.contains("public-pool") || host.contains("publicpool") {
-            return "publicpool"
-        }
-        if host.contains("parasite") {
-            return "parasite"
-        }
-        if host.contains("256foundation") {
-            return "256-foundation"
-        }
-        return nil
-    }
-
-    private func normalizedHost(from raw: String) -> String? {
-        let base = raw.split(separator: "(").first.map(String.init) ?? ""
-        let trimmed = base.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-
-        if let url = URL(string: trimmed), let host = url.host {
-            return host.lowercased()
-        }
-
-        if let url = URL(string: "stratum://\(trimmed)"), let host = url.host {
-            return host.lowercased()
-        }
-
-        let hostPort = trimmed.split(separator: "/").first ?? ""
-        let host = hostPort.split(separator: ":").first ?? ""
-        let normalized = host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return normalized.isEmpty ? nil : normalized
     }
 }
 
@@ -392,45 +217,6 @@ extension View {
     }
 }
 
-private struct BlockFoundToastView: View {
-    let blockHeight: Int?
-    let poolName: String?
-
-    private var formattedBlockHeight: String? {
-        guard let blockHeight else { return nil }
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        return formatter.string(from: NSNumber(value: blockHeight)) ?? "\(blockHeight)"
-    }
-
-    private var messageText: String {
-        let poolSuffix = (poolName?.isEmpty == false) ? " by \(poolName ?? "")" : ""
-        if let formattedHeight = formattedBlockHeight {
-            return "Block \(formattedHeight) found\(poolSuffix)"
-        }
-        return "Block found\(poolSuffix)"
-    }
-
-    var body: some View {
-        HStack {
-            Text(messageText)
-                .font(.headline)
-                .foregroundStyle(.primary)
-
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(
-            Color(.secondarySystemBackground),
-            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(.secondary.opacity(0.3), lineWidth: 0.5)
-        )
-    }
-}
 #Preview {
     let config = ModelConfiguration(isStoredInMemoryOnly: true)
     let container = makeDeviceSummaryPreviewContainer(config: config)

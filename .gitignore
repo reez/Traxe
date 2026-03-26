@@ -47,6 +47,8 @@ Package.resolved
 # .swiftpm
 
 .build/
+.asc/artifacts/
+.asc/runs/
 
 # CocoaPods
 #
