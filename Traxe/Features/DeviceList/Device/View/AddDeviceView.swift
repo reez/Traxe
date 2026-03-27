@@ -244,7 +244,10 @@ struct AddDeviceView: View {
         guard let device = selectedDevice else { return }
 
         isSaving = true
-        viewModel.selectDevice(device)
+        guard viewModel.selectDevice(device) else {
+            isSaving = false
+            return
+        }
 
         Task {
             try? await Task.sleep(for: .milliseconds(200))

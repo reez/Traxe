@@ -25,3 +25,10 @@ struct WeeklyRecapMessageCardView: View {
         .padding(.horizontal)
     }
 }
+
+#Preview("Weekly Recap Message") {
+    WeeklyRecapMessageCardView(
+        title: "Daily Average Temperature",
+        message: "No valid temperature samples were recorded this week."
+    )
+}

@@ -184,3 +184,25 @@ struct WeeklyRecapMetricChartCard: View {
         }
     }
 }
+
+#Preview("Weekly Recap Metric Chart") {
+    let recap = PreviewFixtures.sampleWeeklyRecap()
+    let points = recap.dailyPoints.filter { $0.sampleCount > 0 }
+
+    ScrollView {
+        WeeklyRecapMetricChartCard(
+            title: "Daily Average Temperature",
+            points: points,
+            value: \.averageTemperature,
+            formatter: { value in
+                "\(value.formatted(.number.precision(.fractionLength(0))))°C"
+            },
+            axisFormatter: { value in
+                value.formatted(.number.precision(.fractionLength(0)))
+            },
+            unitLabel: "°C",
+            xAxisDates: recap.dailyPoints.map(\.date),
+            enforceZeroBaseline: false
+        )
+    }
+}

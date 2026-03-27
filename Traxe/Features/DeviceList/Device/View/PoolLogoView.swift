@@ -32,3 +32,11 @@ struct PoolLogoView: View {
         private var poolImage: Never? { nil }
     #endif
 }
+
+#Preview("Pool Logos") {
+    HStack(spacing: 20) {
+        PoolLogoView(logoName: "ocean", size: 28)
+        PoolLogoView(logoName: nil, size: 28)
+    }
+    .padding()
+}

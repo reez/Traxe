@@ -393,9 +393,7 @@ final class OnboardingViewModel {
 
                 let subnetsToScan: Set<String> = [detectedBaseIP]
 
-                Task {
-                    await scanState.cancelAll()
-                }
+                await scanState.cancelAll()
 
                 for subnetBaseIP in subnetsToScan {
                     for i in dependencies.scanHostRange {
@@ -544,13 +542,16 @@ final class OnboardingViewModel {
         return .success
     }
 
-    func selectDevice(_ device: DiscoveredDevice) {
+    @discardableResult
+    func selectDevice(_ device: DiscoveredDevice) -> Bool {
         let savedDevice = SavedDevice(name: device.name, ipAddress: device.ip)
 
         do {
             try dependencies.deviceManagement.saveDevice(savedDevice)
+            return true
         } catch {
             handleError("Failed to save the selected miner. Please try again.")
+            return false
         }
     }
 
@@ -652,9 +653,9 @@ final class OnboardingViewModel {
     }
 
     private func handlePermissionIssueIfNeeded(for code: URLError.Code) async -> Bool {
-        let permissionCodes: Set<URLError.Code> = [
-            .notConnectedToInternet
-        ]
+        // Do not infer Local Network privacy denial from generic transport errors during scans.
+        // The up-front probe remains responsible for deciding whether to show Settings guidance.
+        let permissionCodes: Set<URLError.Code> = []
         guard permissionCodes.contains(code), !permissionErrorDetected else { return false }
 
         permissionErrorDetected = true

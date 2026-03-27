@@ -40,3 +40,11 @@ struct BlockFoundToastView: View {
         )
     }
 }
+
+#Preview("Block Found Toast") {
+    BlockFoundToastView(
+        blockHeight: 941_416,
+        poolName: "mine.ocean.xyz"
+    )
+    .padding()
+}

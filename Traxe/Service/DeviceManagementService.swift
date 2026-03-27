@@ -2,8 +2,27 @@ import Foundation
 import WidgetKit
 
 struct DeviceManagementService {
+    static let appGroupID = "group.matthewramsden.traxe"
+    static var sharedDefaultsOverride: UserDefaults?
+    static var onboardingDefaultsOverride: UserDefaults?
+    static var reloadWidgetTimelines: (_ kind: String) -> Void = { kind in
+        WidgetCenter.shared.reloadTimelines(ofKind: kind)
+    }
+
     private static let session = URLSession.shared
     private static let decoder = JSONDecoder()
+    private static let savedDevicesKey = "savedDevices"
+    private static let savedDeviceIPsKey = "savedDeviceIPs"
+    private static let selectedDeviceKey = "bitaxeIPAddress"
+    private static let hasCompletedOnboardingKey = "hasCompletedOnboarding"
+
+    private static var sharedDefaults: UserDefaults? {
+        sharedDefaultsOverride ?? UserDefaults(suiteName: appGroupID)
+    }
+
+    private static var onboardingDefaults: UserDefaults {
+        onboardingDefaultsOverride ?? .standard
+    }
 
     static func checkDevice(
         ip: String,
@@ -134,7 +153,7 @@ struct DeviceManagementService {
     }
 
     static func saveDevice(_ deviceToSave: SavedDevice) throws {
-        guard let sharedDefaults = UserDefaults(suiteName: "group.matthewramsden.traxe") else {
+        guard let sharedDefaults else {
             throw NSError(
                 domain: "DeviceSaveError",
                 code: 1,
@@ -142,12 +161,7 @@ struct DeviceManagementService {
             )
         }
 
-        var savedDevices: [SavedDevice] = []
-        if let data = sharedDefaults.data(forKey: "savedDevices"),
-            let decoded = try? JSONDecoder().decode([SavedDevice].self, from: data)
-        {
-            savedDevices = decoded
-        }
+        var savedDevices = loadSavedDevices(from: sharedDefaults)
 
         if !savedDevices.contains(where: { $0.ipAddress == deviceToSave.ipAddress }) {
             savedDevices.append(deviceToSave)
@@ -156,21 +170,20 @@ struct DeviceManagementService {
         }
 
         do {
-            let encoded = try JSONEncoder().encode(savedDevices)
-            sharedDefaults.set(encoded, forKey: "savedDevices")
+            try persistSavedDevices(savedDevices, in: sharedDefaults)
 
-            sharedDefaults.set(deviceToSave.ipAddress, forKey: "bitaxeIPAddress")
+            sharedDefaults.set(deviceToSave.ipAddress, forKey: selectedDeviceKey)
 
-            UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+            onboardingDefaults.set(true, forKey: hasCompletedOnboardingKey)
 
-            WidgetCenter.shared.reloadTimelines(ofKind: "TraxeWidget")
+            reloadWidgetTimelines("TraxeWidget")
         } catch {
             throw error
         }
     }
 
     static func deleteDevice(ipAddressToDelete: String) throws {
-        guard let sharedDefaults = UserDefaults(suiteName: "group.matthewramsden.traxe") else {
+        guard let sharedDefaults else {
             throw NSError(
                 domain: "DeviceDeleteError",
                 code: 1,
@@ -178,12 +191,7 @@ struct DeviceManagementService {
             )
         }
 
-        var savedDevices: [SavedDevice] = []
-        if let data = sharedDefaults.data(forKey: "savedDevices"),
-            let decoded = try? JSONDecoder().decode([SavedDevice].self, from: data)
-        {
-            savedDevices = decoded
-        }
+        var savedDevices = loadSavedDevices(from: sharedDefaults)
 
         let initialCount = savedDevices.count
         savedDevices.removeAll { $0.ipAddress == ipAddressToDelete }
@@ -193,16 +201,15 @@ struct DeviceManagementService {
         }
 
         do {
-            let encoded = try JSONEncoder().encode(savedDevices)
-            sharedDefaults.set(encoded, forKey: "savedDevices")
+            try persistSavedDevices(savedDevices, in: sharedDefaults)
 
-            if let currentIP = sharedDefaults.string(forKey: "bitaxeIPAddress"),
+            if let currentIP = sharedDefaults.string(forKey: selectedDeviceKey),
                 currentIP == ipAddressToDelete
             {
-                sharedDefaults.removeObject(forKey: "bitaxeIPAddress")
+                sharedDefaults.removeObject(forKey: selectedDeviceKey)
             }
 
-            WidgetCenter.shared.reloadTimelines(ofKind: "TraxeWidget")
+            reloadWidgetTimelines("TraxeWidget")
 
         } catch {
             throw error
@@ -210,7 +217,7 @@ struct DeviceManagementService {
     }
 
     static func reorderDevices(_ devices: [SavedDevice]) throws {
-        guard let sharedDefaults = UserDefaults(suiteName: "group.matthewramsden.traxe") else {
+        guard let sharedDefaults else {
             throw NSError(
                 domain: "DeviceReorderError",
                 code: 1,
@@ -219,16 +226,29 @@ struct DeviceManagementService {
         }
 
         do {
-            let encoded = try JSONEncoder().encode(devices)
-            sharedDefaults.set(encoded, forKey: "savedDevices")
+            try persistSavedDevices(devices, in: sharedDefaults)
 
-            let ipAddresses = devices.map { $0.ipAddress }
-            sharedDefaults.set(ipAddresses, forKey: "savedDeviceIPs")
-
-            WidgetCenter.shared.reloadTimelines(ofKind: "TraxeWidget")
+            reloadWidgetTimelines("TraxeWidget")
         } catch {
             throw error
         }
+    }
+
+    private static func loadSavedDevices(from defaults: UserDefaults) -> [SavedDevice] {
+        guard let data = defaults.data(forKey: savedDevicesKey),
+            let decoded = try? JSONDecoder().decode([SavedDevice].self, from: data)
+        else {
+            return []
+        }
+        return decoded
+    }
+
+    private static func persistSavedDevices(_ devices: [SavedDevice], in defaults: UserDefaults)
+        throws
+    {
+        let encoded = try JSONEncoder().encode(devices)
+        defaults.set(encoded, forKey: savedDevicesKey)
+        defaults.set(devices.map(\.ipAddress), forKey: savedDeviceIPsKey)
     }
 }
 

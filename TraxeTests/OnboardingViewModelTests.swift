@@ -102,6 +102,68 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.discoveredDevices.map(\.ip), ["192.168.1.44"])
     }
 
+    func testSelectDeviceReturnsFalseWhenSaveFails() {
+        var dependencies = makeBaseDependencies()
+        dependencies.deviceManagement = .init(
+            checkDevice: { _ in
+                XCTFail(
+                    "checkDevice should not be called when selecting an existing discovery result"
+                )
+                throw DeviceCheckError.notBitaxeDevice
+            },
+            saveDevice: { _ in
+                throw NSError(domain: "OnboardingViewModelTests", code: 1)
+            }
+        )
+
+        let viewModel = OnboardingViewModel(dependencies: dependencies)
+        let didSave = viewModel.selectDevice(Self.makeDiscoveredDevice(ip: "192.168.1.55"))
+
+        XCTAssertFalse(didSave)
+        XCTAssertTrue(viewModel.showErrorAlert)
+        XCTAssertEqual(
+            viewModel.errorMessage,
+            "Failed to save the selected miner. Please try again."
+        )
+    }
+
+    func testNotConnectedToInternetDuringSubnetScanDoesNotTriggerPermissionDenied() async {
+        let checkedIPs = LockedBox<[String]>([])
+        var dependencies = makeBaseDependencies()
+        dependencies.urlSession = .init(data: { _ in
+            throw URLError(.timedOut)
+        })
+        dependencies.networkInterfaces = { ["192.168.60.11"] }
+        dependencies.scanHostRange = 1...3
+        dependencies.scanTimeout = .milliseconds(20)
+        dependencies.sleep = { duration in
+            try? await Task.sleep(for: duration)
+        }
+        dependencies.deviceManagement = .init(
+            checkDevice: { ip in
+                checkedIPs.withValue { $0.append(ip) }
+                throw DeviceCheckError.requestFailed(.notConnectedToInternet)
+            },
+            saveDevice: { _ in }
+        )
+
+        let viewModel = OnboardingViewModel(dependencies: dependencies)
+        let result = await viewModel.startScan()
+
+        guard case .success = result else {
+            XCTFail("Expected scan to begin when probe indicates permission is available")
+            return
+        }
+
+        try? await Task.sleep(for: .milliseconds(120))
+
+        XCTAssertTrue(viewModel.hasLocalNetworkPermission)
+        XCTAssertNotEqual(viewModel.scanStatus, permissionDeniedMessage)
+        XCTAssertFalse(viewModel.isScanning)
+        XCTAssertTrue(viewModel.hasScanned)
+        XCTAssertFalse(checkedIPs.value.isEmpty)
+    }
+
     private func makeBaseDependencies() -> OnboardingViewModel.Dependencies {
         var dependencies = OnboardingViewModel.Dependencies.live
         dependencies.notificationCenter = NotificationCenter()

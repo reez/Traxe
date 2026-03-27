@@ -69,3 +69,18 @@ struct DeviceGridCardView: View {
         )
     }
 }
+
+#Preview("Device Grid Cards") {
+    HStack(spacing: 16) {
+        DeviceGridCardView(
+            viewData: PreviewFixtures.sampleDeviceListItemViewData,
+            action: {}
+        )
+
+        DeviceGridCardView(
+            viewData: PreviewFixtures.sampleLockedDeviceListItemViewData,
+            action: {}
+        )
+    }
+    .padding()
+}

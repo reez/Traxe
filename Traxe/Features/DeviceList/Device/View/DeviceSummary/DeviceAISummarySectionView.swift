@@ -44,3 +44,18 @@ struct DeviceAISummarySectionView: View {
         }
     }
 }
+
+#Preview("Device AI Summary") {
+    VStack(alignment: .leading, spacing: 24) {
+        DeviceAISummarySectionView(
+            summary: PreviewFixtures.sampleAISummary,
+            isDataLoaded: true
+        )
+
+        DeviceAISummarySectionView(
+            summary: nil,
+            isDataLoaded: false
+        )
+    }
+    .padding()
+}

@@ -32,3 +32,12 @@ struct WeeklyRecapStatCard: View {
         )
     }
 }
+
+#Preview("Weekly Recap Stat Card") {
+    WeeklyRecapStatCard(
+        title: "Average Hash Rate",
+        value: "5.1 TH/s",
+        subtitle: "Across 21 samples"
+    )
+    .padding()
+}

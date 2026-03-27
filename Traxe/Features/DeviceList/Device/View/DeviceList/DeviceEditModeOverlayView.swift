@@ -33,3 +33,12 @@ struct DeviceEditModeOverlayView: View {
         .transition(.opacity)
     }
 }
+
+#Preview("Edit Mode Overlay") {
+    let viewModel = PreviewFixtures.makeDeviceListViewModel()
+
+    DeviceEditModeOverlayView(
+        viewModel: viewModel,
+        subscriptionAccessPolicy: PreviewFixtures.sampleSubscriptionAccessPolicy
+    )
+}

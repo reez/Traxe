@@ -37,3 +37,11 @@ struct WeeklyRecapNavigationTile: View {
         .buttonStyle(.plain)
     }
 }
+
+#Preview("Weekly Recap Tile") {
+    VStack(spacing: 12) {
+        WeeklyRecapNavigationTile(viewData: .fleet, action: {})
+        WeeklyRecapNavigationTile(viewData: .device, action: {})
+    }
+    .padding()
+}

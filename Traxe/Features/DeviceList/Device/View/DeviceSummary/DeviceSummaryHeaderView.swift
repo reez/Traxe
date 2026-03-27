@@ -36,3 +36,11 @@ struct DeviceSummaryHeaderView: View {
         .padding()
     }
 }
+
+#Preview("Device Summary Header") {
+    DeviceSummaryHeaderView(
+        deviceName: "nerdqaxe++",
+        poolRows: PreviewFixtures.samplePoolRows
+    )
+    .padding()
+}

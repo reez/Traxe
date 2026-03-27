@@ -84,3 +84,12 @@ struct WeeklyRecapDetailContentView: View {
         }
     }
 }
+
+#Preview("Weekly Recap Detail") {
+    ScrollView {
+        WeeklyRecapDetailContentView(
+            recap: PreviewFixtures.sampleWeeklyRecap(),
+            showDateRange: true
+        )
+    }
+}
