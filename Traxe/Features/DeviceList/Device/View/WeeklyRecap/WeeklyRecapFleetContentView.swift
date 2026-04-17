@@ -102,3 +102,17 @@ struct WeeklyRecapFleetContentView: View {
         }
     }
 }
+
+#Preview("Weekly Recap Fleet Content") {
+    ScrollView {
+        WeeklyRecapFleetContentView(
+            fleetRecaps: PreviewFixtures.sampleFleetRecaps,
+            expandedFleetDeviceIDs: Set(PreviewFixtures.sampleFleetRecaps.map(\.id)),
+            areAllFleetSectionsExpanded: true,
+            deviceHistoryEmptyStateText:
+                "Not enough device history yet. Keep the app open while mining to generate weekly recap data.",
+            toggleAllFleetSections: {},
+            toggleFleetSection: { _ in }
+        )
+    }
+}

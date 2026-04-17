@@ -199,3 +199,17 @@ struct FallbackAISummaryText: View {
             .animation(.easeInOut(duration: 0.2), value: content)
     }
 }
+
+#Preview("AI Summary Text") {
+    VStack(alignment: .leading, spacing: 20) {
+        if #available(iOS 18.0, *) {
+            AnimatedAISummaryText(
+                content: PreviewFixtures.sampleAISummary.content,
+                isDataLoaded: true
+            )
+        }
+
+        FallbackAISummaryText(content: PreviewFixtures.sampleAISummary.content)
+    }
+    .padding()
+}

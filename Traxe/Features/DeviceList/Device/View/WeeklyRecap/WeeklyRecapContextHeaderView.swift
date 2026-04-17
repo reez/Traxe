@@ -100,3 +100,27 @@ struct WeeklyRecapContextHeaderView: View {
             "\(allocation.name) (\(WeeklyRecapChartPresenter.formattedPoolPercent(configuredPercent))%)"
     }
 }
+
+#Preview("Weekly Recap Header") {
+    let recap = PreviewFixtures.sampleWeeklyRecap()
+
+    VStack(spacing: 24) {
+        WeeklyRecapContextHeaderView(
+            scope: PreviewFixtures.sampleFleetScope,
+            weekTitleText: WeeklyRecapChartPresenter.dateRangeText(for: recap),
+            fleetPoolAllocations: PreviewFixtures.sampleFleetPoolAllocations,
+            latestBlockHeightsByPoolSlug: PreviewFixtures.sampleLatestBlockHeightsByPoolSlug
+        )
+
+        WeeklyRecapContextHeaderView(
+            scope: .device(
+                deviceID: PreviewFixtures.sampleDeviceID,
+                deviceName: "nerdqaxe++",
+                poolName: PreviewFixtures.sampleDualPoolName
+            ),
+            weekTitleText: WeeklyRecapChartPresenter.dateRangeText(for: recap),
+            fleetPoolAllocations: [],
+            latestBlockHeightsByPoolSlug: [:]
+        )
+    }
+}

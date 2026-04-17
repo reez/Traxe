@@ -35,3 +35,11 @@ struct DeviceEditModeRowView: View {
         .padding(.vertical, 8)
     }
 }
+
+#Preview("Edit Mode Row") {
+    DeviceEditModeRowView(
+        position: 1,
+        viewData: PreviewFixtures.sampleDeviceListItemViewData
+    )
+    .padding()
+}

@@ -3,9 +3,9 @@
 {
   "env": {
     "ASC_ACCOUNT": "personal",
-    "ASC_PROFILE_PRIMARY": "Traxe Personal",
+    "ASC_PROFILE_PRIMARY": "Personal CLI",
     "ASC_PROFILE_FALLBACK": "",
-    "APP_ID": "6744660207",
+    "APP_ID": "",
     "BUNDLE_ID": "com.matthewramsden.Traxe",
     "PROJECT_PATH": "Traxe.xcodeproj",
     "SCHEME": "Traxe",
@@ -97,7 +97,7 @@
         },
         {
           "name": "resolve_build_number",
-          "run": "set -euo pipefail; PROFILE=${steps.resolve_auth_profile.ASC_PROFILE}; ASC_CMD=(asc); if [ -n \"$PROFILE\" ]; then ASC_CMD+=(--profile \"$PROFILE\"); fi; SHOULD_SKIP=${steps.detect_today_commits.SHOULD_SKIP}; RESOLVED_APP_ID=${steps.resolve_app.APP_ID}; VERSION=${steps.resolve_version.VERSION}; if [ \"$SHOULD_SKIP\" = \"1\" ]; then jq -n '{build_number:\"\"}'; exit 0; fi; if [ -n \"$BUILD_NUMBER\" ]; then NEXT_BUILD=\"$BUILD_NUMBER\"; else if ! BUILD_JSON=\"$(./.asc/bin/asc-json-with-retry.sh \"${ASC_CMD[@]}\" builds latest --app $RESOLVED_APP_ID --version $VERSION --platform IOS --next --initial-build-number \"$INITIAL_BUILD_NUMBER\" --output json)\"; then echo \"Could not query latest build number for app ID: $RESOLVED_APP_ID version: $VERSION\" >&2; exit 1; fi; NEXT_BUILD=\"$(printf '%s' \"$BUILD_JSON\" | jq -r '[.. | objects | .nextBuildNumber?] | map(select((type == \"string\" or type == \"number\") and tostring != \"\")) | .[0] // empty')\"; fi; if [ -z \"$NEXT_BUILD\" ]; then echo \"Could not determine build number.\" >&2; exit 1; fi; jq -n --arg build_number \"$NEXT_BUILD\" '{build_number:$build_number}'",
+          "run": "set -euo pipefail; PROFILE=${steps.resolve_auth_profile.ASC_PROFILE}; ASC_CMD=(asc); if [ -n \"$PROFILE\" ]; then ASC_CMD+=(--profile \"$PROFILE\"); fi; SHOULD_SKIP=${steps.detect_today_commits.SHOULD_SKIP}; RESOLVED_APP_ID=${steps.resolve_app.APP_ID}; VERSION=${steps.resolve_version.VERSION}; if [ \"$SHOULD_SKIP\" = \"1\" ]; then jq -n '{build_number:\"\"}'; exit 0; fi; if [ -n \"$BUILD_NUMBER\" ]; then NEXT_BUILD=\"$BUILD_NUMBER\"; else if ! BUILD_JSON=\"$(./.asc/bin/asc-json-with-retry.sh \"${ASC_CMD[@]}\" builds next-build-number --app $RESOLVED_APP_ID --version $VERSION --platform IOS --initial-build-number \"$INITIAL_BUILD_NUMBER\" --output json)\"; then echo \"Could not query next build number for app ID: $RESOLVED_APP_ID version: $VERSION\" >&2; exit 1; fi; NEXT_BUILD=\"$(printf '%s' \"$BUILD_JSON\" | jq -r '[.. | objects | .nextBuildNumber?] | map(select((type == \"string\" or type == \"number\") and tostring != \"\")) | .[0] // empty')\"; fi; if [ -z \"$NEXT_BUILD\" ]; then echo \"Could not determine build number.\" >&2; exit 1; fi; jq -n --arg build_number \"$NEXT_BUILD\" '{build_number:$build_number}'",
           "outputs": {
             "BUILD_NUMBER": "$.build_number"
           }

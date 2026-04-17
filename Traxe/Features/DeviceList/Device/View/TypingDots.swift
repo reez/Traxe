@@ -30,3 +30,8 @@ struct TypingDots: View {
         }
     }
 }
+
+#Preview("Typing Dots") {
+    TypingDots()
+        .padding()
+}

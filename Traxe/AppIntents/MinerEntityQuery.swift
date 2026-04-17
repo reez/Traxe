@@ -2,8 +2,26 @@ import AppIntents
 import Foundation
 
 struct MinerEntityQuery: EntityStringQuery {
+    private let savedDevicesLoader: @Sendable () -> [SavedDevice]
+    private let subscriptionAccessPolicyResolver: @Sendable () async -> SubscriptionAccessPolicy
+
+    init() {
+        self.savedDevicesLoader = { TraxeIntentSupport.loadSavedDevices() }
+        self.subscriptionAccessPolicyResolver = {
+            await TraxeIntentSupport.resolveSubscriptionAccessPolicy()
+        }
+    }
+
+    init(
+        loadSavedDevices: @escaping @Sendable () -> [SavedDevice],
+        resolveSubscriptionAccessPolicy: @escaping @Sendable () async -> SubscriptionAccessPolicy
+    ) {
+        self.savedDevicesLoader = loadSavedDevices
+        self.subscriptionAccessPolicyResolver = resolveSubscriptionAccessPolicy
+    }
+
     func entities(for identifiers: [MinerEntity.ID]) async throws -> [MinerEntity] {
-        let devices = await accessibleDevices()
+        let devices = savedDevicesLoader()
         let deviceByIPAddress = Dictionary(uniqueKeysWithValues: devices.map { ($0.ipAddress, $0) })
 
         return identifiers.compactMap { identifier in
@@ -35,8 +53,8 @@ struct MinerEntityQuery: EntityStringQuery {
     }
 
     private func accessibleDevices() async -> [SavedDevice] {
-        let allDevices = TraxeIntentSupport.loadSavedDevices()
-        let accessPolicy = await TraxeIntentSupport.resolveSubscriptionAccessPolicy()
+        let allDevices = savedDevicesLoader()
+        let accessPolicy = await subscriptionAccessPolicyResolver()
         return accessPolicy.accessibleDevices(from: allDevices)
     }
 }

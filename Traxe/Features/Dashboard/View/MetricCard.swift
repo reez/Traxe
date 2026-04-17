@@ -91,3 +91,20 @@ struct MetricCard: View {
         .opacity(isConnected ? 1.0 : 0.7)
     }
 }
+
+#Preview("Metric Card") {
+    MetricCard(
+        title: "Hash Rate",
+        value: "721",
+        unit: "GH/s",
+        icon: "bolt.fill",
+        expectedValue: "735",
+        expectedUnit: "GH/s",
+        subtitle: "Expected range",
+        progress: (value: 721, maxValue: 735),
+        historicalData: PreviewFixtures.sampleHistoricalData(),
+        historicalDataKey: \.hashrate,
+        chartStyle: .line
+    )
+    .padding()
+}

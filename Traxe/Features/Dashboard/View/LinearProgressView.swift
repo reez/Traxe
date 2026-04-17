@@ -25,3 +25,13 @@ struct LinearProgressView: View {
         .frame(height: 4)
     }
 }
+
+#Preview("Linear Progress") {
+    LinearProgressView(
+        value: 72,
+        maxValue: 100,
+        unit: "%"
+    )
+    .frame(height: 4)
+    .padding()
+}

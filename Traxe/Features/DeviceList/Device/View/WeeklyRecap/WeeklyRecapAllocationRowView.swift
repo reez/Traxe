@@ -32,3 +32,13 @@ struct WeeklyRecapAllocationRowView: View {
         }
     }
 }
+
+#Preview("Weekly Recap Allocation") {
+    WeeklyRecapAllocationRowView(
+        labelText: "Ocean (65%)",
+        logoName: "ocean",
+        estimatedHashrate: 3_315,
+        lastBlockHeight: 941_416
+    )
+    .padding()
+}

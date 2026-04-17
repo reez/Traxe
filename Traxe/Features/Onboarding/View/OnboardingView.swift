@@ -108,7 +108,10 @@ struct OnboardingView: View {
         Button(action: {
             guard !isConnecting else { return }
             isConnecting = true
-            viewModel.selectDevice(device)
+            guard viewModel.selectDevice(device) else {
+                isConnecting = false
+                return
+            }
             Task {
                 try? await Task.sleep(for: .milliseconds(200))
                 navigateToDeviceList = true

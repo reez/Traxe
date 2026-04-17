@@ -54,3 +54,16 @@ struct DeviceGridSectionView: View {
         .padding(.bottom, 40)
     }
 }
+
+#Preview("Device Grid Section") {
+    let viewModel = PreviewFixtures.makeDeviceListViewModel()
+
+    ScrollView {
+        DeviceGridSectionView(
+            viewModel: viewModel,
+            subscriptionAccessPolicy: PreviewFixtures.sampleSubscriptionAccessPolicy,
+            showFleetWeeklyRecap: {},
+            handleSelection: { _, _ in }
+        )
+    }
+}

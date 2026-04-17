@@ -23,3 +23,10 @@ struct DeviceSummaryHashrateSectionView: View {
         }
     }
 }
+
+#Preview("Device Summary Hashrate") {
+    DeviceSummaryHashrateSectionView(
+        historicalData: PreviewFixtures.sampleHistoricalData()
+    )
+    .padding()
+}

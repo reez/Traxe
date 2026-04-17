@@ -68,3 +68,12 @@ struct FanControlSection: View {
         }
     }
 }
+
+#Preview("Fan Control") {
+    let preview = PreviewFixtures.makeSettingsPreviewContext()
+
+    Form {
+        FanControlSection(viewModel: preview.viewModel)
+    }
+    .modelContainer(preview.container)
+}

@@ -44,3 +44,11 @@ struct DeviceSummaryNetworkInfoView: View {
         }
     }
 }
+
+#Preview("Network Info") {
+    DeviceSummaryNetworkInfoView(
+        blockHeight: 941_416,
+        networkDifficulty: 83_250_000_000_000
+    )
+    .padding()
+}

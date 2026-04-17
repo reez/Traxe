@@ -46,3 +46,12 @@ struct AdvancedSettingsView: View {
         }
     }
 }
+
+#Preview("Advanced Settings") {
+    let preview = PreviewFixtures.makeSettingsPreviewContext()
+
+    NavigationStack {
+        AdvancedSettingsView(viewModel: preview.viewModel)
+    }
+    .modelContainer(preview.container)
+}

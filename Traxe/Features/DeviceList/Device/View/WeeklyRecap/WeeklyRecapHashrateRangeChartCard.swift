@@ -186,3 +186,14 @@ struct WeeklyRecapHashrateRangeChartCard: View {
         }
     }
 }
+
+#Preview("Weekly Recap Hashrate Range") {
+    let recap = PreviewFixtures.sampleWeeklyRecap()
+
+    ScrollView {
+        WeeklyRecapHashrateRangeChartCard(
+            points: recap.dailyPoints.filter { $0.sampleCount > 0 },
+            xAxisDates: recap.dailyPoints.map(\.date)
+        )
+    }
+}

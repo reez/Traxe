@@ -36,7 +36,7 @@ BUNDLE_ID="${BUNDLE_ID:-com.matthewramsden.Traxe}"
 APP_NAME="${APP_NAME:-Traxe}"
 APP_SKU="${APP_SKU:-TRAXE001}"
 APP_PRIMARY_LOCALE="${APP_PRIMARY_LOCALE:-en-US}"
-ASC_PROFILE_NAME="${ASC_PROFILE_NAME:-Traxe Personal}"
+ASC_PROFILE_NAME="${ASC_PROFILE_NAME:-Personal CLI}"
 CREATE_ASC_APP="${CREATE_ASC_APP:-0}"
 
 SUBSCRIPTION_GROUP_REF="${SUBSCRIPTION_GROUP_REF:-TraxePro}"
@@ -290,7 +290,7 @@ ASC_APPS_JSON="$(asc apps list --bundle-id "${BUNDLE_ID}" --paginate --output js
 APP_ID="$(resolve_asc_app_id "${ASC_APPS_JSON}")"
 
 if [[ -z "${APP_ID}" && "${CREATE_ASC_APP}" == "1" ]]; then
-  APP_CREATE_JSON="$(asc apps create \
+  APP_CREATE_JSON="$(asc web apps create \
     --name "${APP_NAME}" \
     --bundle-id "${BUNDLE_ID}" \
     --sku "${APP_SKU}" \
