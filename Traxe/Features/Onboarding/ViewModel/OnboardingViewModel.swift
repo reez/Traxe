@@ -22,6 +22,10 @@ struct DiscoveredDevice: Identifiable {
     let poolURL: String?
     let blockHeight: Int?
     let networkDifficulty: Double?
+    var isHashrateKnown: Bool = true
+    var isTemperatureKnown: Bool = true
+    var isMiningPaused: Bool = false
+    var isMiningPausedKnown: Bool = true
 }
 
 @Observable
@@ -192,6 +196,9 @@ final class OnboardingViewModel {
                     let decoder = JSONDecoder()
                     do {
                         let systemInfo = try decoder.decode(SystemInfoDTO.self, from: data)
+                        let hashrate = systemInfo.hashrate
+                        let temperature = systemInfo.temperature
+                        let miningPaused = systemInfo.miningPaused
                         let lowercasedHostname = systemInfo.hostname.lowercased()
                         let lowercasedVersion = systemInfo.version.lowercased()
                         let uppercasedASICModel = systemInfo.ASICModel.uppercased()
@@ -208,13 +215,17 @@ final class OnboardingViewModel {
                             let device = DiscoveredDevice(
                                 ip: apIP,
                                 name: systemInfo.hostname,
-                                hashrate: systemInfo.hashrate ?? 0.0,
-                                temperature: systemInfo.temperature ?? 0.0,
+                                hashrate: hashrate ?? 0.0,
+                                temperature: temperature ?? 0.0,
                                 bestDiff: systemInfo.bestDiff,
                                 power: systemInfo.power ?? 0.0,
                                 poolURL: systemInfo.poolURL,
                                 blockHeight: systemInfo.blockHeight,
-                                networkDifficulty: systemInfo.networkDifficulty
+                                networkDifficulty: systemInfo.networkDifficulty,
+                                isHashrateKnown: hashrate != nil,
+                                isTemperatureKnown: temperature != nil,
+                                isMiningPaused: miningPaused ?? false,
+                                isMiningPausedKnown: miningPaused != nil
                             )
                             await MainActor.run {
                                 if !discoveredDevices.contains(where: { $0.ip == apIP }) {

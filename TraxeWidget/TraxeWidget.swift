@@ -19,6 +19,10 @@ private struct CachedDeviceMetrics: Codable {
     var bestDifficulty: Double?
     var hostname: String?
     var poolURL: String?
+    var isMiningPaused: Bool?
+    var isHashrateKnown: Bool?
+    var isTemperatureKnown: Bool?
+    var isMiningPausedKnown: Bool?
     // Include temperature so widget preserves it in the shared cache
     var temperature: Double?
     var lastUpdated: Date
@@ -170,14 +174,19 @@ struct Provider: TimelineProvider {
                             bestDifficulty: 0.0,  // write non-nil default to keep cache clean
                             hostname: nil,
                             poolURL: nil,
+                            isMiningPaused: nil,
+                            isHashrateKnown: true,
+                            isTemperatureKnown: false,
+                            isMiningPausedKnown: false,
                             temperature: nil,
                             lastUpdated: now
                         )
                     entry.hashrate = fresh
-                    if let t = fetchedTemps[ip] { entry.temperature = t }
-                    // If we fetched system info above we had temperature; but since we only stored hash here,
-                    // keep existing temperature if present rather than dropping it.
-                    // Note: A more robust approach is to plumb temp through fetched map as well.
+                    entry.isHashrateKnown = true
+                    if let t = fetchedTemps[ip] {
+                        entry.temperature = t
+                        entry.isTemperatureKnown = true
+                    }
                     entry.lastUpdated = now
                     merged[ip] = entry
                 } else if let cached = perDeviceCache[ip] {

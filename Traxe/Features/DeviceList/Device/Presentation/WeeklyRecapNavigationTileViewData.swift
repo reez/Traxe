@@ -8,7 +8,7 @@ struct WeeklyRecapNavigationTileViewData: Equatable, Sendable {
     static let fleet = WeeklyRecapNavigationTileViewData(
         title: "Weekly Recap",
         subtitle: "View all miners from the last 7 days",
-        showsChevron: false
+        showsChevron: true
     )
 
     static let device = WeeklyRecapNavigationTileViewData(

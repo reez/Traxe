@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "app": {
+    "bundle_id": "com.matthewramsden.Traxe",
+    "project": "Traxe.xcodeproj",
+    "scheme": "Traxe",
+    "simulator_udid": "booted"
+  },
+  "paths": {
+    "raw_dir": "./screenshots/raw/en-US/APP_IPHONE_67",
+    "framed_dir": "./screenshots/framed/en-US/APP_IPHONE_67",
+    "review_dir": "./screenshots/review"
+  },
+  "pipeline": {
+    "frame_enabled": false,
+    "upload_enabled": false
+  },
+  "upload": {
+    "app_id": "6744660207",
+    "version_id": "bf6bc220-6ef0-4690-9765-eeef47f4f310",
+    "version_localization_id": "4a5361ee-6d15-4826-942c-61aae923d843",
+    "device_type": "IPHONE_67",
+    "source_dir": "./screenshots/raw/en-US/APP_IPHONE_67"
+  }
+}

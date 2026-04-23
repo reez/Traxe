@@ -7,6 +7,7 @@ import SwiftUI
 struct DeviceAISummarySectionView: View {
     let summary: AISummary?
     let isDataLoaded: Bool
+    let historicalData: [HistoricalDataPoint]
 
     var body: some View {
         let lineCount = 3
@@ -41,6 +42,16 @@ struct DeviceAISummarySectionView: View {
                 }
             }
             .frame(height: fixedHeight)
+
+            if !historicalData.isEmpty {
+                SparklineView(
+                    data: historicalData,
+                    valueKey: \.hashrate,
+                    style: .bars,
+                    barAlignment: .leading
+                )
+                .frame(height: 60)
+            }
         }
     }
 }
@@ -49,12 +60,14 @@ struct DeviceAISummarySectionView: View {
     VStack(alignment: .leading, spacing: 24) {
         DeviceAISummarySectionView(
             summary: PreviewFixtures.sampleAISummary,
-            isDataLoaded: true
+            isDataLoaded: true,
+            historicalData: PreviewFixtures.sampleHistoricalData()
         )
 
         DeviceAISummarySectionView(
             summary: nil,
-            isDataLoaded: false
+            isDataLoaded: false,
+            historicalData: PreviewFixtures.sampleHistoricalData()
         )
     }
     .padding()

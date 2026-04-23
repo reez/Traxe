@@ -292,7 +292,9 @@ enum PreviewFixtures {
         let viewModel = DashboardViewModel(
             modelContext: container.mainContext,
             dependencies: .init(
-                network: .init(fetchSystemInfo: { _ in throw NetworkError.configurationMissing }),
+                network: .init(
+                    fetchSystemInfo: { _ in throw NetworkError.configurationMissing }
+                ),
                 selectedDeviceID: { deviceId },
                 notificationCenter: .default,
                 makeNetworkMonitor: nil,

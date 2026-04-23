@@ -66,6 +66,9 @@ struct DeviceManagementService {
             case 200:
                 do {
                     let systemInfo = try decoder.decode(SystemInfoDTO.self, from: data)
+                    let hashrate = systemInfo.hashrate
+                    let temperature = systemInfo.temperature
+                    let miningPaused = systemInfo.miningPaused
                     let lowercasedHostname = systemInfo.hostname.lowercased()
                     let lowercasedVersion = systemInfo.version.lowercased()
                     let uppercasedASICModel = systemInfo.ASICModel.uppercased()
@@ -101,13 +104,17 @@ struct DeviceManagementService {
                         return DiscoveredDevice(
                             ip: ip,
                             name: systemInfo.hostname,
-                            hashrate: systemInfo.hashrate ?? 0.0,
-                            temperature: systemInfo.temperature ?? 0.0,
+                            hashrate: hashrate ?? 0.0,
+                            temperature: temperature ?? 0.0,
                             bestDiff: systemInfo.bestDiff,
                             power: systemInfo.power ?? 0.0,
                             poolURL: systemInfo.poolURL,
                             blockHeight: systemInfo.blockHeight,
-                            networkDifficulty: systemInfo.networkDifficulty
+                            networkDifficulty: systemInfo.networkDifficulty,
+                            isHashrateKnown: hashrate != nil,
+                            isTemperatureKnown: temperature != nil,
+                            isMiningPaused: miningPaused ?? false,
+                            isMiningPausedKnown: miningPaused != nil
                         )
                     } else {
                         throw DeviceCheckError.notBitaxeDevice

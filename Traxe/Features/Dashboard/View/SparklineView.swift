@@ -5,6 +5,7 @@ struct SparklineView: View {
     let data: [HistoricalDataPoint]
     let valueKey: KeyPath<HistoricalDataPoint, Double>
     var style: ChartStyle = .line
+    var barAlignment: BarAlignment = .center
     var maxDataPoints: Int = 20
     @State private var isPulsing = false
     @State private var selectedValue: Double?
@@ -19,6 +20,11 @@ struct SparklineView: View {
     enum ChartStyle {
         case line
         case bars
+    }
+
+    enum BarAlignment {
+        case leading
+        case center
     }
 
     private var sampledData: [HistoricalDataPoint] {
@@ -240,6 +246,11 @@ struct SparklineView: View {
     private func barAreaStartX(geometry: GeometryProxy) -> CGFloat {
         let count = sampledData.count
         guard count > 0 else { return 0 }
+
+        guard barAlignment == .center else {
+            return 0
+        }
+
         let totalWidth = calculateTotalBarAreaWidth(count: count)
         return max(0, (geometry.size.width - totalWidth) / 2)
     }

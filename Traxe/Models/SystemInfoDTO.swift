@@ -15,6 +15,15 @@ struct DynamicCodingKey: CodingKey {
     }
 }
 
+struct HashrateMonitorDTO: Codable {
+    let asics: [HashrateMonitorASICDTO]?
+}
+
+struct HashrateMonitorASICDTO: Codable {
+    let total: Double?
+    let domains: [Double]?
+}
+
 struct SystemInfoDTO: Codable {
     let power: Double?
     let voltage: Double?
@@ -23,6 +32,7 @@ struct SystemInfoDTO: Codable {
     let vrTemp: Double?
     let hashRate: Double?
     let expectedHashrate: Double?
+    let errorPercentage: Double?
     let _bestDiff: String?
     let bestSessionDiff: String?
     let stratumDiff: Int?
@@ -45,6 +55,8 @@ struct SystemInfoDTO: Codable {
     let blockHeight: Int?
     let networkDifficulty: Double?
     let blockFound: Int?
+    let miningPaused: Bool?
+    let hashrateMonitor: HashrateMonitorDTO?
 
     let asicCount: Int?
     let smallCoreCount: Int?
@@ -91,7 +103,7 @@ struct SystemInfoDTO: Codable {
     enum CodingKeys: String, CodingKey, CaseIterable {
         case power, voltage, current, temp, vrTemp
         case hashRate = "hashRate"
-        case expectedHashrate
+        case expectedHashrate, errorPercentage
         case _bestDiff = "bestDiff"
         case bestSessionDiff, stratumDiff
         case isUsingFallbackStratum, freeHeap
@@ -100,7 +112,8 @@ struct SystemInfoDTO: Codable {
         case _hostname = "hostname"
         case wifiStatus, wifiRSSI
         case sharesAccepted, sharesRejected, uptimeSeconds
-        case blockHeight, networkDifficulty, blockFound
+        case blockHeight, networkDifficulty, blockFound, miningPaused
+        case hashrateMonitor
         case asicCount, smallCoreCount
         case _ASICModel = "ASICModel"
         case _stratumURL = "stratumURL"
@@ -144,6 +157,7 @@ struct SystemInfoDTO: Codable {
             vrTemp = nil
         }
         expectedHashrate = try container.decodeIfPresent(Double.self, forKey: .expectedHashrate)
+        errorPercentage = Self.decodeDoubleFlexible(container: container, key: .errorPercentage)
         _bestDiff = Self.decodeDiffAsString(container: container, key: ._bestDiff)
         bestSessionDiff = Self.decodeDiffAsString(container: container, key: .bestSessionDiff)
         stratumDiff = try container.decodeIfPresent(Int.self, forKey: .stratumDiff)
@@ -175,6 +189,11 @@ struct SystemInfoDTO: Codable {
         } else {
             blockFound = try container.decodeIfPresent(Int.self, forKey: .blockFound)
         }
+        miningPaused = Self.decodeBoolFlexible(container: container, key: .miningPaused)
+        hashrateMonitor = try container.decodeIfPresent(
+            HashrateMonitorDTO.self,
+            forKey: .hashrateMonitor
+        )
         asicCount = try container.decodeIfPresent(Int.self, forKey: .asicCount)
         smallCoreCount = try container.decodeIfPresent(Int.self, forKey: .smallCoreCount)
         _ASICModel = try container.decodeIfPresent(String.self, forKey: ._ASICModel)
@@ -372,6 +391,30 @@ extension SystemInfoDTO {
         }
         if let stringValue = try? container.decodeIfPresent(String.self, forKey: key) {
             return Double(stringValue)
+        }
+        return nil
+    }
+
+    // ESP-Miner uses booleans here; accept numeric/string variants for older or forked payloads.
+    fileprivate static func decodeBoolFlexible(
+        container: KeyedDecodingContainer<CodingKeys>,
+        key: CodingKeys
+    ) -> Bool? {
+        if let boolValue = try? container.decodeIfPresent(Bool.self, forKey: key) {
+            return boolValue
+        }
+        if let intValue = try? container.decodeIfPresent(Int.self, forKey: key) {
+            return intValue != 0
+        }
+        if let stringValue = try? container.decodeIfPresent(String.self, forKey: key) {
+            switch stringValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            case "true", "1", "yes":
+                return true
+            case "false", "0", "no":
+                return false
+            default:
+                return nil
+            }
         }
         return nil
     }

@@ -10,7 +10,9 @@ final class DashboardViewModelTests: XCTestCase {
         let modelContainer = try makeInMemoryModelContainer()
         let info = try Self.makeSystemInfo(hashRate: 1234.0, temp: 51.0, power: 15.0)
         let dependencies = DashboardViewModel.Dependencies(
-            network: .init(fetchSystemInfo: { _ in info }),
+            network: .init(
+                fetchSystemInfo: { _ in info }
+            ),
             selectedDeviceID: { "192.168.1.44" },
             notificationCenter: NotificationCenter(),
             makeNetworkMonitor: nil,
@@ -30,8 +32,12 @@ final class DashboardViewModelTests: XCTestCase {
 
         assertConnectionState(viewModel.connectionState, expected: .connected)
         XCTAssertEqual(viewModel.currentMetrics.hashrate, 1234.0, accuracy: 0.001)
+        XCTAssertEqual(viewModel.currentMetrics.expectedHashrate, 1300.0, accuracy: 0.001)
         XCTAssertEqual(viewModel.currentMetrics.temperature, 51.0, accuracy: 0.001)
         XCTAssertEqual(viewModel.currentMetrics.power, 15.0, accuracy: 0.001)
+        XCTAssertEqual(viewModel.currentMetrics.asicHashrateMonitors.count, 1)
+        XCTAssertEqual(viewModel.currentMetrics.asicHashrateMonitors.first?.domains, [10, 20])
+        XCTAssertEqual(viewModel.currentMetrics.asicErrorPercentage ?? 0, 1.42, accuracy: 0.001)
         XCTAssertEqual(viewModel.errorMessage, "")
 
         viewModel.disconnect()
@@ -40,10 +46,12 @@ final class DashboardViewModelTests: XCTestCase {
     func testConnectWithoutConfiguredDeviceSetsDisconnectedState() async throws {
         let modelContainer = try makeInMemoryModelContainer()
         let dependencies = DashboardViewModel.Dependencies(
-            network: .init(fetchSystemInfo: { _ in
-                XCTFail("fetchSystemInfo should not be called without a configured IP")
-                throw NetworkError.configurationMissing
-            }),
+            network: .init(
+                fetchSystemInfo: { _ in
+                    XCTFail("fetchSystemInfo should not be called without a configured IP")
+                    throw NetworkError.configurationMissing
+                }
+            ),
             selectedDeviceID: { nil },
             notificationCenter: NotificationCenter(),
             makeNetworkMonitor: nil,
@@ -77,6 +85,8 @@ final class DashboardViewModelTests: XCTestCase {
             "power": power,
             "temp": temp,
             "hashRate": hashRate,
+            "expectedHashrate": 1300.0,
+            "errorPercentage": 1.42,
             "bestDiff": "2 M",
             "hostname": "Test Miner",
             "version": "axeOS-2.0.0",
@@ -88,6 +98,14 @@ final class DashboardViewModelTests: XCTestCase {
             "fanspeed": 75,
             "sharesAccepted": 42,
             "sharesRejected": 1,
+            "hashrateMonitor": [
+                "asics": [
+                    [
+                        "total": hashRate,
+                        "domains": [10, 20],
+                    ]
+                ]
+            ],
         ]
 
         let data = try JSONSerialization.data(withJSONObject: payload)
