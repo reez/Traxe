@@ -21,6 +21,14 @@ struct DeviceMetrics {
     var blockHeight: Int? = nil
     var networkDifficulty: Double? = nil
     var blockFound: Int? = nil
+    var asicHashrateMonitors: [ASICHashrateMonitor] = []
+    var asicErrorPercentage: Double? = nil
+    var vrTemperature: Double = 0.0
+    var isVRTemperatureKnown: Bool = false
+    var isHashrateKnown: Bool = true
+    var isTemperatureKnown: Bool = true
+    var isMiningPaused: Bool = false
+    var isMiningPausedKnown: Bool = true
 
     var efficiency: Double {
         guard hashrate > 0 else { return 0 }
@@ -61,7 +69,15 @@ struct DeviceMetrics {
         hostname: String? = nil,
         blockHeight: Int? = nil,
         networkDifficulty: Double? = nil,
-        blockFound: Int? = nil
+        blockFound: Int? = nil,
+        asicHashrateMonitors: [ASICHashrateMonitor] = [],
+        asicErrorPercentage: Double? = nil,
+        vrTemperature: Double = 0.0,
+        isVRTemperatureKnown: Bool = false,
+        isHashrateKnown: Bool = true,
+        isTemperatureKnown: Bool = true,
+        isMiningPaused: Bool = false,
+        isMiningPausedKnown: Bool = true
     ) {
         self.hashrate = hashrate
         self.expectedHashrate = expectedHashrate
@@ -82,9 +98,28 @@ struct DeviceMetrics {
         self.blockHeight = blockHeight
         self.networkDifficulty = networkDifficulty
         self.blockFound = blockFound
+        self.asicHashrateMonitors = asicHashrateMonitors
+        self.asicErrorPercentage = asicErrorPercentage
+        self.vrTemperature = vrTemperature
+        self.isVRTemperatureKnown = isVRTemperatureKnown
+        self.isHashrateKnown = isHashrateKnown
+        self.isTemperatureKnown = isTemperatureKnown
+        self.isMiningPaused = isMiningPaused
+        self.isMiningPausedKnown = isMiningPausedKnown
     }
 
     init(from systemInfo: SystemInfoDTO) {
+        let hashrate = systemInfo.hashrate
+        let temperature = systemInfo.temperature
+        let miningPaused = systemInfo.miningPaused
+        let asicHashrateMonitors =
+            systemInfo.hashrateMonitor?.asics?.enumerated().map { offset, asic in
+                ASICHashrateMonitor(
+                    index: offset + 1,
+                    total: asic.total ?? 0.0,
+                    domains: asic.domains ?? []
+                )
+            } ?? []
         let inputVoltage = Self.normalizeVoltage(
             systemInfo.voltage ?? 0.0,
             threshold: 1_000.0  // allow higher-voltage rigs to report in volts
@@ -105,9 +140,9 @@ struct DeviceMetrics {
         }()
 
         self.init(
-            hashrate: systemInfo.hashrate ?? 0.0,
-            expectedHashrate: 0.0,
-            temperature: systemInfo.temp ?? 0.0,
+            hashrate: hashrate ?? 0.0,
+            expectedHashrate: systemInfo.expectedHashrate ?? 0.0,
+            temperature: temperature ?? 0.0,
             power: systemInfo.power ?? 0.0,
             uptime: TimeInterval(systemInfo.uptimeSeconds ?? 0),
             fanSpeedPercent: systemInfo.fanspeed ?? 0,
@@ -123,7 +158,15 @@ struct DeviceMetrics {
             hostname: systemInfo.hostname,
             blockHeight: systemInfo.blockHeight,
             networkDifficulty: systemInfo.networkDifficulty,
-            blockFound: systemInfo.blockFound
+            blockFound: systemInfo.blockFound,
+            asicHashrateMonitors: asicHashrateMonitors,
+            asicErrorPercentage: systemInfo.errorPercentage,
+            vrTemperature: systemInfo.vrTemp ?? 0.0,
+            isVRTemperatureKnown: systemInfo.vrTemp != nil,
+            isHashrateKnown: hashrate != nil,
+            isTemperatureKnown: temperature != nil,
+            isMiningPaused: miningPaused ?? false,
+            isMiningPausedKnown: miningPaused != nil
         )
     }
 

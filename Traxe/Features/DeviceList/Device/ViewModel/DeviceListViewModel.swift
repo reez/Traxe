@@ -57,6 +57,7 @@ final class DeviceListViewModel {
     var lastDataUpdate: Date = Date()
     var reachableIPs: Set<String> = []
     var lastSeenWhatsNewVersion: String? = nil
+    private var hasCompletedAggregatedStatsRefresh = false
 
     private let dependencies: Dependencies
     private let defaults: UserDefaults
@@ -112,9 +113,25 @@ final class DeviceListViewModel {
             && lastSeenWhatsNewVersion != currentKey
     }
 
+    var fleetHealthSnapshot: FleetHealthSnapshot {
+        FleetHealthSnapshot.make(
+            devices: savedDevices,
+            metricsByIP: deviceMetrics,
+            reachableIPs: reachableIPs,
+            isRefreshing: isLoadingAggregatedStats
+        )
+    }
+
+    var isFleetHealthLoading: Bool {
+        !savedDevices.isEmpty && !hasCompletedAggregatedStatsRefresh
+    }
+
     func loadDevices() {
+        let previousIPAddresses = Set(savedDevices.map(\.ipAddress))
+
         guard let data = defaults.data(forKey: "savedDevices") else {
             self.savedDevices = []
+            updateFleetHealthRefreshState(previousIPAddresses: previousIPAddresses)
             saveIPsAndReloadWidget()
             scheduleAggregatedStatsRefreshIfNeeded()
             return
@@ -123,12 +140,21 @@ final class DeviceListViewModel {
         do {
             let decoder = JSONDecoder()
             self.savedDevices = try decoder.decode([SavedDevice].self, from: data)
+            updateFleetHealthRefreshState(previousIPAddresses: previousIPAddresses)
             saveIPsAndReloadWidget()
             scheduleAggregatedStatsRefreshIfNeeded()
         } catch {
             self.savedDevices = []
+            updateFleetHealthRefreshState(previousIPAddresses: previousIPAddresses)
             saveIPsAndReloadWidget()
             scheduleAggregatedStatsRefreshIfNeeded()
+        }
+    }
+
+    private func updateFleetHealthRefreshState(previousIPAddresses: Set<String>) {
+        let currentIPAddresses = Set(savedDevices.map(\.ipAddress))
+        if currentIPAddresses != previousIPAddresses {
+            hasCompletedAggregatedStatsRefresh = false
         }
     }
 
@@ -163,6 +189,15 @@ final class DeviceListViewModel {
                     // If cached temp is missing/zero but we have a non-zero in-memory temp, keep it
                     if (cached.temperature ?? 0.0) == 0.0, existing.temperature > 0.0 {
                         merged.temperature = existing.temperature
+                        merged.isTemperatureKnown = existing.isTemperatureKnown
+                    }
+                    if !merged.isHashrateKnown, existing.isHashrateKnown {
+                        merged.hashrate = existing.hashrate
+                        merged.isHashrateKnown = true
+                    }
+                    if !merged.isMiningPausedKnown, existing.isMiningPausedKnown {
+                        merged.isMiningPaused = existing.isMiningPaused
+                        merged.isMiningPausedKnown = true
                     }
                 }
                 deviceMetrics[device.ipAddress] = merged
@@ -340,7 +375,11 @@ final class DeviceListViewModel {
                                 poolURL: discoveredDevice.poolURL,
                                 hostname: discoveredDevice.name,
                                 blockHeight: discoveredDevice.blockHeight,
-                                networkDifficulty: discoveredDevice.networkDifficulty
+                                networkDifficulty: discoveredDevice.networkDifficulty,
+                                isHashrateKnown: discoveredDevice.isHashrateKnown,
+                                isTemperatureKnown: discoveredDevice.isTemperatureKnown,
+                                isMiningPaused: discoveredDevice.isMiningPaused,
+                                isMiningPausedKnown: discoveredDevice.isMiningPausedKnown
                             )
                             return (device.ipAddress, metrics)
                         } catch {
@@ -380,6 +419,7 @@ final class DeviceListViewModel {
         reachableIPs = newReachables
         computeTotals()
         persistHistoricalSamples(successfulSamples)
+        hasCompletedAggregatedStatsRefresh = true
 
         isLoadingAggregatedStats = false
 
@@ -535,3 +575,11 @@ final class DeviceListViewModel {
     }
 
 }
+
+#if DEBUG
+extension DeviceListViewModel {
+    func markAggregatedStatsRefreshCompletedForPreview() {
+        hasCompletedAggregatedStatsRefresh = true
+    }
+}
+#endif

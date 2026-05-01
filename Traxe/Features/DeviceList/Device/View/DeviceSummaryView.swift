@@ -41,47 +41,60 @@ struct DeviceSummaryView: View {
                         poolRows: poolRows
                     )
 
-                    if AIFeatureFlags.isAvailable,
-                        AIFeatureFlags.isEnabledByUser
-                    {
-                        DeviceAISummarySectionView(
-                            summary: deviceAISummary,
-                            isDataLoaded: dashboardViewModel.connectionState == .connected
-                        )
-                        .padding(.horizontal)
-                        .onAppear {
-                            if deviceAISummary == nil {
-                                Task {
-                                    try? await Task.sleep(for: .milliseconds(500))
-                                    if ProcessInfo.isPreview {
-                                        let seeded = UserDefaults.standard.string(
-                                            forKey: "preview_device_summary"
-                                        )
-                                        let content =
-                                            seeded
-                                            ?? "Hashrate steady around 2.5 TH/s; temps mid‑60s °C; power ~620W."
-                                        deviceAISummary = AISummary(content: content)
-                                    } else {
-                                        generateDeviceAISummary()
+                    VStack(alignment: .leading, spacing: 16) {
+                        if AIFeatureFlags.isAvailable,
+                            AIFeatureFlags.isEnabledByUser
+                        {
+                            DeviceAISummarySectionView(
+                                summary: deviceAISummary,
+                                isDataLoaded: dashboardViewModel.connectionState == .connected,
+                                historicalData: dashboardViewModel.connectionState == .connected
+                                    ? dashboardViewModel.historicalData
+                                    : []
+                            )
+                            .onAppear {
+                                if deviceAISummary == nil {
+                                    Task {
+                                        try? await Task.sleep(for: .milliseconds(500))
+                                        if ProcessInfo.isPreview {
+                                            let seeded = UserDefaults.standard.string(
+                                                forKey: "preview_device_summary"
+                                            )
+                                            let content =
+                                                seeded
+                                                ?? "Hashrate steady around 2.5 TH/s; temps mid‑60s °C; power ~620W."
+                                            deviceAISummary = AISummary(content: content)
+                                        } else {
+                                            generateDeviceAISummary()
+                                        }
                                     }
                                 }
                             }
                         }
+
+                        WeeklyRecapNavigationTile(viewData: .device) {
+                            showingWeeklyRecap = true
+                        }
                     }
+                    .padding(.horizontal)
 
                     if dashboardViewModel.connectionState == .connected,
-                        !dashboardViewModel.historicalData.isEmpty
+                        !dashboardViewModel.currentMetrics.asicHashrateMonitors.isEmpty
                     {
-                        DeviceSummaryHashrateSectionView(
-                            historicalData: dashboardViewModel.historicalData
+                        DeviceSummaryASICHeatmapView(
+                            monitors: dashboardViewModel.currentMetrics.asicHashrateMonitors,
+                            expectedHashrate: dashboardViewModel.currentMetrics.expectedHashrate,
+                            chipTemperature: dashboardViewModel.currentMetrics.temperature,
+                            isChipTemperatureKnown: dashboardViewModel.currentMetrics
+                                .isTemperatureKnown,
+                            vrTemperature: dashboardViewModel.currentMetrics.vrTemperature,
+                            isVRTemperatureKnown: dashboardViewModel.currentMetrics
+                                .isVRTemperatureKnown,
+                            errorPercentage: dashboardViewModel.currentMetrics
+                                .asicErrorPercentage
                         )
                         .padding(.horizontal)
                     }
-
-                    WeeklyRecapNavigationTile(viewData: .device) {
-                        showingWeeklyRecap = true
-                    }
-                    .padding(.horizontal)
 
                     VStack(alignment: .leading, spacing: 16) {
                         Text("Stats")
@@ -268,7 +281,11 @@ extension View {
         poolURL: "mine.ocean.xyz",
         hostname: "bitaxe",
         blockHeight: 874_321,
-        networkDifficulty: 83_250_000_000_000
+        networkDifficulty: 83_250_000_000_000,
+        asicHashrateMonitors: previewASICHashrateMonitors(),
+        asicErrorPercentage: 1.42,
+        vrTemperature: 54,
+        isVRTemperatureKnown: true
     )
 
     #if DEBUG
@@ -341,7 +358,11 @@ extension View {
         poolURL: dualPoolName,
         hostname: "bitaxe",
         blockHeight: 874_321,
-        networkDifficulty: 83_250_000_000_000
+        networkDifficulty: 83_250_000_000_000,
+        asicHashrateMonitors: previewASICHashrateMonitors(),
+        asicErrorPercentage: 1.42,
+        vrTemperature: 54,
+        isVRTemperatureKnown: true
     )
 
     #if DEBUG
@@ -372,4 +393,14 @@ private func makeDeviceSummaryPreviewContainer(config: ModelConfiguration) -> Mo
 
 private func previewSharedDefaults() -> UserDefaults {
     UserDefaults(suiteName: "group.matthewramsden.traxe") ?? .standard
+}
+
+private func previewASICHashrateMonitors() -> [ASICHashrateMonitor] {
+    [
+        ASICHashrateMonitor(
+            index: 1,
+            total: 325.6,
+            domains: [0, 50.1, 100.2, 175.3]
+        )
+    ]
 }

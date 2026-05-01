@@ -74,6 +74,56 @@ final class DeviceListViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.deviceMetrics["192.168.1.21"])
     }
 
+    func testFleetHealthInitialLoadStaysLoadingUntilFirstRefreshCompletes() async {
+        var dependencies = makeDependencies(responses: [:])
+        dependencies.autoRefreshOnLoad = false
+
+        let defaults = makeIsolatedDefaults(suiteName: "DeviceListViewModelTests.fleetHealthLoading")
+        let viewModel = DeviceListViewModel(defaults: defaults, dependencies: dependencies)
+        viewModel.savedDevices = [
+            SavedDevice(name: "Miner A", ipAddress: "192.168.1.40"),
+            SavedDevice(name: "Miner B", ipAddress: "192.168.1.41"),
+        ]
+        viewModel.deviceMetrics = [:]
+
+        XCTAssertTrue(viewModel.isFleetHealthLoading)
+
+        await viewModel.updateAggregatedStats()
+
+        XCTAssertFalse(viewModel.isFleetHealthLoading)
+        XCTAssertEqual(viewModel.fleetHealthSnapshot.offline, 2)
+    }
+
+    func testFleetHealthInitialLoadRedactsCachedMetricsUntilFirstRefreshCompletes() async {
+        let responses: [String: DiscoveredDevice] = [
+            "192.168.1.50": makeDiscoveredDevice(
+                ip: "192.168.1.50",
+                name: "Miner A",
+                hashrate: 600,
+                power: 12,
+                bestDiff: "3 M"
+            )
+        ]
+        var dependencies = makeDependencies(responses: responses)
+        dependencies.autoRefreshOnLoad = false
+
+        let defaults = makeIsolatedDefaults(suiteName: "DeviceListViewModelTests.fleetHealthCached")
+        let viewModel = DeviceListViewModel(defaults: defaults, dependencies: dependencies)
+        viewModel.savedDevices = [
+            SavedDevice(name: "Miner A", ipAddress: "192.168.1.50")
+        ]
+        viewModel.deviceMetrics = [
+            "192.168.1.50": DeviceMetrics(hashrate: 600, temperature: 60)
+        ]
+
+        XCTAssertTrue(viewModel.isFleetHealthLoading)
+
+        await viewModel.updateAggregatedStats()
+
+        XCTAssertFalse(viewModel.isFleetHealthLoading)
+        XCTAssertEqual(viewModel.fleetHealthSnapshot.online, 1)
+    }
+
     func testUpdateAggregatedStatsPersistsHistoricalSamplesWhenModelContextConfigured() async throws
     {
         let responses: [String: DiscoveredDevice] = [

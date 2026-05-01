@@ -16,12 +16,12 @@ struct DeviceGridSectionView: View {
             Spacer().frame(height: 10)
 
             if viewModel.savedDevices.count > 1 {
-                AggregatedStatsHeader(viewModel: viewModel)
-            }
-
-            if !viewModel.savedDevices.isEmpty {
+                AggregatedStatsHeader(
+                    viewModel: viewModel,
+                    showFleetWeeklyRecap: showFleetWeeklyRecap
+                )
+            } else if !viewModel.savedDevices.isEmpty {
                 WeeklyRecapNavigationTile(viewData: .fleet, action: showFleetWeeklyRecap)
-                    .padding(.top, viewModel.savedDevices.count > 1 ? -46 : 0)
                     .padding(.horizontal)
             }
 

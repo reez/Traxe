@@ -49,6 +49,7 @@ Package.resolved
 .build/
 .asc/artifacts/
 .asc/runs/
+screenshots/
 
 # CocoaPods
 #

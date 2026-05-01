@@ -62,7 +62,7 @@ public struct WhatsNewContent: Sendable, Equatable {
 
 public enum WhatsNewConfig {
     /// Toggle this flag when you want the TipKit surface to appear for the current build.
-    public static var isEnabledForCurrentBuild = false
+    public static var isEnabledForCurrentBuild = true
 
     /// A stable identifier for a "What's New" announcement.
     ///
@@ -78,17 +78,16 @@ public enum WhatsNewConfig {
         message: "Version \(currentVersion())",  // "New features in Traxe",
         highlights: [
             WhatsNewHighlight(
-                badgeTint: .orange,
-                iconSystemName: "calendar",
-                title: "Weekly Recap",
-                detail:
-                    "Added Weekly Recap views for fleet and individual miners, with charts & key stats."
+                badgeTint: .green,
+                iconSystemName: "chart.bar.yaxis",
+                title: "Fleet Status Bar",
+                detail: "A quick visual breakdown of every miner’s status."
             ),
             WhatsNewHighlight(
-                badgeTint: .green,
-                iconSystemName: "macbook",
-                title: "Open Source Contributors",
-                detail: "Thanks to @joeycast for your recent code contributions to Traxe!"
+                badgeTint: .orange,
+                iconSystemName: "circle.grid.2x2",
+                title: "Hashrate Registers",
+                detail: "Spot weak ASIC domains on each device."
             ),
         ]
     )

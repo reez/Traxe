@@ -8,6 +8,10 @@ struct CachedDeviceMetrics: Codable {
     var poolURL: String?
     var blockHeight: Int?
     var networkDifficulty: Double?
+    var isMiningPaused: Bool?
+    var isHashrateKnown: Bool?
+    var isTemperatureKnown: Bool?
+    var isMiningPausedKnown: Bool?
     // Added: cache temperature (optional for backward compatibility)
     var temperature: Double?
     var lastUpdated: Date
@@ -20,6 +24,10 @@ struct CachedDeviceMetrics: Codable {
         self.poolURL = metrics.poolURL
         self.blockHeight = metrics.blockHeight
         self.networkDifficulty = metrics.networkDifficulty
+        self.isMiningPaused = metrics.isMiningPaused
+        self.isHashrateKnown = metrics.isHashrateKnown
+        self.isTemperatureKnown = metrics.isTemperatureKnown
+        self.isMiningPausedKnown = metrics.isMiningPausedKnown
         self.temperature = metrics.temperature
         self.lastUpdated = Date()
     }
@@ -35,7 +43,11 @@ extension DeviceMetrics {
             poolURL: cached.poolURL,
             hostname: cached.hostname,
             blockHeight: cached.blockHeight,
-            networkDifficulty: cached.networkDifficulty
+            networkDifficulty: cached.networkDifficulty,
+            isHashrateKnown: cached.isHashrateKnown ?? false,
+            isTemperatureKnown: cached.isTemperatureKnown ?? false,
+            isMiningPaused: cached.isMiningPaused ?? false,
+            isMiningPausedKnown: cached.isMiningPausedKnown ?? false
         )
     }
 }

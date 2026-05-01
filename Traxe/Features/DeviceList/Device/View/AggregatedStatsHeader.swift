@@ -3,15 +3,98 @@ import SwiftUI
 
 struct AggregatedStatsHeader: View {
     @Bindable var viewModel: DeviceListViewModel
+    let showFleetWeeklyRecap: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // AI Summary (plain text)
-            if AIFeatureFlags.isAvailable,
-                AIFeatureFlags.isEnabledByUser,
-                viewModel.savedDevices.count > 1
-            {
-                VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 40) {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Total Hash Rate")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    // Keep the UI calm during refresh: no inline spinner here.
+                    StatItem(
+                        label: "Hash Rate",
+                        value: viewModel.totalHashRate,
+                        unit: "TH/s",
+                        isLoading: false,
+                        name: "bolt.fill"
+                    )
+
+                    //                Text("Updated: \(viewModel.lastDataUpdate, style: .time)")
+                    //                    .font(.caption2)
+                    //                    .foregroundStyle(.tertiary)
+                    //                    .padding(.leading, 16)
+                }
+                .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                //            .background {
+                //                if #available(iOS 26.0, *) {
+                //                    ConcentricRectangle(corners: .concentric(minimum: 20))
+                //                        .fill(Color(.secondarySystemBackground))
+                //                    //                        .fill(
+                //                    //                            LinearGradient(
+                //                    //                                colors: [
+                //                    //                                    Color(.tertiarySystemBackground),
+                //                    //                                    Color(.secondarySystemBackground)
+                //                    //                                ],
+                //                    //                                startPoint: .bottom,
+                //                    //                                endPoint: .top
+                //                    //                            )
+                //                    //                        )
+                //                    //                        .overlay(
+                //                    //                            ConcentricRectangle(corners: .concentric(minimum: 20))
+                //                    //                                .fill(
+                //                    //                                    LinearGradient(
+                //                    //                                        colors: [
+                //                    //                                            Color.traxeGold.opacity(0.08),
+                //                    //                                            Color.clear
+                //                    //                                        ],
+                //                    //                                        startPoint: .bottom,
+                //                    //                                        endPoint: .top
+                //                    //                                    )
+                //                    //                                )
+                //                    //                        )
+                //                } else {
+                //                    RoundedRectangle(cornerRadius: 20)
+                //                        .fill(Color(.secondarySystemBackground))
+                //                    //                        .fill(
+                //                    //                            LinearGradient(
+                //                    //                                colors: [
+                //                    //                                    Color(.tertiarySystemBackground),
+                //                    //                                    Color(.secondarySystemBackground)
+                //                    //                                ],
+                //                    //                                startPoint: .bottom,
+                //                    //                                endPoint: .top
+                //                    //                            )
+                //                    //                        )
+                //                    //                        .overlay(
+                //                    //                            RoundedRectangle(cornerRadius: 20)
+                //                    //                                .fill(
+                //                    //                                    LinearGradient(
+                //                    //                                        colors: [
+                //                    //                                            Color.traxeGold.opacity(0.08),
+                //                    //                                            Color.clear
+                //                    //                                        ],
+                //                    //                                        startPoint: .bottom,
+                //                    //                                        endPoint: .top
+                //                    //                                    )
+                //                    //                                )
+                //                    //                        )
+                //                }
+                //            }
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(Color.primary.opacity(0.1), lineWidth: 0.5)
+                )
+            }
+
+            VStack(alignment: .leading, spacing: 16) {
+                if AIFeatureFlags.isAvailable,
+                    AIFeatureFlags.isEnabledByUser,
+                    viewModel.savedDevices.count > 1
+                {
                     Text("Summary")
                         .font(.title2)
                         .fontWeight(.semibold)
@@ -35,91 +118,14 @@ struct AggregatedStatsHeader: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .padding(.bottom, 50)
-            }
 
-            Text("Total Hash Rate")
-                .font(.title2)
-                .fontWeight(.semibold)
-                .padding(.bottom, 16)
-
-            VStack(alignment: .leading, spacing: 8) {
-                // Keep the UI calm during refresh: no inline spinner here.
-                StatItem(
-                    label: "Hash Rate",
-                    value: viewModel.totalHashRate,
-                    unit: "TH/s",
-                    isLoading: false,
-                    name: "bolt.fill"
+                FleetHealthCardView(
+                    snapshot: viewModel.fleetHealthSnapshot,
+                    isLoading: viewModel.isFleetHealthLoading
                 )
 
-                //                Text("Updated: \(viewModel.lastDataUpdate, style: .time)")
-                //                    .font(.caption2)
-                //                    .foregroundStyle(.tertiary)
-                //                    .padding(.leading, 16)
+                WeeklyRecapNavigationTile(viewData: .fleet, action: showFleetWeeklyRecap)
             }
-            .padding()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            //            .background {
-            //                if #available(iOS 26.0, *) {
-            //                    ConcentricRectangle(corners: .concentric(minimum: 20))
-            //                        .fill(Color(.secondarySystemBackground))
-            //                    //                        .fill(
-            //                    //                            LinearGradient(
-            //                    //                                colors: [
-            //                    //                                    Color(.tertiarySystemBackground),
-            //                    //                                    Color(.secondarySystemBackground)
-            //                    //                                ],
-            //                    //                                startPoint: .bottom,
-            //                    //                                endPoint: .top
-            //                    //                            )
-            //                    //                        )
-            //                    //                        .overlay(
-            //                    //                            ConcentricRectangle(corners: .concentric(minimum: 20))
-            //                    //                                .fill(
-            //                    //                                    LinearGradient(
-            //                    //                                        colors: [
-            //                    //                                            Color.traxeGold.opacity(0.08),
-            //                    //                                            Color.clear
-            //                    //                                        ],
-            //                    //                                        startPoint: .bottom,
-            //                    //                                        endPoint: .top
-            //                    //                                    )
-            //                    //                                )
-            //                    //                        )
-            //                } else {
-            //                    RoundedRectangle(cornerRadius: 20)
-            //                        .fill(Color(.secondarySystemBackground))
-            //                    //                        .fill(
-            //                    //                            LinearGradient(
-            //                    //                                colors: [
-            //                    //                                    Color(.tertiarySystemBackground),
-            //                    //                                    Color(.secondarySystemBackground)
-            //                    //                                ],
-            //                    //                                startPoint: .bottom,
-            //                    //                                endPoint: .top
-            //                    //                            )
-            //                    //                        )
-            //                    //                        .overlay(
-            //                    //                            RoundedRectangle(cornerRadius: 20)
-            //                    //                                .fill(
-            //                    //                                    LinearGradient(
-            //                    //                                        colors: [
-            //                    //                                            Color.traxeGold.opacity(0.08),
-            //                    //                                            Color.clear
-            //                    //                                        ],
-            //                    //                                        startPoint: .bottom,
-            //                    //                                        endPoint: .top
-            //                    //                                    )
-            //                    //                                )
-            //                    //                        )
-            //                }
-            //            }
-            .overlay(
-                RoundedRectangle(cornerRadius: 20)
-                    .stroke(Color.primary.opacity(0.1), lineWidth: 0.5)
-            )
-
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
@@ -251,9 +257,125 @@ struct AggregatedStatsHeader: View {
     viewModel.totalHashRate = 7.35
     viewModel.isLoadingAggregatedStats = false
 
-    return AggregatedStatsHeader(viewModel: viewModel)
+    return aggregatedStatsHeaderPreviewContent(viewModel: viewModel)
+}
+
+#Preview("Aggregated Stats - Loading Status") {
+    aggregatedStatsHeaderPreviewContent(
+        viewModel: makeAggregatedStatsHeaderPreviewViewModel(
+            onlineCount: 5,
+            offlineCount: 2,
+            isLoadingStatus: true
+        )
+    )
+}
+
+#Preview("Aggregated Stats - Five Online Two Offline") {
+    aggregatedStatsHeaderPreviewContent(
+        viewModel: makeAggregatedStatsHeaderPreviewViewModel(
+            onlineCount: 5,
+            offlineCount: 2,
+            isLoadingStatus: false
+        )
+    )
+}
+
+#Preview("Aggregated Stats - Four Online Three Offline") {
+    aggregatedStatsHeaderPreviewContent(
+        viewModel: makeAggregatedStatsHeaderPreviewViewModel(
+            onlineCount: 4,
+            offlineCount: 3,
+            isLoadingStatus: false
+        )
+    )
+}
+
+private func aggregatedStatsHeaderPreviewContent(viewModel: DeviceListViewModel) -> some View {
+    ScrollView {
+        DeviceGridSectionView(
+            viewModel: viewModel,
+            subscriptionAccessPolicy: PreviewFixtures.sampleSubscriptionAccessPolicy,
+            showFleetWeeklyRecap: {},
+            handleSelection: { _, _ in }
+        )
+    }
 }
 
 private func makeAggregatedStatsPreviewDefaults() -> UserDefaults {
     UserDefaults(suiteName: "preview.aggregated") ?? .standard
+}
+
+@MainActor
+private func makeAggregatedStatsHeaderPreviewViewModel(
+    onlineCount: Int,
+    offlineCount: Int,
+    isLoadingStatus: Bool
+) -> DeviceListViewModel {
+    UserDefaults.standard.set(true, forKey: "ai_enabled")
+
+    let totalDeviceCount = onlineCount + offlineCount
+    let devices = (1...totalDeviceCount).map { index in
+        SavedDevice(
+            name: "Preview Miner \(index)",
+            ipAddress: "192.168.5.\(index)"
+        )
+    }
+    let metricsByIP = Dictionary(
+        uniqueKeysWithValues: devices.enumerated().map { offset, device in
+            (
+                device.ipAddress,
+                DeviceMetrics(
+                    hashrate: 2_200,
+                    temperature: offset.isMultiple(of: 2) ? 45 : 60,
+                    power: 48,
+                    bestDifficulty: 1.2,
+                    poolURL: "preview.pool",
+                    hostname: device.name
+                )
+            )
+        }
+    )
+    let defaults = makeAggregatedStatsPreviewDefaults()
+    defaults.removePersistentDomain(forName: "preview.aggregated")
+    let viewModel = DeviceListViewModel(
+        defaults: defaults,
+        dependencies: .init(
+            deviceManagement: .init(
+                checkDevice: { ip in
+                    let metrics = metricsByIP[ip] ?? .placeholder
+                    return DiscoveredDevice(
+                        ip: ip,
+                        name: metrics.hostname ?? "Preview Miner",
+                        hashrate: metrics.hashrate,
+                        temperature: metrics.temperature,
+                        bestDiff: "\(metrics.bestDifficulty)",
+                        power: metrics.power,
+                        poolURL: metrics.poolURL,
+                        blockHeight: metrics.blockHeight,
+                        networkDifficulty: metrics.networkDifficulty
+                    )
+                },
+                deleteDevice: { _ in },
+                reorderDevices: { _ in }
+            ),
+            reloadWidget: {},
+            autoRefreshOnLoad: false
+        )
+    )
+
+    viewModel.savedDevices = devices
+    viewModel.deviceMetrics = metricsByIP
+    viewModel.reachableIPs = Set(devices.prefix(onlineCount).map(\.ipAddress))
+    viewModel.totalHashRate = metricsByIP.values.reduce(0) { $0 + $1.hashrate }
+    viewModel.totalPower = metricsByIP.values.reduce(0) { $0 + $1.power }
+    viewModel.bestOverallDiff = metricsByIP.values.map(\.bestDifficulty).max() ?? 0
+    viewModel.fleetAISummary = AISummaryFormatter.fleetSummary(from: Array(metricsByIP.values))
+
+    #if DEBUG
+        if !isLoadingStatus {
+            viewModel.markAggregatedStatsRefreshCompletedForPreview()
+        }
+    #endif
+
+    return viewModel
 }
