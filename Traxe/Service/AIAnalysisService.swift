@@ -157,6 +157,9 @@ actor AIAnalysisService {
         let temperature = systemInfo.temp ?? 0
         let power = systemInfo.power ?? 0
         let fanSpeedPercent = systemInfo.fanspeed ?? 0
+        let miningLuckSentence = MiningLuckPresenter.makeSummarySentence(
+            from: DeviceMetrics(from: systemInfo)
+        )
 
         let hashRateFormatted = hashRate.formattedHashRateWithUnit()
         var summary: String
@@ -210,7 +213,12 @@ actor AIAnalysisService {
                     )
                     lastGenerationFailed = false
                     lastErrorMessage = nil
-                    return AISummary(content: variation)
+                    return AISummary(
+                        content: appendingMiningLuckSentence(
+                            miningLuckSentence,
+                            to: variation
+                        )
+                    )
                 } catch {
                     lastGenerationFailed = true
                     lastErrorMessage = "Generation failed"
@@ -219,7 +227,35 @@ actor AIAnalysisService {
             }
         #endif
 
-        return AISummary(content: summary)
+        return AISummary(
+            content: appendingMiningLuckSentence(
+                miningLuckSentence,
+                to: summary
+            )
+        )
+    }
+
+    private func appendingMiningLuckSentence(_ luckSentence: String?, to summary: String) -> String {
+        guard let luckSentence else {
+            return summary
+        }
+
+        let trimmedSummary = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedSummary.isEmpty else {
+            return luckSentence
+        }
+
+        let separator: String
+        if trimmedSummary.hasSuffix(".")
+            || trimmedSummary.hasSuffix("!")
+            || trimmedSummary.hasSuffix("?")
+        {
+            separator = " "
+        } else {
+            separator = ". "
+        }
+
+        return "\(trimmedSummary)\(separator)\(luckSentence)"
     }
 
     private func analyzeHistoricalTrend(

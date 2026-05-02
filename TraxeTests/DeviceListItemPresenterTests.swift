@@ -19,6 +19,8 @@ final class DeviceListItemPresenterTests: XCTestCase {
         XCTAssertEqual(viewData.hashrateValueText, "1.3")
         XCTAssertEqual(viewData.hashrateUnitText, "TH/s")
         XCTAssertEqual(viewData.summaryHashrateText, "1.3 TH/s")
+        XCTAssertNil(viewData.bestDifficultyRankText)
+        XCTAssertFalse(viewData.showsBestDifficultyMetric)
         XCTAssertFalse(viewData.showsPlaceholderHashrate)
         XCTAssertTrue(viewData.isReachable)
         XCTAssertTrue(viewData.isAccessible)
@@ -77,6 +79,26 @@ final class DeviceListItemPresenterTests: XCTestCase {
         )
 
         XCTAssertTrue(viewData.isReachable)
+    }
+
+    func testMakeViewDataShowsBestDifficultyContextWhenSortedByBestDifficulty() {
+        let viewData = DeviceListItemPresenter.makeViewData(
+            device: SavedDevice(name: "Ranked Miner", ipAddress: "192.168.1.14"),
+            metrics: DeviceMetrics(hashrate: 1_250, bestDifficulty: 4_070),
+            index: 0,
+            reachableIPs: ["192.168.1.14"],
+            isLoadingAggregatedStats: false,
+            subscriptionAccessPolicy: SubscriptionAccessPolicy.accommodatingFallback,
+            bestDifficultyRank: 1,
+            sortOption: .scoreboard,
+            isPreview: false
+        )
+
+        XCTAssertEqual(viewData.bestDifficultyRankText, "#1")
+        XCTAssertTrue(viewData.bestDifficultyRankIsHighlighted)
+        XCTAssertTrue(viewData.showsBestDifficultyMetric)
+        XCTAssertEqual(viewData.bestDifficultyValueText, "4.07")
+        XCTAssertEqual(viewData.bestDifficultyUnitText, "G")
     }
 
     private func makeLoadedFreePolicy() -> SubscriptionAccessPolicy {

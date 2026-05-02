@@ -78,16 +78,22 @@ public enum WhatsNewConfig {
         message: "Version \(currentVersion())",  // "New features in Traxe",
         highlights: [
             WhatsNewHighlight(
-                badgeTint: .green,
-                iconSystemName: "chart.bar.yaxis",
-                title: "Fleet Status Bar",
-                detail: "A quick visual breakdown of every miner’s status."
+                badgeTint: .blue,
+                iconSystemName: "arrow.up.arrow.down",
+                title: "Miner Sorting",
+                detail: "Sort miners by custom order, scoreboard, or hashrate."
             ),
             WhatsNewHighlight(
-                badgeTint: .orange,
-                iconSystemName: "circle.grid.2x2",
-                title: "Hashrate Registers",
-                detail: "Spot weak ASIC domains on each device."
+                badgeTint: .yellow,
+                iconSystemName: "trophy.fill",
+                title: "Best Difficulty Scoreboard",
+                detail: "Scoreboard mode sorts by best difficulty and shows each miner's best difficulty hit."
+            ),
+            WhatsNewHighlight(
+                badgeTint: .purple,
+                iconSystemName: "dice.fill",
+                title: "Solo Block Odds",
+                detail: "Miner summaries include solo block odds when firmware reports network difficulty."
             ),
         ]
     )

@@ -115,7 +115,9 @@ enum PreviewFixtures {
             index: 0,
             reachableIPs: sampleReachableIPs,
             isLoadingAggregatedStats: false,
-            subscriptionAccessPolicy: sampleSubscriptionAccessPolicy
+            subscriptionAccessPolicy: sampleSubscriptionAccessPolicy,
+            bestDifficultyRank: 1,
+            sortOption: .scoreboard
         )
     }
 
@@ -126,7 +128,9 @@ enum PreviewFixtures {
             index: 2,
             reachableIPs: sampleReachableIPs,
             isLoadingAggregatedStats: false,
-            subscriptionAccessPolicy: sampleLockedSubscriptionAccessPolicy
+            subscriptionAccessPolicy: sampleLockedSubscriptionAccessPolicy,
+            bestDifficultyRank: 3,
+            sortOption: .scoreboard
         )
     }
 

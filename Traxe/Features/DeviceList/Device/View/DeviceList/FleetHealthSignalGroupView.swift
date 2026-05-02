@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct FleetHealthSignalGroupView: View {
-    let title: String
+    let title: String?
     let segments: [FleetHealthSignalSegment]
     let barTotal: Int
 
@@ -16,9 +16,11 @@ struct FleetHealthSignalGroupView: View {
     var body: some View {
         if !visibleSegments.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
-                Text(title)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                if let title {
+                    Text(title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
 
                 FleetHealthStatusBarView(total: barTotal, segments: visibleSegments)
 

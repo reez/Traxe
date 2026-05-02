@@ -8,6 +8,11 @@ struct DeviceListItemViewData: Identifiable, Equatable {
     let hashrateValueText: String
     let hashrateUnitText: String
     let summaryHashrateText: String?
+    let bestDifficultyRankText: String?
+    let bestDifficultyRankIsHighlighted: Bool
+    let showsBestDifficultyMetric: Bool
+    let bestDifficultyValueText: String?
+    let bestDifficultyUnitText: String?
     let showsPlaceholderHashrate: Bool
     let isReachable: Bool
     let isAccessible: Bool

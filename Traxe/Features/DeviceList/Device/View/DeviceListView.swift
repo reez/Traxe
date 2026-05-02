@@ -152,6 +152,7 @@ struct DeviceListView: View {
             if viewModel.isEditMode {
                 DeviceEditModeOverlayView(
                     viewModel: viewModel,
+                    sortOption: viewModel.deviceGridSortOption,
                     subscriptionAccessPolicy: subscriptionAccessPolicy
                 )
             }
@@ -256,7 +257,13 @@ struct DeviceListView: View {
                     dashboardViewModel: dashboardViewModel,
                     deviceName: viewModel.deviceMetrics[device.ipAddress]?.hostname ?? device.name,
                     deviceIP: device.ipAddress,
-                    poolName: viewModel.deviceMetrics[device.ipAddress]?.poolURL
+                    poolName: viewModel.deviceMetrics[device.ipAddress]?.poolURL,
+                    onMinerDeleted: { deletedIPAddress in
+                        viewModel.deleteDevices(withIPAddresses: Set([deletedIPAddress]))
+                        if selectedDevice?.ipAddress == deletedIPAddress {
+                            selectedDevice = nil
+                        }
+                    }
                 )
             } else {
                 Text("Error: No miner selected")
@@ -361,16 +368,40 @@ struct DeviceListView: View {
     // Seed cached device metrics so cards and totals are populated (hashrate in GH/s)
     let cached: [String: CachedDeviceMetrics] = [
         "192.168.1.101": CachedDeviceMetrics(
-            from: DeviceMetrics(hashrate: 5100, temperature: 61, power: 600, hostname: "nerdqaxe++")
+            from: DeviceMetrics(
+                hashrate: 5100,
+                temperature: 61,
+                power: 600,
+                bestDifficulty: 4_070,
+                hostname: "nerdqaxe++"
+            )
         ),
         "192.168.1.102": CachedDeviceMetrics(
-            from: DeviceMetrics(hashrate: 721, temperature: 65, power: 620, hostname: "bitaxe")
+            from: DeviceMetrics(
+                hashrate: 721,
+                temperature: 65,
+                power: 620,
+                bestDifficulty: 598.7,
+                hostname: "bitaxe"
+            )
         ),
         "192.168.1.103": CachedDeviceMetrics(
-            from: DeviceMetrics(hashrate: 450, temperature: 68, power: 610, hostname: "octaxe")
+            from: DeviceMetrics(
+                hashrate: 450,
+                temperature: 68,
+                power: 610,
+                bestDifficulty: 412.2,
+                hostname: "octaxe"
+            )
         ),
         "192.168.1.104": CachedDeviceMetrics(
-            from: DeviceMetrics(hashrate: 3800, temperature: 72, power: 620, hostname: "lucky")
+            from: DeviceMetrics(
+                hashrate: 3800,
+                temperature: 72,
+                power: 620,
+                bestDifficulty: 1_200,
+                hostname: "lucky"
+            )
         ),
     ]
     let cacheEncoder = JSONEncoder()

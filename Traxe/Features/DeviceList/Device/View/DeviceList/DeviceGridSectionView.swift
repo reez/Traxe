@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct DeviceGridSectionView: View {
-    let viewModel: DeviceListViewModel
+    @Bindable var viewModel: DeviceListViewModel
     let subscriptionAccessPolicy: SubscriptionAccessPolicy
     let showFleetWeeklyRecap: () -> Void
     let handleSelection: (SavedDevice, Bool) -> Void
@@ -26,21 +26,27 @@ struct DeviceGridSectionView: View {
             }
 
             VStack(alignment: .leading, spacing: 16) {
-                Text("Miners")
-                    .font(.title2)
-                    .fontWeight(.semibold)
+                DeviceGridHeaderView(sortOption: $viewModel.deviceGridSortOption)
                     .padding(.horizontal)
 
+                let gridItems = DeviceGridPresenter.makeItems(
+                    devices: viewModel.savedDevices,
+                    metricsByIP: viewModel.deviceMetrics,
+                    sortOption: viewModel.deviceGridSortOption
+                )
+
                 LazyVGrid(columns: columns, spacing: 12) {
-                    ForEach(viewModel.savedDevices.indices, id: \.self) { index in
-                        let device = viewModel.savedDevices[index]
+                    ForEach(gridItems) { item in
+                        let device = item.device
                         let viewData = DeviceListItemPresenter.makeViewData(
                             device: device,
                             metrics: viewModel.deviceMetrics[device.ipAddress],
-                            index: index,
+                            index: item.savedDeviceIndex,
                             reachableIPs: viewModel.reachableIPs,
                             isLoadingAggregatedStats: viewModel.isLoadingAggregatedStats,
-                            subscriptionAccessPolicy: subscriptionAccessPolicy
+                            subscriptionAccessPolicy: subscriptionAccessPolicy,
+                            bestDifficultyRank: item.bestDifficultyRank,
+                            sortOption: viewModel.deviceGridSortOption
                         )
 
                         DeviceGridCardView(viewData: viewData) {

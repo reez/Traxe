@@ -31,11 +31,19 @@ final class SettingsViewModel {
     var hostname: String = ""
     var isUpdatingHostname: Bool = false
     var hostnameConfigurationError: String? = nil
+    var deleteMinerErrorMessage: String? = nil
+
+    var canDeleteCurrentMiner: Bool {
+        !deleteMinerIPAddress.isEmpty
+    }
 
     private let userDefaults: UserDefaults
     private let sharedUserDefaults: UserDefaults
     private let networkService: NetworkService
     private let modelContext: ModelContext
+    private let shouldFetchDeviceSettingsOnLoad: Bool
+    private let deleteDevice: (_ ipAddressToDelete: String) throws -> Void
+    private var selectedMinerIPAddress: String = ""
 
     static let sharedUserDefaultsSuiteName = "group.matthewramsden.traxe"
 
@@ -43,7 +51,12 @@ final class SettingsViewModel {
         userDefaults: UserDefaults = .standard,
         sharedUserDefaults: UserDefaults? = nil,
         networkService: NetworkService = NetworkService(),
-        modelContext: ModelContext
+        modelContext: ModelContext,
+        shouldFetchDeviceSettingsOnLoad: Bool = true,
+        deleteDevice: @escaping (_ ipAddressToDelete: String) throws -> Void = {
+            ipAddressToDelete in
+            try DeviceManagementService.deleteDevice(ipAddressToDelete: ipAddressToDelete)
+        }
     ) {
         self.userDefaults = userDefaults
         if let providedSharedUserDefaults = sharedUserDefaults {
@@ -54,11 +67,15 @@ final class SettingsViewModel {
         }
         self.networkService = networkService
         self.modelContext = modelContext
+        self.shouldFetchDeviceSettingsOnLoad = shouldFetchDeviceSettingsOnLoad
+        self.deleteDevice = deleteDevice
         loadSettings()
     }
 
     func loadSettings() {
-        bitaxeIPAddress = sharedUserDefaults.string(forKey: "bitaxeIPAddress") ?? ""
+        let storedIPAddress = sharedUserDefaults.string(forKey: "bitaxeIPAddress") ?? ""
+        bitaxeIPAddress = storedIPAddress
+        selectedMinerIPAddress = storedIPAddress
 
         tempAlertThreshold = userDefaults.double(forKey: "tempAlertThreshold")
         if tempAlertThreshold == 0 { tempAlertThreshold = 85.0 }
@@ -66,8 +83,10 @@ final class SettingsViewModel {
         hashrateAlertThreshold = userDefaults.double(forKey: "hashrateAlertThreshold")
         if hashrateAlertThreshold == 0 { hashrateAlertThreshold = 400.0 }
 
-        Task {
-            await fetchDeviceSettings()
+        if shouldFetchDeviceSettingsOnLoad {
+            Task {
+                await fetchDeviceSettings()
+            }
         }
     }
 
@@ -78,11 +97,34 @@ final class SettingsViewModel {
         }
 
         sharedUserDefaults.set(trimmedIP, forKey: "bitaxeIPAddress")
+        selectedMinerIPAddress = trimmedIP
 
         userDefaults.set(tempAlertThreshold, forKey: "tempAlertThreshold")
         userDefaults.set(hashrateAlertThreshold, forKey: "hashrateAlertThreshold")
 
         WidgetCenter.shared.reloadTimelines(ofKind: "TraxeWidget")
+    }
+
+    func deleteCurrentMiner() -> String? {
+        let ipAddressToDelete = deleteMinerIPAddress
+        guard !ipAddressToDelete.isEmpty else {
+            deleteMinerErrorMessage = "No miner is selected."
+            return nil
+        }
+
+        do {
+            try deleteDevice(ipAddressToDelete)
+            sharedUserDefaults.removeObject(forKey: "bitaxeIPAddress")
+            bitaxeIPAddress = ""
+            selectedMinerIPAddress = ""
+            currentVersion = "Unknown"
+            isConnected = false
+            deleteMinerErrorMessage = nil
+            return ipAddressToDelete
+        } catch {
+            deleteMinerErrorMessage = "Failed to delete miner: \(error.localizedDescription)"
+            return nil
+        }
     }
 
     func restartDevice() async {
@@ -236,6 +278,18 @@ final class SettingsViewModel {
         }
         isUpdatingHostname = false
         return success
+    }
+
+    private var trimmedMinerIPAddress: String {
+        bitaxeIPAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var deleteMinerIPAddress: String {
+        let trimmedSelectedIPAddress = selectedMinerIPAddress.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard trimmedSelectedIPAddress.isEmpty else { return trimmedSelectedIPAddress }
+        return trimmedMinerIPAddress
     }
 
 }

@@ -1,6 +1,6 @@
 import Foundation
 
-struct FleetHealthSnapshot: Equatable {
+struct FleetHealthSnapshot: Codable, Equatable {
     var totalMiners: Int
     var online: Int
     var paused: Int
