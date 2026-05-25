@@ -121,7 +121,8 @@ struct AggregatedStatsHeader: View {
 
                 FleetHealthCardView(
                     snapshot: viewModel.fleetHealthSnapshot,
-                    isLoading: viewModel.isFleetHealthLoading
+                    isLoading: viewModel.isFleetHealthLoading,
+                    isRefreshing: viewModel.isFleetHealthRefreshing
                 )
 
                 WeeklyRecapNavigationTile(viewData: .fleet, action: showFleetWeeklyRecap)

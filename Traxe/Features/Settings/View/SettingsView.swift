@@ -11,9 +11,12 @@ import SwiftUI
 struct SettingsView: View {
     @Bindable var viewModel: SettingsViewModel
     @State private var showingRestartConfirmation = false
+    @State private var showingDeleteConfirmation = false
+    @State private var showingDeleteFailure = false
     @State private var isAIEnabled = UserDefaults.standard.bool(forKey: "ai_enabled")
     @State private var showingPaywallSheet = false
     @State private var customerInfo: CustomerInfo? = nil
+    private let onMinerDeleted: (String) -> Void
 
     @Environment(\.dismiss) var dismiss
     @Environment(\.requestReview) var requestReview
@@ -42,6 +45,14 @@ struct SettingsView: View {
             return .activePlan("Traxe Pro (One-Time, 5 Miners)")
         }
         return .upgrade
+    }
+
+    init(
+        viewModel: SettingsViewModel,
+        onMinerDeleted: @escaping (String) -> Void = { _ in }
+    ) {
+        self.viewModel = viewModel
+        self.onMinerDeleted = onMinerDeleted
     }
 
     var body: some View {
@@ -88,7 +99,11 @@ struct SettingsView: View {
                         }
                     }
 
-                    DangerZoneSection(onRestart: { showingRestartConfirmation = true })
+                    DangerZoneSection(
+                        onRestart: { showingRestartConfirmation = true },
+                        onDelete: { showingDeleteConfirmation = true },
+                        canDeleteMiner: viewModel.canDeleteCurrentMiner
+                    )
 
                     if #available(iOS 18.0, macOS 15.0, *) {
                         Section {
@@ -232,6 +247,26 @@ struct SettingsView: View {
                     Text(
                         "Are you sure you want to restart the miner? This will temporarily stop mining operations."
                     )
+                }
+                .alert("Delete Miner", isPresented: $showingDeleteConfirmation) {
+                    Button("Cancel", role: .cancel) {}
+                    Button("Delete", role: .destructive) {
+                        if let deletedIPAddress = viewModel.deleteCurrentMiner() {
+                            dismiss()
+                            onMinerDeleted(deletedIPAddress)
+                        } else {
+                            showingDeleteFailure = true
+                        }
+                    }
+                } message: {
+                    Text(
+                        "This removes the miner from Traxe. The miner hardware and pool settings are not changed."
+                    )
+                }
+                .alert("Delete Miner Failed", isPresented: $showingDeleteFailure) {
+                    Button("OK") {}
+                } message: {
+                    Text(viewModel.deleteMinerErrorMessage ?? "Traxe could not delete this miner.")
                 }
                 .sheet(isPresented: $showingPaywallSheet) {
                     PaywallView()

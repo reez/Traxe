@@ -27,10 +27,6 @@ struct DeviceEditModeRowView: View {
             }
 
             Spacer()
-
-            Image(systemName: "line.3.horizontal")
-                .foregroundStyle(.secondary)
-                .font(.title2)
         }
         .padding(.vertical, 8)
     }

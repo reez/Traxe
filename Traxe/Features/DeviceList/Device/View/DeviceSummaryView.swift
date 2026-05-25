@@ -5,6 +5,7 @@ import SwiftUI
 
 struct DeviceSummaryView: View {
     let dashboardViewModel: DashboardViewModel
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @State private var showingSettings = false
     @State private var showingWeeklyRecap = false
@@ -13,9 +14,24 @@ struct DeviceSummaryView: View {
     let deviceName: String
     let deviceIP: String
     let poolName: String?
+    let onMinerDeleted: (String) -> Void
 
     @State private var deviceAISummary: AISummary?
     @State private var isGeneratingDeviceSummary = false
+
+    init(
+        dashboardViewModel: DashboardViewModel,
+        deviceName: String,
+        deviceIP: String,
+        poolName: String?,
+        onMinerDeleted: @escaping (String) -> Void = { _ in }
+    ) {
+        self.dashboardViewModel = dashboardViewModel
+        self.deviceName = deviceName
+        self.deviceIP = deviceIP
+        self.poolName = poolName
+        self.onMinerDeleted = onMinerDeleted
+    }
 
     private var displayPoolName: String? { dashboardViewModel.currentMetrics.poolURL ?? poolName }
     private var poolRows: [PoolDisplayLineViewData] {
@@ -62,7 +78,7 @@ struct DeviceSummaryView: View {
                                             )
                                             let content =
                                                 seeded
-                                                ?? "Hashrate steady around 2.5 TH/s; temps mid‑60s °C; power ~620W."
+                                                ?? "Hashrate steady around 2.5 TH/s; temps mid‑60s °C; power ~620W. This miner's solo odds to hit a block are 1 in 5.7M today (15.7K yr expected)."
                                             deviceAISummary = AISummary(content: content)
                                         } else {
                                             generateDeviceAISummary()
@@ -139,7 +155,10 @@ struct DeviceSummaryView: View {
                 sharedUserDefaults: sharedDefaults,
                 modelContext: modelContext
             )
-            SettingsView(viewModel: settingsViewModel)
+            SettingsView(
+                viewModel: settingsViewModel,
+                onMinerDeleted: handleMinerDeleted
+            )
         }
         .onAppear {
             lastBlockFoundValue = dashboardViewModel.currentMetrics.blockFound
@@ -217,6 +236,12 @@ struct DeviceSummaryView: View {
             }
         }
     }
+
+    private func handleMinerDeleted(_ deletedIPAddress: String) {
+        dashboardViewModel.disconnect()
+        onMinerDeleted(deletedIPAddress)
+        dismiss()
+    }
 }
 
 extension View {
@@ -240,7 +265,7 @@ extension View {
     groupDefaults.set("192.168.1.102", forKey: "bitaxeIPAddress")
     UserDefaults.standard.set(true, forKey: "ai_enabled")
     UserDefaults.standard.set(
-        "Over the last 24 hours the miner has averaged 721.0 GH/s",
+        "Over the last 24 hours the miner has averaged 721.0 GH/s. This miner's solo odds to hit a block are 1 in 5.7M today (15.7K yr expected).",
         forKey: "preview_device_summary"
     )
 
@@ -316,7 +341,7 @@ extension View {
     groupDefaults.set("192.168.1.102", forKey: "bitaxeIPAddress")
     UserDefaults.standard.set(true, forKey: "ai_enabled")
     UserDefaults.standard.set(
-        "Over the last 24 hours the miner has averaged 721.0 GH/s",
+        "Over the last 24 hours the miner has averaged 721.0 GH/s. This miner's solo odds to hit a block are 1 in 5.7M today (15.7K yr expected).",
         forKey: "preview_device_summary"
     )
 

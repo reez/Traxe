@@ -8,6 +8,8 @@ enum DeviceListItemPresenter {
         reachableIPs: Set<String>,
         isLoadingAggregatedStats: Bool,
         subscriptionAccessPolicy: SubscriptionAccessPolicy,
+        bestDifficultyRank: Int? = nil,
+        sortOption: DeviceGridSortOption = .savedOrder,
         isPreview: Bool = ProcessInfo.isPreview
     ) -> DeviceListItemViewData {
         let hashrate = metrics?.hashrate ?? 0
@@ -15,6 +17,13 @@ enum DeviceListItemPresenter {
         let displayUnit = hashrate >= 1000 ? "TH/s" : "GH/s"
         let formattedValue = displayValue.formatted(.number.precision(.fractionLength(1)))
         let hasMetrics = metrics != nil
+        let bestDifficulty = metrics?.bestDifficulty ?? 0
+        let showsBestDifficultyMetric =
+            sortOption == .scoreboard
+            && hasMetrics
+            && bestDifficulty.isFinite
+            && bestDifficulty > 0
+        let formattedBestDifficulty = bestDifficulty.formattedDifficulty()
         let isAccessible = subscriptionAccessPolicy.isDeviceAccessible(at: index)
         let isReachable =
             isLoadingAggregatedStats
@@ -29,6 +38,11 @@ enum DeviceListItemPresenter {
             hashrateValueText: hasMetrics ? formattedValue : "---",
             hashrateUnitText: displayUnit,
             summaryHashrateText: hasMetrics ? "\(formattedValue) \(displayUnit)" : nil,
+            bestDifficultyRankText: bestDifficultyRank.map { "#\($0)" },
+            bestDifficultyRankIsHighlighted: bestDifficultyRank == 1,
+            showsBestDifficultyMetric: showsBestDifficultyMetric,
+            bestDifficultyValueText: showsBestDifficultyMetric ? formattedBestDifficulty.value : nil,
+            bestDifficultyUnitText: showsBestDifficultyMetric ? formattedBestDifficulty.unit : nil,
             showsPlaceholderHashrate: !hasMetrics,
             isReachable: isReachable,
             isAccessible: isAccessible,

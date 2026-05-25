@@ -3,6 +3,17 @@ import SwiftUI
 struct FleetHealthCardView: View {
     let snapshot: FleetHealthSnapshot
     let isLoading: Bool
+    let isRefreshing: Bool
+
+    init(
+        snapshot: FleetHealthSnapshot,
+        isLoading: Bool,
+        isRefreshing: Bool = false
+    ) {
+        self.snapshot = snapshot
+        self.isLoading = isLoading
+        self.isRefreshing = isRefreshing
+    }
 
     private var stateSegments: [FleetHealthSignalSegment] {
         [
@@ -56,10 +67,10 @@ struct FleetHealthCardView: View {
 
     private var accessibilityLabelText: String {
         if isLoading {
-            return "Fleet Health. Loading miner status."
+            return "Fleet Health. Loading miners."
         }
 
-        var parts = ["Fleet Health."]
+        var parts = [isRefreshing ? "Fleet Health. Last known status." : "Fleet Health."]
         let statusSignals = [
             accessibilitySignal(count: snapshot.online, label: "online"),
             accessibilitySignal(count: snapshot.paused, label: "paused"),
@@ -100,7 +111,7 @@ struct FleetHealthCardView: View {
             } else {
                 VStack(alignment: .leading, spacing: 16) {
                     FleetHealthSignalGroupView(
-                        title: "Status",
+                        title: nil,
                         segments: stateSegments,
                         barTotal: snapshot.totalMiners
                     )
@@ -110,10 +121,12 @@ struct FleetHealthCardView: View {
                         barTotal: alertSignalTotal
                     )
                 }
+                .opacity(isRefreshing ? 0.72 : 1)
                 .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
             }
         }
         .animation(.easeInOut(duration: 0.3), value: isLoading)
+        .animation(.easeInOut(duration: 0.3), value: isRefreshing)
         .animation(.easeInOut(duration: 0.3), value: snapshot)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
@@ -141,7 +154,7 @@ struct FleetHealthCardView: View {
         .padding()
 }
 
-#Preview("Fleet Health - Mixed Status") {
+#Preview("Fleet Health - Mixed States") {
     FleetHealthCardView(
         snapshot: fleetHealthPreviewSnapshot(online: 3, paused: 1, offline: 1, unknown: 1),
         isLoading: false

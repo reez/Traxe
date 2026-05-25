@@ -57,7 +57,16 @@ final class DeviceListViewModel {
     var lastDataUpdate: Date = Date()
     var reachableIPs: Set<String> = []
     var lastSeenWhatsNewVersion: String? = nil
+    var deviceGridSortOption: DeviceGridSortOption = .savedOrder {
+        didSet {
+            defaults.set(
+                deviceGridSortOption.rawValue,
+                forKey: StorageKeys.deviceGridSortOption
+            )
+        }
+    }
     private var hasCompletedAggregatedStatsRefresh = false
+    private var cachedFleetHealth: FleetHealthCacheEntry?
 
     private let dependencies: Dependencies
     private let defaults: UserDefaults
@@ -68,6 +77,8 @@ final class DeviceListViewModel {
 
     private enum StorageKeys {
         static let lastSeenWhatsNewVersion = "lastSeenWhatsNewVersion"
+        static let deviceGridSortOption = "deviceGridSortOption"
+        static let cachedFleetHealthSnapshot = "cachedFleetHealthSnapshotV1"
     }
 
     private enum Support {
@@ -86,6 +97,12 @@ final class DeviceListViewModel {
         let deviceCount: Int
     }
 
+    private struct FleetHealthCacheEntry: Codable {
+        let snapshot: FleetHealthSnapshot
+        let generatedAt: Date
+        let deviceIPAddresses: [String]
+    }
+
     init(
         defaults: UserDefaults = UserDefaults(suiteName: "group.matthewramsden.traxe") ?? .standard,
         dependencies: Dependencies = .live
@@ -98,7 +115,11 @@ final class DeviceListViewModel {
         self.lastSeenWhatsNewVersion = defaults.string(
             forKey: StorageKeys.lastSeenWhatsNewVersion
         )
+        self.deviceGridSortOption =
+            defaults.string(forKey: StorageKeys.deviceGridSortOption)
+            .flatMap(DeviceGridSortOption.init(rawValue:)) ?? .savedOrder
         loadDevices()
+        cachedFleetHealth = loadCachedFleetHealth()
         loadCacheAndComputeTotals()
         // If we couldn't build a summary from cached metrics (e.g., cache is empty),
         // fall back to the last persisted fleet summary so the section still has content.
@@ -114,6 +135,24 @@ final class DeviceListViewModel {
     }
 
     var fleetHealthSnapshot: FleetHealthSnapshot {
+        if isFleetHealthRefreshing, let snapshot = matchingCachedFleetHealthSnapshot {
+            return snapshot
+        }
+
+        return liveFleetHealthSnapshot
+    }
+
+    var isFleetHealthLoading: Bool {
+        !savedDevices.isEmpty && !hasCompletedAggregatedStatsRefresh
+            && matchingCachedFleetHealthSnapshot == nil
+    }
+
+    var isFleetHealthRefreshing: Bool {
+        !savedDevices.isEmpty && !hasCompletedAggregatedStatsRefresh
+            && matchingCachedFleetHealthSnapshot != nil
+    }
+
+    private var liveFleetHealthSnapshot: FleetHealthSnapshot {
         FleetHealthSnapshot.make(
             devices: savedDevices,
             metricsByIP: deviceMetrics,
@@ -122,8 +161,16 @@ final class DeviceListViewModel {
         )
     }
 
-    var isFleetHealthLoading: Bool {
-        !savedDevices.isEmpty && !hasCompletedAggregatedStatsRefresh
+    private var matchingCachedFleetHealthSnapshot: FleetHealthSnapshot? {
+        guard let cachedFleetHealth,
+            cachedFleetHealth.deviceIPAddresses == currentDeviceIPAddresses
+        else { return nil }
+
+        return cachedFleetHealth.snapshot
+    }
+
+    private var currentDeviceIPAddresses: [String] {
+        savedDevices.map(\.ipAddress).sorted()
     }
 
     func loadDevices() {
@@ -155,6 +202,7 @@ final class DeviceListViewModel {
         let currentIPAddresses = Set(savedDevices.map(\.ipAddress))
         if currentIPAddresses != previousIPAddresses {
             hasCompletedAggregatedStatsRefresh = false
+            cachedFleetHealth = loadCachedFleetHealth()
         }
     }
 
@@ -294,11 +342,19 @@ final class DeviceListViewModel {
 
     func deleteDevice(at offsets: IndexSet) {
         let devicesToDelete = offsets.map { savedDevices[$0] }
+        deleteDevices(devicesToDelete)
+    }
 
+    func deleteDevices(withIPAddresses ipAddresses: Set<String>) {
+        let devicesToDelete = savedDevices.filter { ipAddresses.contains($0.ipAddress) }
+        deleteDevices(devicesToDelete)
+    }
+
+    private func deleteDevices(_ devicesToDelete: [SavedDevice]) {
         for device in devicesToDelete {
             do {
                 try dependencies.deviceManagement.deleteDevice(device.ipAddress)
-                savedDevices.removeAll { $0.id == device.id }
+                savedDevices.removeAll { $0.ipAddress == device.ipAddress }
                 deviceMetrics.removeValue(forKey: device.ipAddress)
                 saveIPsAndReloadWidget()
             } catch {
@@ -423,6 +479,7 @@ final class DeviceListViewModel {
 
         isLoadingAggregatedStats = false
 
+        saveCachedFleetHealthSnapshot(liveFleetHealthSnapshot)
         // Save all current metrics to cache
         saveCacheFromCurrentMetrics()
         // No need to regenerate summary here; computeTotals() already keeps it in sync
@@ -443,6 +500,42 @@ final class DeviceListViewModel {
         #if os(iOS)
             WatchSyncManager.shared.updateCacheMetrics(cacheMetrics)
         #endif
+    }
+
+    private func loadCachedFleetHealth() -> FleetHealthCacheEntry? {
+        guard !savedDevices.isEmpty,
+            let data = defaults.data(forKey: StorageKeys.cachedFleetHealthSnapshot)
+        else { return nil }
+
+        do {
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let entry = try decoder.decode(FleetHealthCacheEntry.self, from: data)
+            guard entry.deviceIPAddresses == currentDeviceIPAddresses else { return nil }
+            return entry
+        } catch {
+            return nil
+        }
+    }
+
+    private func saveCachedFleetHealthSnapshot(_ snapshot: FleetHealthSnapshot) {
+        guard !savedDevices.isEmpty else { return }
+
+        let entry = FleetHealthCacheEntry(
+            snapshot: snapshot,
+            generatedAt: Date(),
+            deviceIPAddresses: currentDeviceIPAddresses
+        )
+
+        do {
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            let data = try encoder.encode(entry)
+            defaults.set(data, forKey: StorageKeys.cachedFleetHealthSnapshot)
+            cachedFleetHealth = entry
+        } catch {
+            // Best-effort cache; ignore errors
+        }
     }
 
     private func persistHistoricalSamples(_ samples: [(deviceId: String, metrics: DeviceMetrics)]) {
