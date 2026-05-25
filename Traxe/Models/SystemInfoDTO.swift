@@ -68,6 +68,12 @@ struct SystemInfoDTO: Codable {
     let fallbackStratumPort: Int?
     let _stratumUser: String?
     let fallbackStratumUser: String?
+    let stratumProtocol: String?
+    let fallbackStratumProtocol: String?
+    let stratumV2ChannelType: String?
+    let fallbackStratumV2ChannelType: String?
+    let stratumV2AuthorityPubkey: String?
+    let fallbackStratumV2AuthorityPubkey: String?
 
     let _version: String?
     let idfVersion: String?
@@ -122,6 +128,9 @@ struct SystemInfoDTO: Codable {
         case fallbackStratumPort
         case _stratumUser = "stratumUser"
         case fallbackStratumUser
+        case stratumProtocol, fallbackStratumProtocol
+        case stratumV2ChannelType, fallbackStratumV2ChannelType
+        case stratumV2AuthorityPubkey, fallbackStratumV2AuthorityPubkey
         case _version = "version"
         case idfVersion, boardVersion
         case runningPartition
@@ -205,6 +214,27 @@ struct SystemInfoDTO: Codable {
         fallbackStratumUser = try container.decodeIfPresent(
             String.self,
             forKey: .fallbackStratumUser
+        )
+        stratumProtocol = try container.decodeIfPresent(String.self, forKey: .stratumProtocol)
+        fallbackStratumProtocol = try container.decodeIfPresent(
+            String.self,
+            forKey: .fallbackStratumProtocol
+        )
+        stratumV2ChannelType = try container.decodeIfPresent(
+            String.self,
+            forKey: .stratumV2ChannelType
+        )
+        fallbackStratumV2ChannelType = try container.decodeIfPresent(
+            String.self,
+            forKey: .fallbackStratumV2ChannelType
+        )
+        stratumV2AuthorityPubkey = try container.decodeIfPresent(
+            String.self,
+            forKey: .stratumV2AuthorityPubkey
+        )
+        fallbackStratumV2AuthorityPubkey = try container.decodeIfPresent(
+            String.self,
+            forKey: .fallbackStratumV2AuthorityPubkey
         )
         _version = try container.decodeIfPresent(String.self, forKey: ._version)
         idfVersion = try container.decodeIfPresent(String.self, forKey: .idfVersion)
@@ -316,6 +346,15 @@ extension SystemInfoDTO {
     var stratumURL: String { _stratumURL ?? "" }
     var stratumUser: String { _stratumUser ?? "" }
     var stratumPort: Int { _stratumPort ?? 0 }
+    var supportsStratumProtocolSettings: Bool {
+        stratumProtocol != nil ||
+            fallbackStratumProtocol != nil ||
+            stratumV2ChannelType != nil ||
+            fallbackStratumV2ChannelType != nil ||
+            stratumV2AuthorityPubkey != nil ||
+            fallbackStratumV2AuthorityPubkey != nil
+    }
+
     var poolDisplayName: String? {
         let primary = stratumURL.trimmingCharacters(in: .whitespacesAndNewlines)
         let secondary = fallbackStratumURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""

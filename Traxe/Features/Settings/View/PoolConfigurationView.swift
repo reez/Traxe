@@ -13,6 +13,12 @@ struct PoolConfigurationView: View {
     @State private var localSecondaryStratumURL: String = ""
     @State private var localSecondaryStratumPortString: String = ""
     @State private var localSecondaryStratumUser: String = ""
+    @State private var localPrimaryStratumProtocol: String = "SV1"
+    @State private var localSecondaryStratumProtocol: String = "SV1"
+    @State private var localPrimaryStratumV2ChannelType: String = "standard"
+    @State private var localSecondaryStratumV2ChannelType: String = "standard"
+    @State private var localPrimaryStratumV2AuthorityPubkey: String = ""
+    @State private var localSecondaryStratumV2AuthorityPubkey: String = ""
     @State private var localPoolBalance: Double = 50
     @State private var localPoolMode: Int = 0
     @State private var showErrorAlert: Bool = false
@@ -43,6 +49,22 @@ struct PoolConfigurationView: View {
         selectedPoolIndex == 0 ? $localPrimaryStratumUser : $localSecondaryStratumUser
     }
 
+    private var activeStratumProtocol: Binding<String> {
+        selectedPoolIndex == 0 ? $localPrimaryStratumProtocol : $localSecondaryStratumProtocol
+    }
+
+    private var activeStratumV2ChannelType: Binding<String> {
+        selectedPoolIndex == 0
+            ? $localPrimaryStratumV2ChannelType
+            : $localSecondaryStratumV2ChannelType
+    }
+
+    private var activeStratumV2AuthorityPubkey: Binding<String> {
+        selectedPoolIndex == 0
+            ? $localPrimaryStratumV2AuthorityPubkey
+            : $localSecondaryStratumV2AuthorityPubkey
+    }
+
     var body: some View {
         Form {
             Section("Pool Configuration") {
@@ -54,6 +76,7 @@ struct PoolConfigurationView: View {
                         Text("Failover").tag(0)
                         Text("Dual Pool").tag(1)
                     }
+                    .labelsHidden()
                     .pickerStyle(.menu)
                     Text("Changing pool mode may require a device restart.")
                         .font(.caption)
@@ -117,9 +140,20 @@ struct PoolConfigurationView: View {
                     Text("Stratum User".uppercased())
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    TextField("pod256.traxe", text: activeStratumUser)
-                        .autocorrectionDisabled(true)
-                        .textInputAutocapitalization(.never)
+                    MonospacedIdentifierEditor(
+                        placeholder: "pod256.traxe",
+                        text: activeStratumUser
+                    )
+                }
+
+                if viewModel.supportsStratumProtocolSettings {
+                    StratumProtocolDetailsView(
+                        poolTitle: poolSegmentTitles[selectedPoolIndex],
+                        protocolValue: activeStratumProtocol,
+                        channelType: activeStratumV2ChannelType,
+                        authorityPubkey: activeStratumV2AuthorityPubkey
+                    )
+                    .padding(.vertical, 4)
                 }
             }
 
@@ -131,6 +165,13 @@ struct PoolConfigurationView: View {
                     viewModel.fallbackStratumURL = localSecondaryStratumURL
                     viewModel.fallbackStratumPortString = localSecondaryStratumPortString
                     viewModel.fallbackStratumUser = localSecondaryStratumUser
+                    viewModel.stratumProtocol = localPrimaryStratumProtocol
+                    viewModel.fallbackStratumProtocol = localSecondaryStratumProtocol
+                    viewModel.stratumV2ChannelType = localPrimaryStratumV2ChannelType
+                    viewModel.fallbackStratumV2ChannelType = localSecondaryStratumV2ChannelType
+                    viewModel.stratumV2AuthorityPubkey = localPrimaryStratumV2AuthorityPubkey
+                    viewModel.fallbackStratumV2AuthorityPubkey =
+                        localSecondaryStratumV2AuthorityPubkey
                     viewModel.poolBalance = Int(localPoolBalance.rounded())
                     viewModel.poolMode = localPoolMode
                     viewModel.isDualPool = localPoolMode == 1
@@ -164,6 +205,18 @@ struct PoolConfigurationView: View {
             localSecondaryStratumURL = viewModel.fallbackStratumURL
             localSecondaryStratumPortString = viewModel.fallbackStratumPortString
             localSecondaryStratumUser = viewModel.fallbackStratumUser
+            localPrimaryStratumProtocol = Self.protocolValueForControl(viewModel.stratumProtocol)
+            localSecondaryStratumProtocol = Self.protocolValueForControl(
+                viewModel.fallbackStratumProtocol
+            )
+            localPrimaryStratumV2ChannelType = Self.channelTypeForControl(
+                viewModel.stratumV2ChannelType
+            )
+            localSecondaryStratumV2ChannelType = Self.channelTypeForControl(
+                viewModel.fallbackStratumV2ChannelType
+            )
+            localPrimaryStratumV2AuthorityPubkey = viewModel.stratumV2AuthorityPubkey
+            localSecondaryStratumV2AuthorityPubkey = viewModel.fallbackStratumV2AuthorityPubkey
             localPoolBalance = Double(viewModel.poolBalance)
             localPoolMode = viewModel.poolMode
             selectedPoolIndex = 0
@@ -174,11 +227,83 @@ struct PoolConfigurationView: View {
             Text(viewModel.poolConfigurationError ?? "An unknown error occurred. Please try again.")
         }
     }
+
+    private static func protocolValueForControl(_ value: String) -> String {
+        StratumProtocolSettingsValidator.protocolValueToSave(value) ?? "SV1"
+    }
+
+    private static func channelTypeForControl(_ value: String) -> String {
+        StratumProtocolSettingsValidator.channelTypeToSave(value) ?? "standard"
+    }
 }
 
 #if DEBUG
     struct PoolConfigurationView_Previews: PreviewProvider {
         static var previews: some View {
+            Group {
+                NavigationStack {
+                    PoolConfigurationView(viewModel: publicPoolSV2PreviewViewModel())
+                }
+                .previewDisplayName("Public Pool SV2")
+
+                NavigationStack {
+                    PoolConfigurationView(viewModel: dualPoolPreviewViewModel())
+                }
+                .previewDisplayName("Dual Pool")
+            }
+        }
+
+        private static func publicPoolSV2PreviewViewModel() -> SettingsViewModel {
+            let previewViewModel = SettingsViewModel(
+                sharedUserDefaults: previewSharedDefaults(named: "PublicPoolSV2"),
+                modelContext: previewContainer().mainContext,
+                shouldFetchDeviceSettingsOnLoad: false
+            )
+            previewViewModel.stratumURL = "public-pool.io"
+            previewViewModel.stratumPortString = "3333"
+            previewViewModel.stratumUser = "bc1qpublicpoolpreview.worker1"
+            previewViewModel.fallbackStratumURL = ""
+            previewViewModel.fallbackStratumPortString = ""
+            previewViewModel.fallbackStratumUser = ""
+            previewViewModel.supportsStratumProtocolSettings = true
+            previewViewModel.stratumProtocol = "SV2"
+            previewViewModel.fallbackStratumProtocol = "SV1"
+            previewViewModel.stratumV2ChannelType = "extended"
+            previewViewModel.fallbackStratumV2ChannelType = "standard"
+            previewViewModel.stratumV2AuthorityPubkey =
+                "9c4zpyJ2ndm4e8sP2uNc1VNCGxYjqaxWS6wUCjk8zFj6njFquH6"
+            previewViewModel.fallbackStratumV2AuthorityPubkey = ""
+            previewViewModel.poolBalance = 50
+            previewViewModel.poolMode = 0
+            previewViewModel.isDualPool = false
+            return previewViewModel
+        }
+
+        private static func dualPoolPreviewViewModel() -> SettingsViewModel {
+            let previewViewModel = SettingsViewModel(
+                sharedUserDefaults: previewSharedDefaults(named: "DualPool"),
+                modelContext: previewContainer().mainContext,
+                shouldFetchDeviceSettingsOnLoad: false
+            )
+            previewViewModel.stratumURL = "stratum.slushpool.com"
+            previewViewModel.stratumPortString = "3333"
+            previewViewModel.stratumUser = "testUser.worker1"
+            previewViewModel.fallbackStratumURL = "public-pool.io"
+            previewViewModel.fallbackStratumPortString = "21496"
+            previewViewModel.fallbackStratumUser = "testUser.worker2"
+            previewViewModel.supportsStratumProtocolSettings = true
+            previewViewModel.stratumProtocol = "SV2"
+            previewViewModel.fallbackStratumProtocol = "SV1"
+            previewViewModel.stratumV2ChannelType = "extended"
+            previewViewModel.stratumV2AuthorityPubkey =
+                "9c4zpyJ2ndm4e8sP2uNc1VNCGxYjqaxWS6wUCjk8zFj6njFquH6"
+            previewViewModel.poolBalance = 60
+            previewViewModel.poolMode = 1
+            previewViewModel.isDualPool = true
+            return previewViewModel
+        }
+
+        private static func previewContainer() -> ModelContainer {
             let previewContainer: ModelContainer = {
                 let config = ModelConfiguration(isStoredInMemoryOnly: true)
                 do {
@@ -187,32 +312,17 @@ struct PoolConfigurationView: View {
                     fatalError("Failed to create preview container: \\(error)")
                 }
             }()
+            return previewContainer
+        }
 
-            let previewSharedDefaults = UserDefaults(
-                suiteName: SettingsViewModel.sharedUserDefaultsSuiteName
-            )
+        private static func previewSharedDefaults(named name: String) -> UserDefaults? {
+            let suiteName = "traxe.poolConfigurationPreview.\(name)"
+            let previewSharedDefaults = UserDefaults(suiteName: suiteName)
             previewSharedDefaults?.removePersistentDomain(
-                forName: SettingsViewModel.sharedUserDefaultsSuiteName
+                forName: suiteName
             )
             previewSharedDefaults?.set("192.168.1.100", forKey: "bitaxeIPAddress")
-
-            let previewViewModel = SettingsViewModel(
-                sharedUserDefaults: previewSharedDefaults,
-                modelContext: previewContainer.mainContext
-            )
-            previewViewModel.stratumURL = "stratum.slushpool.com"
-            previewViewModel.stratumPortString = "3333"
-            previewViewModel.stratumUser = "testUser.worker1"
-            previewViewModel.fallbackStratumURL = "public-pool.io"
-            previewViewModel.fallbackStratumPortString = "21496"
-            previewViewModel.fallbackStratumUser = "testUser.worker2"
-            previewViewModel.poolBalance = 60
-            previewViewModel.poolMode = 1
-            previewViewModel.isDualPool = true
-
-            return NavigationStack {
-                PoolConfigurationView(viewModel: previewViewModel)
-            }
+            return previewSharedDefaults
         }
     }
 #endif

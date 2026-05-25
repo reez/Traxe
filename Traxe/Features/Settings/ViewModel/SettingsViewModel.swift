@@ -23,6 +23,13 @@ final class SettingsViewModel {
     var fallbackStratumUser: String = ""
     var fallbackStratumURL: String = ""
     var fallbackStratumPortString: String = ""
+    var supportsStratumProtocolSettings: Bool = false
+    var stratumProtocol: String = ""
+    var fallbackStratumProtocol: String = ""
+    var stratumV2ChannelType: String = ""
+    var fallbackStratumV2ChannelType: String = ""
+    var stratumV2AuthorityPubkey: String = ""
+    var fallbackStratumV2AuthorityPubkey: String = ""
     var poolBalance: Int = 50
     var isDualPool: Bool = false
     var poolMode: Int = 0
@@ -120,6 +127,7 @@ final class SettingsViewModel {
             currentVersion = "Unknown"
             isConnected = false
             deleteMinerErrorMessage = nil
+            resetStratumProtocolDetails()
             return ipAddressToDelete
         } catch {
             deleteMinerErrorMessage = "Failed to delete miner: \(error.localizedDescription)"
@@ -148,6 +156,13 @@ final class SettingsViewModel {
             fallbackStratumUser = systemInfo.fallbackStratumUser ?? ""
             fallbackStratumURL = systemInfo.fallbackStratumURL ?? ""
             fallbackStratumPortString = systemInfo.fallbackStratumPort.map { String($0) } ?? ""
+            supportsStratumProtocolSettings = systemInfo.supportsStratumProtocolSettings
+            stratumProtocol = systemInfo.stratumProtocol ?? ""
+            fallbackStratumProtocol = systemInfo.fallbackStratumProtocol ?? ""
+            stratumV2ChannelType = systemInfo.stratumV2ChannelType ?? ""
+            fallbackStratumV2ChannelType = systemInfo.fallbackStratumV2ChannelType ?? ""
+            stratumV2AuthorityPubkey = systemInfo.stratumV2AuthorityPubkey ?? ""
+            fallbackStratumV2AuthorityPubkey = systemInfo.fallbackStratumV2AuthorityPubkey ?? ""
             poolBalance = max(0, min(100, systemInfo.stratum?.poolBalance ?? 50))
             let detectedPoolMode =
                 systemInfo.stratum?.poolMode ?? systemInfo.stratum?.activePoolMode ?? 0
@@ -158,6 +173,7 @@ final class SettingsViewModel {
         } catch {
             currentVersion = "Unknown"
             isConnected = false
+            resetStratumProtocolDetails()
         }
     }
 
@@ -207,6 +223,54 @@ final class SettingsViewModel {
             return false
         }
 
+        var stratumProtocolToSave: String? = nil
+        var fallbackStratumProtocolToSave: String? = nil
+        var stratumV2ChannelTypeToSave: String? = nil
+        var fallbackStratumV2ChannelTypeToSave: String? = nil
+        var stratumV2AuthorityPubkeyToSave: String? = nil
+        var fallbackStratumV2AuthorityPubkeyToSave: String? = nil
+
+        if supportsStratumProtocolSettings {
+            if let validationError = StratumProtocolSettingsValidator.validationError(
+                protocolValue: stratumProtocol,
+                channelType: stratumV2ChannelType,
+                authorityPubkey: stratumV2AuthorityPubkey,
+                poolName: "Primary SV2"
+            ) {
+                poolConfigurationError = validationError
+                isUpdatingPoolConfiguration = false
+                return false
+            }
+
+            if let validationError = StratumProtocolSettingsValidator.validationError(
+                protocolValue: fallbackStratumProtocol,
+                channelType: fallbackStratumV2ChannelType,
+                authorityPubkey: fallbackStratumV2AuthorityPubkey,
+                poolName: "Fallback SV2"
+            ) {
+                poolConfigurationError = validationError
+                isUpdatingPoolConfiguration = false
+                return false
+            }
+
+            stratumProtocolToSave = StratumProtocolSettingsValidator.protocolValueToSave(
+                stratumProtocol
+            )
+            fallbackStratumProtocolToSave = StratumProtocolSettingsValidator.protocolValueToSave(
+                fallbackStratumProtocol
+            )
+            stratumV2ChannelTypeToSave = StratumProtocolSettingsValidator.channelTypeToSave(
+                stratumV2ChannelType
+            )
+            fallbackStratumV2ChannelTypeToSave = StratumProtocolSettingsValidator.channelTypeToSave(
+                fallbackStratumV2ChannelType
+            )
+            stratumV2AuthorityPubkeyToSave = StratumProtocolSettingsValidator
+                .trimmedAuthorityPubkey(stratumV2AuthorityPubkey)
+            fallbackStratumV2AuthorityPubkeyToSave = StratumProtocolSettingsValidator
+                .trimmedAuthorityPubkey(fallbackStratumV2AuthorityPubkey)
+        }
+
         do {
             try await networkService.updateSystemSettings(
                 stratumUser: stratumUser.isEmpty ? nil : stratumUser,
@@ -215,6 +279,12 @@ final class SettingsViewModel {
                 fallbackStratumUser: fallbackStratumUser.isEmpty ? nil : fallbackStratumUser,
                 fallbackStratumURL: fallbackStratumURL.isEmpty ? nil : fallbackStratumURL,
                 fallbackStratumPort: fallbackPortToSave,
+                stratumProtocol: stratumProtocolToSave,
+                fallbackStratumProtocol: fallbackStratumProtocolToSave,
+                stratumV2ChannelType: stratumV2ChannelTypeToSave,
+                fallbackStratumV2ChannelType: fallbackStratumV2ChannelTypeToSave,
+                stratumV2AuthorityPubkey: stratumV2AuthorityPubkeyToSave,
+                fallbackStratumV2AuthorityPubkey: fallbackStratumV2AuthorityPubkeyToSave,
                 poolBalance: targetPoolBalance,
                 poolMode: poolMode
             )
@@ -290,6 +360,16 @@ final class SettingsViewModel {
         )
         guard trimmedSelectedIPAddress.isEmpty else { return trimmedSelectedIPAddress }
         return trimmedMinerIPAddress
+    }
+
+    private func resetStratumProtocolDetails() {
+        supportsStratumProtocolSettings = false
+        stratumProtocol = ""
+        fallbackStratumProtocol = ""
+        stratumV2ChannelType = ""
+        fallbackStratumV2ChannelType = ""
+        stratumV2AuthorityPubkey = ""
+        fallbackStratumV2AuthorityPubkey = ""
     }
 
 }
