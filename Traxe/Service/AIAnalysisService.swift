@@ -71,32 +71,26 @@ actor AIAnalysisService {
 
     func generateFleetSummary(forDevices deviceIPs: [String]) async throws -> AISummary {
 
-        var allDevices: [SystemInfoDTO] = []
-        var totalHashRate: Double = 0
-        var totalPower: Double = 0
-        var avgTemperature: Double = 0
+        var allMetrics: [DeviceMetrics] = []
         var deviceCount = 0
 
-        try await withThrowingTaskGroup(of: SystemInfoDTO?.self) { group in
+        try await withThrowingTaskGroup(of: DeviceMetrics?.self) { group in
             for ipAddress in deviceIPs {
                 group.addTask { [self] in
                     do {
-                        let systemInfo = try await networkService.fetchSystemInfo(
+                        let telemetry = try await networkService.fetchMinerTelemetry(
                             ipAddressOverride: ipAddress
                         )
-                        return systemInfo
+                        return DeviceMetrics(from: telemetry)
                     } catch {
                         return nil
                     }
                 }
             }
 
-            for try await systemInfo in group {
-                if let systemInfo = systemInfo {
-                    allDevices.append(systemInfo)
-                    totalHashRate += systemInfo.hashrate ?? 0
-                    totalPower += systemInfo.power ?? 0
-                    avgTemperature += systemInfo.temp ?? 0
+            for try await metrics in group {
+                if let metrics = metrics {
+                    allMetrics.append(metrics)
                     deviceCount += 1
                 }
             }
@@ -110,8 +104,6 @@ actor AIAnalysisService {
             )
         }
 
-        avgTemperature /= Double(deviceCount)
-
         // Try Foundation Models first if available
 
         #if canImport(FoundationModels)
@@ -119,7 +111,7 @@ actor AIAnalysisService {
                 let session = languageSession as? LanguageModelSession
             {
                 do {
-                    let basicSummary = AISummaryFormatter.fleetSummary(fromSystemInfos: allDevices)
+                    let basicSummary = AISummaryFormatter.fleetSummary(from: allMetrics)
                     let variation = try await generateFleetSummaryVariation(
                         using: session,
                         basicData: basicSummary?.content ?? ""
@@ -136,7 +128,7 @@ actor AIAnalysisService {
         #endif
 
         // Fallback to basic summary formatter
-        if let formatted = AISummaryFormatter.fleetSummary(fromSystemInfos: allDevices) {
+        if let formatted = AISummaryFormatter.fleetSummary(from: allMetrics) {
             return formatted
         }
         throw NSError(
@@ -151,15 +143,14 @@ actor AIAnalysisService {
         withHistoricalData historicalData: [HistoricalDataPoint] = []
     ) async throws -> AISummary {
 
-        let systemInfo = try await networkService.fetchSystemInfo(ipAddressOverride: deviceIP)
+        let telemetry = try await networkService.fetchMinerTelemetry(ipAddressOverride: deviceIP)
+        let metrics = DeviceMetrics(from: telemetry)
 
-        let hashRate = systemInfo.hashrate ?? 0
-        let temperature = systemInfo.temp ?? 0
-        let power = systemInfo.power ?? 0
-        let fanSpeedPercent = systemInfo.fanspeed ?? 0
-        let miningLuckSentence = MiningLuckPresenter.makeSummarySentence(
-            from: DeviceMetrics(from: systemInfo)
-        )
+        let hashRate = metrics.hashrate
+        let temperature = metrics.temperature
+        let power = metrics.power
+        let fanSpeedPercent = metrics.fanSpeedPercent
+        let miningLuckSentence = MiningLuckPresenter.makeSummarySentence(from: metrics)
 
         let hashRateFormatted = hashRate.formattedHashRateWithUnit()
         var summary: String

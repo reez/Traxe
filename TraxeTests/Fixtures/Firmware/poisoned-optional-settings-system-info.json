@@ -1,0 +1,31 @@
+{
+  "hostname": "future-miner",
+  "version": "future-fw",
+  "deviceModel": "NerdQAxe++",
+  "ASICModel": "BM1370",
+  "hashRate": 777000,
+  "expectedHashrate": 800,
+  "temp": 49,
+  "power": 88,
+  "bestDiff": 999,
+  "stratumURL": "future.pool.example",
+  "stratumPort": 3333,
+  "stratumUser": "bc1qexample.future",
+  "uptimeSeconds": 42,
+  "sharesAccepted": 8,
+  "sharesRejected": 0,
+  "fanspeed": 64,
+  "freeHeap": {
+    "unexpected": true
+  },
+  "stratumProtocol": {
+    "mode": "SV2"
+  },
+  "sv2ChannelType": ["extended"],
+  "fans": [
+    { "rpm": 1111 }
+  ],
+  "futureNestedSettings": {
+    "newField": "not relevant to telemetry"
+  }
+}

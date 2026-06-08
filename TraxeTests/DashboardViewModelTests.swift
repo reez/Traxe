@@ -8,10 +8,10 @@ import XCTest
 final class DashboardViewModelTests: XCTestCase {
     func testConnectWithConfiguredDevicePopulatesMetricsAndConnectedState() async throws {
         let modelContainer = try makeInMemoryModelContainer()
-        let info = try Self.makeSystemInfo(hashRate: 1234.0, temp: 51.0, power: 15.0)
+        let telemetry = try Self.makeTelemetry(hashRate: 1234.0, temp: 51.0, power: 15.0)
         let dependencies = DashboardViewModel.Dependencies(
             network: .init(
-                fetchSystemInfo: { _ in info }
+                fetchMinerTelemetry: { _ in telemetry }
             ),
             selectedDeviceID: { "192.168.1.44" },
             notificationCenter: NotificationCenter(),
@@ -47,8 +47,8 @@ final class DashboardViewModelTests: XCTestCase {
         let modelContainer = try makeInMemoryModelContainer()
         let dependencies = DashboardViewModel.Dependencies(
             network: .init(
-                fetchSystemInfo: { _ in
-                    XCTFail("fetchSystemInfo should not be called without a configured IP")
+                fetchMinerTelemetry: { _ in
+                    XCTFail("fetchMinerTelemetry should not be called without a configured IP")
                     throw NetworkError.configurationMissing
                 }
             ),
@@ -78,8 +78,46 @@ final class DashboardViewModelTests: XCTestCase {
         return try ModelContainer(for: schema, configurations: [configuration])
     }
 
-    private static func makeSystemInfo(hashRate: Double, temp: Double, power: Double) throws
-        -> SystemInfoDTO
+    func testConnectWithTelemetryFromPayloadThatBreaksFullSettingsDecodeStaysConnected()
+        async throws
+    {
+        let modelContainer = try makeInMemoryModelContainer()
+        let telemetry = try Self.decodeTelemetryFixture(
+            named: "poisoned-optional-settings-system-info.json"
+        )
+        let dependencies = DashboardViewModel.Dependencies(
+            network: .init(
+                fetchMinerTelemetry: { _ in telemetry }
+            ),
+            selectedDeviceID: { "192.168.1.55" },
+            notificationCenter: NotificationCenter(),
+            makeNetworkMonitor: nil,
+            networkMonitorQueue: DispatchQueue.main,
+            sleep: { duration in
+                try? await Task.sleep(for: duration)
+            },
+            pollingInterval: .seconds(60)
+        )
+
+        let viewModel = DashboardViewModel(
+            modelContext: modelContainer.mainContext,
+            dependencies: dependencies
+        )
+
+        await viewModel.connect()
+
+        assertConnectionState(viewModel.connectionState, expected: .connected)
+        XCTAssertEqual(viewModel.currentMetrics.hashrate, 777.0, accuracy: 0.001)
+        XCTAssertEqual(viewModel.currentMetrics.temperature, 49.0, accuracy: 0.001)
+        XCTAssertEqual(viewModel.currentMetrics.power, 88.0, accuracy: 0.001)
+        XCTAssertEqual(viewModel.currentMetrics.hostname, "future-miner")
+        XCTAssertEqual(viewModel.errorMessage, "")
+
+        viewModel.disconnect()
+    }
+
+    private static func makeTelemetry(hashRate: Double, temp: Double, power: Double) throws
+        -> MinerTelemetryDTO
     {
         let payload: [String: Any] = [
             "power": power,
@@ -109,7 +147,22 @@ final class DashboardViewModelTests: XCTestCase {
         ]
 
         let data = try JSONSerialization.data(withJSONObject: payload)
-        return try JSONDecoder().decode(SystemInfoDTO.self, from: data)
+        return try JSONDecoder().decode(MinerTelemetryDTO.self, from: data)
+    }
+
+    private static func decodeTelemetryFixture(named filename: String) throws -> MinerTelemetryDTO {
+        let data = try fixtureData(named: filename)
+        return try JSONDecoder().decode(MinerTelemetryDTO.self, from: data)
+    }
+
+    private static func fixtureData(named filename: String) throws -> Data {
+        let testFile = URL(fileURLWithPath: #filePath)
+        let fixtureURL = testFile
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures")
+            .appendingPathComponent("Firmware")
+            .appendingPathComponent(filename)
+        return try Data(contentsOf: fixtureURL)
     }
 
     private func assertConnectionState(

@@ -10,13 +10,13 @@ import SwiftUI
 final class DashboardViewModel {
     struct Dependencies {
         struct NetworkClient {
-            var fetchSystemInfo:
-                @Sendable (_ ipAddressOverride: String?) async throws -> SystemInfoDTO
+            var fetchMinerTelemetry:
+                @Sendable (_ ipAddressOverride: String?) async throws -> MinerTelemetryDTO
 
             static func live(networkService: NetworkService) -> Self {
                 Self(
-                    fetchSystemInfo: { ipAddressOverride in
-                        try await networkService.fetchSystemInfo(
+                    fetchMinerTelemetry: { ipAddressOverride in
+                        try await networkService.fetchMinerTelemetry(
                             ipAddressOverride: ipAddressOverride
                         )
                     }
@@ -182,8 +182,8 @@ final class DashboardViewModel {
         }
 
         do {
-            let info = try await dependencies.network.fetchSystemInfo(deviceId)
-            let metrics = DeviceMetrics(from: info)
+            let telemetry = try await dependencies.network.fetchMinerTelemetry(deviceId)
+            let metrics = DeviceMetrics(from: telemetry)
 
             await MainActor.run {
                 self.currentMetrics = metrics
@@ -310,8 +310,8 @@ final class DashboardViewModel {
                 guard let deviceId = deviceId, !deviceId.isEmpty else { continue }
 
                 do {
-                    let info = try await dependencies.network.fetchSystemInfo(deviceId)
-                    let metrics = DeviceMetrics(from: info)
+                    let telemetry = try await dependencies.network.fetchMinerTelemetry(deviceId)
+                    let metrics = DeviceMetrics(from: telemetry)
 
                     await MainActor.run {
                         self.currentMetrics = metrics
@@ -323,7 +323,7 @@ final class DashboardViewModel {
                         }
                     }
 
-                    await storeSystemInfo(info)
+                    saveHistoricalData(metrics: metrics)
 
                 } catch {
                     if !Task.isCancelled {
@@ -337,11 +337,6 @@ final class DashboardViewModel {
                 }
             }
         }
-    }
-
-    private func storeSystemInfo(_ info: SystemInfoDTO) async {
-        let metrics = DeviceMetrics(from: info)
-        saveHistoricalData(metrics: metrics)
     }
 
     private func saveHistoricalData(metrics: DeviceMetrics) {

@@ -215,27 +215,39 @@ struct SystemInfoDTO: Codable {
             String.self,
             forKey: .fallbackStratumUser
         )
-        stratumProtocol = try container.decodeIfPresent(String.self, forKey: .stratumProtocol)
-        fallbackStratumProtocol = try container.decodeIfPresent(
-            String.self,
-            forKey: .fallbackStratumProtocol
+        let dynamicContainer = try decoder.container(keyedBy: DynamicCodingKey.self)
+        stratumProtocol = Self.decodeStratumProtocol(
+            container: container,
+            key: .stratumProtocol
         )
-        stratumV2ChannelType = try container.decodeIfPresent(
-            String.self,
-            forKey: .stratumV2ChannelType
+        fallbackStratumProtocol = Self.decodeStratumProtocol(
+            container: container,
+            key: .fallbackStratumProtocol
         )
-        fallbackStratumV2ChannelType = try container.decodeIfPresent(
-            String.self,
-            forKey: .fallbackStratumV2ChannelType
-        )
-        stratumV2AuthorityPubkey = try container.decodeIfPresent(
-            String.self,
-            forKey: .stratumV2AuthorityPubkey
-        )
-        fallbackStratumV2AuthorityPubkey = try container.decodeIfPresent(
-            String.self,
-            forKey: .fallbackStratumV2AuthorityPubkey
-        )
+        stratumV2ChannelType =
+            Self.decodeSV2ChannelType(container: container, key: .stratumV2ChannelType)
+            ?? Self.decodeSV2ChannelType(
+                container: dynamicContainer,
+                key: DynamicCodingKey(stringValue: "sv2ChannelType")
+            )
+        fallbackStratumV2ChannelType =
+            Self.decodeSV2ChannelType(container: container, key: .fallbackStratumV2ChannelType)
+            ?? Self.decodeSV2ChannelType(
+                container: dynamicContainer,
+                key: DynamicCodingKey(stringValue: "fallbackSv2ChannelType")
+            )
+        stratumV2AuthorityPubkey =
+            try container.decodeIfPresent(String.self, forKey: .stratumV2AuthorityPubkey)
+            ?? dynamicContainer.decodeIfPresent(
+                String.self,
+                forKey: DynamicCodingKey(stringValue: "sv2AuthorityPubkey")
+            )
+        fallbackStratumV2AuthorityPubkey =
+            try container.decodeIfPresent(String.self, forKey: .fallbackStratumV2AuthorityPubkey)
+            ?? dynamicContainer.decodeIfPresent(
+                String.self,
+                forKey: DynamicCodingKey(stringValue: "fallbackSv2AuthorityPubkey")
+            )
         _version = try container.decodeIfPresent(String.self, forKey: ._version)
         idfVersion = try container.decodeIfPresent(String.self, forKey: .idfVersion)
         boardVersion = try container.decodeIfPresent(String.self, forKey: .boardVersion)
@@ -277,7 +289,6 @@ struct SystemInfoDTO: Codable {
                 hashRate = hr
             } else {
                 // Fall back to original Bitaxe logic for backward compatibility
-                let dynamicContainer = try decoder.container(keyedBy: DynamicCodingKey.self)
                 if let hr = try? dynamicContainer.decode(
                     Double.self,
                     forKey: DynamicCodingKey(stringValue: "hashrate")
@@ -288,6 +299,329 @@ struct SystemInfoDTO: Codable {
                 }
             }
         }
+    }
+}
+
+struct MinerTelemetryDTO: Decodable {
+    let power: Double?
+    let voltage: Double?
+    let current: Double?
+    let temp: Double?
+    let vrTemp: Double?
+    let hashRate: Double?
+    let expectedHashrate: Double?
+    let errorPercentage: Double?
+    let _bestDiff: String?
+    let bestSessionDiff: String?
+    let isUsingFallbackStratum: Int?
+    let coreVoltage: Int?
+    let coreVoltageActual: Int?
+    let frequency: Int?
+    let ssid: String?
+    let macAddr: String?
+    let _hostname: String?
+    let wifiStatus: String?
+    let wifiRSSI: Int?
+    let sharesAccepted: Int?
+    let sharesRejected: Int?
+    let uptimeSeconds: Int?
+    let blockHeight: Int?
+    let networkDifficulty: Double?
+    let blockFound: Int?
+    let miningPaused: Bool?
+    let hashrateMonitor: HashrateMonitorDTO?
+    let asicCount: Int?
+    let smallCoreCount: Int?
+    let _ASICModel: String?
+    let _stratumURL: String?
+    let fallbackStratumURL: String?
+    let _stratumUser: String?
+    let fallbackStratumUser: String?
+    let _version: String?
+    let idfVersion: String?
+    let boardVersion: String?
+    let runningPartition: String?
+    let fanspeed: Int?
+    let fanrpm: Int?
+    let deviceModel: String?
+    let hostip: String?
+    let hashRateTimestamp: Int?
+    let hashRate_10m: Double?
+    let hashRate_1h: Double?
+    let hashRate_1d: Double?
+    let stratum: StratumInfoDTO?
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: DynamicCodingKey.self)
+
+        power = Self.decodeDouble(container: container, key: "power")
+        voltage = Self.decodeDouble(container: container, key: "voltage")
+        current = Self.decodeDouble(container: container, key: "current")
+        temp = Self.decodeDouble(container: container, key: "temp")
+        vrTemp = Self.decodeDouble(container: container, key: "vrTemp")
+        expectedHashrate = Self.decodeDouble(container: container, key: "expectedHashrate")
+        errorPercentage = Self.decodeDouble(container: container, key: "errorPercentage")
+        _bestDiff = Self.decodeDiffAsString(container: container, key: "bestDiff")
+        bestSessionDiff = Self.decodeDiffAsString(container: container, key: "bestSessionDiff")
+        isUsingFallbackStratum = Self.decodeFallbackStratum(container: container)
+        coreVoltage = Self.decodeInt(container: container, key: "coreVoltage")
+        coreVoltageActual = Self.decodeInt(container: container, key: "coreVoltageActual")
+        frequency = Self.decodeInt(container: container, key: "frequency")
+        ssid = Self.decodeString(container: container, key: "ssid")
+        macAddr = Self.decodeString(container: container, key: "macAddr")
+        _hostname = Self.decodeString(container: container, key: "hostname")
+        wifiStatus = Self.decodeString(container: container, key: "wifiStatus")
+        wifiRSSI = Self.decodeInt(container: container, key: "wifiRSSI")
+        sharesAccepted = Self.decodeInt(container: container, key: "sharesAccepted")
+        sharesRejected = Self.decodeInt(container: container, key: "sharesRejected")
+        uptimeSeconds = Self.decodeInt(container: container, key: "uptimeSeconds")
+        blockHeight = Self.decodeInt(container: container, key: "blockHeight")
+        networkDifficulty = Self.decodeDouble(container: container, key: "networkDifficulty")
+        blockFound = Self.decodeBlockFound(container: container)
+        miningPaused = Self.decodeBool(container: container, key: "miningPaused")
+        hashrateMonitor = try? container.decodeIfPresent(
+            HashrateMonitorDTO.self,
+            forKey: Self.key("hashrateMonitor")
+        )
+        asicCount = Self.decodeInt(container: container, key: "asicCount")
+        smallCoreCount = Self.decodeInt(container: container, key: "smallCoreCount")
+        _ASICModel = Self.decodeString(container: container, key: "ASICModel")
+        _stratumURL = Self.decodeString(container: container, key: "stratumURL")
+        fallbackStratumURL = Self.decodeString(container: container, key: "fallbackStratumURL")
+        _stratumUser = Self.decodeString(container: container, key: "stratumUser")
+        fallbackStratumUser = Self.decodeString(container: container, key: "fallbackStratumUser")
+        _version = Self.decodeString(container: container, key: "version")
+        idfVersion = Self.decodeString(container: container, key: "idfVersion")
+        boardVersion = Self.decodeString(container: container, key: "boardVersion")
+        runningPartition = Self.decodeString(container: container, key: "runningPartition")
+        fanspeed = Self.decodeInt(container: container, key: "fanspeed")
+        fanrpm = Self.decodeInt(container: container, key: "fanrpm")
+        deviceModel = Self.decodeString(container: container, key: "deviceModel")
+        hostip = Self.decodeString(container: container, key: "hostip")
+        hashRateTimestamp = Self.decodeInt(container: container, key: "hashRateTimestamp")
+        hashRate_10m = Self.decodeDouble(container: container, key: "hashRate_10m")
+        hashRate_1h = Self.decodeDouble(container: container, key: "hashRate_1h")
+        hashRate_1d = Self.decodeDouble(container: container, key: "hashRate_1d")
+        stratum = try? container.decodeIfPresent(StratumInfoDTO.self, forKey: Self.key("stratum"))
+
+        hashRate =
+            Self.decodeDouble(container: container, key: "hashRate")
+            ?? hashRate_10m
+            ?? hashRate_1h
+            ?? Self.decodeDouble(container: container, key: "hashrate")
+    }
+}
+
+extension MinerTelemetryDTO {
+    var hashrate: Double? {
+        guard let raw = hashRate else { return nil }
+        if raw >= 50_000 {
+            return raw / 1_000.0
+        }
+        return raw
+    }
+
+    var temperature: Double? { temp }
+    var fanPercent: Int? { fanspeed }
+    var mac: String? { macAddr }
+    var poolUser: String? { stratumUser }
+    var poolURL: String? { poolDisplayName }
+    var wifiSSID: String? { ssid }
+    var uptime: UInt64? { UInt64(uptimeSeconds ?? 0) }
+    var hostname: String { Self.displayString(_hostname) ?? "Unknown Miner" }
+    var version: String { Self.displayString(_version) ?? "Unknown" }
+    var ASICModel: String { Self.displayString(_ASICModel) ?? "Unknown" }
+    var bestDiff: String { _bestDiff ?? "0" }
+    var stratumURL: String { _stratumURL ?? "" }
+    var stratumUser: String { _stratumUser ?? "" }
+
+    var deviceType: DeviceType {
+        let model = Self.identityString(deviceModel)?.lowercased() ?? ""
+        let hostname = Self.identityString(_hostname)?.lowercased() ?? ""
+        let asicModel = Self.identityString(_ASICModel)?.uppercased() ?? ""
+
+        if model.contains("nerd") {
+            return .nerdqaxe
+        } else if hostname.contains("nerd") {
+            return .nerdqaxe
+        } else if hostname.contains("axe") || model.contains("axe") || asicModel.contains("BM") {
+            return .bitaxe
+        } else {
+            return .unknown
+        }
+    }
+
+    var isCompatibleMiner: Bool {
+        let lowercasedHostname = Self.identityString(_hostname)?.lowercased() ?? ""
+        let lowercasedVersion = Self.identityString(_version)?.lowercased() ?? ""
+        let lowercasedDeviceModel = Self.identityString(deviceModel)?.lowercased() ?? ""
+        let uppercasedASICModel = Self.identityString(_ASICModel)?.uppercased() ?? ""
+
+        guard !lowercasedHostname.isEmpty || !lowercasedVersion.isEmpty
+            || !lowercasedDeviceModel.isEmpty || !uppercasedASICModel.isEmpty
+        else {
+            return false
+        }
+
+        return lowercasedHostname.contains("axe")
+            || lowercasedVersion.contains("axe")
+            || lowercasedDeviceModel.contains("axe")
+            || lowercasedHostname.contains("nerd")
+            || lowercasedDeviceModel.contains("nerd")
+            || lowercasedHostname.contains("esp-miner")
+            || lowercasedVersion.contains("esp-miner")
+            || lowercasedHostname.contains("miner")
+            || lowercasedVersion.contains("miner")
+            || lowercasedHostname.contains("lucky")
+            || lowercasedDeviceModel.contains("lucky")
+            || lowercasedHostname.contains("lv")
+            || lowercasedDeviceModel.contains("lv")
+            || lowercasedHostname.contains("qaxe")
+            || lowercasedDeviceModel.contains("qaxe")
+            || uppercasedASICModel == "BM1366"
+            || uppercasedASICModel == "BM1368"
+            || (uppercasedASICModel.contains("BM")
+                && uppercasedASICModel.rangeOfCharacter(from: .decimalDigits) != nil)
+            || uppercasedASICModel == "LV07"
+            || uppercasedASICModel == "LV08"
+            || (uppercasedASICModel.contains("LV")
+                && uppercasedASICModel.rangeOfCharacter(from: .decimalDigits) != nil)
+    }
+
+    var poolDisplayName: String? {
+        let primary = stratumURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let secondary = fallbackStratumURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let isUsingFallback = (isUsingFallbackStratum == 1) || (stratum?.usingFallback == true)
+        let isDualPool = (stratum?.poolMode ?? stratum?.activePoolMode ?? 0) == 1
+
+        if isDualPool {
+            guard !primary.isEmpty || !secondary.isEmpty else { return nil }
+            if primary.isEmpty { return secondary }
+            if secondary.isEmpty { return primary }
+            let balance = max(0, min(100, stratum?.poolBalance ?? 50))
+            let secondaryBalance = max(0, 100 - balance)
+            return "\(primary) (\(balance)%) • \(secondary) (\(secondaryBalance)%)"
+        }
+
+        if isUsingFallback, !secondary.isEmpty {
+            return secondary
+        }
+
+        return primary.isEmpty ? (secondary.isEmpty ? nil : secondary) : primary
+    }
+}
+
+extension MinerTelemetryDTO {
+    private static func displayString(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func identityString(_ value: String?) -> String? {
+        guard let trimmed = displayString(value) else { return nil }
+        switch trimmed.lowercased() {
+        case "unknown", "unknown miner":
+            return nil
+        default:
+            return trimmed
+        }
+    }
+
+    private static func key(_ stringValue: String) -> DynamicCodingKey {
+        DynamicCodingKey(stringValue: stringValue)
+    }
+
+    private static func decodeString(
+        container: KeyedDecodingContainer<DynamicCodingKey>,
+        key: String
+    ) -> String? {
+        try? container.decodeIfPresent(String.self, forKey: Self.key(key))
+    }
+
+    private static func decodeInt(
+        container: KeyedDecodingContainer<DynamicCodingKey>,
+        key: String
+    ) -> Int? {
+        if let intValue = try? container.decodeIfPresent(Int.self, forKey: Self.key(key)) {
+            return intValue
+        }
+        if let doubleValue = try? container.decodeIfPresent(Double.self, forKey: Self.key(key)) {
+            return Int(doubleValue)
+        }
+        if let stringValue = try? container.decodeIfPresent(String.self, forKey: Self.key(key)) {
+            return Int(stringValue.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        return nil
+    }
+
+    private static func decodeDouble(
+        container: KeyedDecodingContainer<DynamicCodingKey>,
+        key: String
+    ) -> Double? {
+        if let doubleValue = try? container.decodeIfPresent(Double.self, forKey: Self.key(key)) {
+            return doubleValue
+        }
+        if let intValue = try? container.decodeIfPresent(Int.self, forKey: Self.key(key)) {
+            return Double(intValue)
+        }
+        if let stringValue = try? container.decodeIfPresent(String.self, forKey: Self.key(key)) {
+            return Double(stringValue.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        return nil
+    }
+
+    private static func decodeBool(
+        container: KeyedDecodingContainer<DynamicCodingKey>,
+        key: String
+    ) -> Bool? {
+        if let boolValue = try? container.decodeIfPresent(Bool.self, forKey: Self.key(key)) {
+            return boolValue
+        }
+        if let intValue = try? container.decodeIfPresent(Int.self, forKey: Self.key(key)) {
+            return intValue != 0
+        }
+        if let stringValue = try? container.decodeIfPresent(String.self, forKey: Self.key(key)) {
+            switch stringValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            case "true", "1", "yes":
+                return true
+            case "false", "0", "no":
+                return false
+            default:
+                return nil
+            }
+        }
+        return nil
+    }
+
+    private static func decodeDiffAsString(
+        container: KeyedDecodingContainer<DynamicCodingKey>,
+        key: String
+    ) -> String? {
+        if let int64Value = try? container.decodeIfPresent(Int64.self, forKey: Self.key(key)) {
+            return String(int64Value)
+        }
+        if let doubleValue = try? container.decodeIfPresent(Double.self, forKey: Self.key(key)) {
+            return String(doubleValue)
+        }
+        return decodeString(container: container, key: key)
+    }
+
+    private static func decodeFallbackStratum(
+        container: KeyedDecodingContainer<DynamicCodingKey>
+    ) -> Int? {
+        if let boolValue = decodeBool(container: container, key: "isUsingFallbackStratum") {
+            return boolValue ? 1 : 0
+        }
+        return decodeInt(container: container, key: "isUsingFallbackStratum")
+    }
+
+    private static func decodeBlockFound(
+        container: KeyedDecodingContainer<DynamicCodingKey>
+    ) -> Int? {
+        if let boolValue = decodeBool(container: container, key: "blockFound") {
+            return boolValue ? 1 : 0
+        }
+        return decodeInt(container: container, key: "blockFound")
     }
 }
 
@@ -413,6 +747,66 @@ extension SystemInfoDTO {
         }
         if let doubleValue = try? container.decodeIfPresent(Double.self, forKey: key) {
             return Int(doubleValue)
+        }
+        return nil
+    }
+
+    // NerdQAxe firmwares report Stratum protocol as 0/1; ESP-Miner reports SV1/SV2.
+    fileprivate static func decodeStratumProtocol<Key: CodingKey>(
+        container: KeyedDecodingContainer<Key>,
+        key: Key
+    ) -> String? {
+        if let stringValue = try? container.decodeIfPresent(String.self, forKey: key) {
+            let normalizedValue = stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                .uppercased()
+            switch normalizedValue {
+            case "SV1", "STRATUM_V1", "0":
+                return "SV1"
+            case "SV2", "STRATUM_V2", "1":
+                return "SV2"
+            default:
+                return stringValue
+            }
+        }
+        if let intValue = try? container.decodeIfPresent(Int.self, forKey: key) {
+            switch intValue {
+            case 0:
+                return "SV1"
+            case 1:
+                return "SV2"
+            default:
+                return nil
+            }
+        }
+        return nil
+    }
+
+    // NerdQAxe firmwares report SV2 channel type as 0/1; ESP-Miner reports text.
+    fileprivate static func decodeSV2ChannelType<Key: CodingKey>(
+        container: KeyedDecodingContainer<Key>,
+        key: Key
+    ) -> String? {
+        if let stringValue = try? container.decodeIfPresent(String.self, forKey: key) {
+            let normalizedValue = stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            switch normalizedValue {
+            case "extended", "0":
+                return "extended"
+            case "standard", "1":
+                return "standard"
+            default:
+                return stringValue
+            }
+        }
+        if let intValue = try? container.decodeIfPresent(Int.self, forKey: key) {
+            switch intValue {
+            case 0:
+                return "extended"
+            case 1:
+                return "standard"
+            default:
+                return nil
+            }
         }
         return nil
     }

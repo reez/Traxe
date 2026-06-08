@@ -195,33 +195,22 @@ final class OnboardingViewModel {
                 case 200:
                     let decoder = JSONDecoder()
                     do {
-                        let systemInfo = try decoder.decode(SystemInfoDTO.self, from: data)
-                        let hashrate = systemInfo.hashrate
-                        let temperature = systemInfo.temperature
-                        let miningPaused = systemInfo.miningPaused
-                        let lowercasedHostname = systemInfo.hostname.lowercased()
-                        let lowercasedVersion = systemInfo.version.lowercased()
-                        let uppercasedASICModel = systemInfo.ASICModel.uppercased()
+                        let telemetry = try decoder.decode(MinerTelemetryDTO.self, from: data)
+                        let hashrate = telemetry.hashrate
+                        let temperature = telemetry.temperature
+                        let miningPaused = telemetry.miningPaused
 
-                        let isBitaxeDevice =
-                            lowercasedHostname.contains("axe") || lowercasedVersion.contains("axe")
-                            || uppercasedASICModel == "BM1366" || uppercasedASICModel == "BM1368"
-                            || (uppercasedASICModel.contains("BM")
-                                && uppercasedASICModel.rangeOfCharacter(
-                                    from: CharacterSet.decimalDigits
-                                ) != nil)
-
-                        if isBitaxeDevice {
+                        if telemetry.isCompatibleMiner {
                             let device = DiscoveredDevice(
                                 ip: apIP,
-                                name: systemInfo.hostname,
+                                name: telemetry.hostname,
                                 hashrate: hashrate ?? 0.0,
                                 temperature: temperature ?? 0.0,
-                                bestDiff: systemInfo.bestDiff,
-                                power: systemInfo.power ?? 0.0,
-                                poolURL: systemInfo.poolURL,
-                                blockHeight: systemInfo.blockHeight,
-                                networkDifficulty: systemInfo.networkDifficulty,
+                                bestDiff: telemetry.bestDiff,
+                                power: telemetry.power ?? 0.0,
+                                poolURL: telemetry.poolURL,
+                                blockHeight: telemetry.blockHeight,
+                                networkDifficulty: telemetry.networkDifficulty,
                                 isHashrateKnown: hashrate != nil,
                                 isTemperatureKnown: temperature != nil,
                                 isMiningPaused: miningPaused ?? false,

@@ -58,6 +58,43 @@ final class NetworkServiceTests: XCTestCase {
         )
     }
 
+    func testFetchMinerTelemetryDecodesPayloadThatFullSystemInfoRejects() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [URLProtocolStub.self]
+        let session = URLSession(configuration: configuration)
+        let service = NetworkService(session: session)
+        let payload = try Self.fixtureData(named: "poisoned-optional-settings-system-info.json")
+
+        URLProtocolStub.requestHandler = { request in
+            URLProtocolStub.capturedRequest = request
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )
+            return (try XCTUnwrap(response), payload)
+        }
+
+        do {
+            _ = try await service.fetchSystemInfo(ipAddressOverride: "192.0.2.10")
+            XCTFail("SystemInfoDTO should reject the poisoned settings field")
+        } catch NetworkError.decodingError {
+        } catch {
+            XCTFail("Expected decodingError, got \(error)")
+        }
+
+        let telemetry = try await service.fetchMinerTelemetry(ipAddressOverride: "192.0.2.10")
+
+        XCTAssertEqual(
+            URLProtocolStub.capturedRequest?.url?.absoluteString,
+            "http://192.0.2.10/api/system/info"
+        )
+        XCTAssertEqual(telemetry.hostname, "future-miner")
+        XCTAssertEqual(telemetry.hashrate, 777.0)
+        XCTAssertEqual(DeviceMetrics(from: telemetry).temperature, 49.0)
+    }
+
     private static func bodyData(from request: URLRequest) -> Data? {
         if let httpBody = request.httpBody {
             return httpBody
@@ -79,6 +116,16 @@ final class NetworkServiceTests: XCTestCase {
         }
 
         return data
+    }
+
+    private static func fixtureData(named filename: String) throws -> Data {
+        let testFile = URL(fileURLWithPath: #filePath)
+        let fixtureURL = testFile
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures")
+            .appendingPathComponent("Firmware")
+            .appendingPathComponent(filename)
+        return try Data(contentsOf: fixtureURL)
     }
 }
 

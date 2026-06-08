@@ -58,4 +58,43 @@ final class SystemInfoDTOTests: XCTestCase {
         XCTAssertNil(systemInfo.stratumV2AuthorityPubkey)
         XCTAssertNil(systemInfo.fallbackStratumV2AuthorityPubkey)
     }
+
+    func testDecodesNerdQaxeNumericStratumSettings() throws {
+        let payload = """
+            {
+                "hostname": "nerdqaxe-plus",
+                "version": "V1.0.37.2-LTS",
+                "deviceModel": "NerdQAxe++",
+                "stratumURL": "pool.example",
+                "stratumPort": 3333,
+                "stratumUser": "bc1qexample.primary",
+                "fallbackStratumURL": "fallback.pool.example",
+                "fallbackStratumPort": 4333,
+                "fallbackStratumUser": "bc1qexample.fallback",
+                "stratumProtocol": 1,
+                "fallbackStratumProtocol": 0,
+                "sv2ChannelType": 0,
+                "fallbackSv2ChannelType": 1,
+                "sv2AuthorityPubkey": "primaryAuthorityPubkey",
+                "fallbackSv2AuthorityPubkey": "fallbackAuthorityPubkey",
+                "hashRate": 1234000,
+                "bestDiff": 12345,
+                "bestSessionDiff": 67890
+            }
+            """
+
+        let systemInfo = try JSONDecoder().decode(SystemInfoDTO.self, from: Data(payload.utf8))
+
+        XCTAssertTrue(systemInfo.supportsStratumProtocolSettings)
+        XCTAssertEqual(systemInfo.deviceType, .nerdqaxe)
+        XCTAssertEqual(systemInfo.stratumProtocol, "SV2")
+        XCTAssertEqual(systemInfo.fallbackStratumProtocol, "SV1")
+        XCTAssertEqual(systemInfo.stratumV2ChannelType, "extended")
+        XCTAssertEqual(systemInfo.fallbackStratumV2ChannelType, "standard")
+        XCTAssertEqual(systemInfo.stratumV2AuthorityPubkey, "primaryAuthorityPubkey")
+        XCTAssertEqual(systemInfo.fallbackStratumV2AuthorityPubkey, "fallbackAuthorityPubkey")
+        XCTAssertEqual(systemInfo.hashrate, 1234)
+        XCTAssertEqual(systemInfo.bestDiff, "12345")
+        XCTAssertEqual(systemInfo.bestSessionDiff, "67890")
+    }
 }
