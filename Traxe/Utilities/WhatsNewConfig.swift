@@ -78,22 +78,10 @@ public enum WhatsNewConfig {
         message: "Version \(currentVersion())",  // "New features in Traxe",
         highlights: [
             WhatsNewHighlight(
-                badgeTint: .blue,
-                iconSystemName: "arrow.up.arrow.down",
-                title: "Miner Sorting",
-                detail: "Sort miners by custom order, scoreboard, or hashrate."
-            ),
-            WhatsNewHighlight(
-                badgeTint: .yellow,
-                iconSystemName: "trophy.fill",
-                title: "Best Difficulty Scoreboard",
-                detail: "Scoreboard mode sorts by best difficulty and shows each miner's best difficulty hit."
-            ),
-            WhatsNewHighlight(
-                badgeTint: .purple,
-                iconSystemName: "dice.fill",
-                title: "Solo Block Odds",
-                detail: "Miner summaries include solo block odds when firmware reports network difficulty."
+                badgeTint: .orange,
+                iconSystemName: "fan.fill",
+                title: "Stratum V2 Support",
+                detail: "Configure Stratum V2 pool settings in Traxe for supported AxeOS firmware."
             ),
         ]
     )

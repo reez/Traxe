@@ -273,9 +273,6 @@ struct SettingsView: View {
                 }
             }
         }
-        .onAppear {
-            viewModel.loadSettings()
-        }
         .task {
             guard previewUpgradeState == nil, !ProcessInfo.isPreview else { return }
             for await info in Purchases.shared.customerInfoStream {

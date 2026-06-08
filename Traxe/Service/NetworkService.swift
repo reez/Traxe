@@ -203,6 +203,12 @@ actor NetworkService {
         fallbackStratumUser: String? = nil,
         fallbackStratumURL: String? = nil,
         fallbackStratumPort: Int? = nil,
+        stratumProtocol: String? = nil,
+        fallbackStratumProtocol: String? = nil,
+        stratumV2ChannelType: String? = nil,
+        fallbackStratumV2ChannelType: String? = nil,
+        stratumV2AuthorityPubkey: String? = nil,
+        fallbackStratumV2AuthorityPubkey: String? = nil,
         poolBalance: Int? = nil,
         poolMode: Int? = nil,
         hostname: String? = nil,
@@ -218,6 +224,12 @@ actor NetworkService {
             let fallbackStratumUser: String?
             let fallbackStratumURL: String?
             let fallbackStratumPort: Int?
+            let stratumProtocol: String?
+            let fallbackStratumProtocol: String?
+            let stratumV2ChannelType: String?
+            let fallbackStratumV2ChannelType: String?
+            let stratumV2AuthorityPubkey: String?
+            let fallbackStratumV2AuthorityPubkey: String?
             let poolBalance: Int?
             let poolMode: Int?
             let hostname: String?
@@ -233,6 +245,12 @@ actor NetworkService {
             fallbackStratumUser: fallbackStratumUser,
             fallbackStratumURL: fallbackStratumURL,
             fallbackStratumPort: fallbackStratumPort,
+            stratumProtocol: stratumProtocol,
+            fallbackStratumProtocol: fallbackStratumProtocol,
+            stratumV2ChannelType: stratumV2ChannelType,
+            fallbackStratumV2ChannelType: fallbackStratumV2ChannelType,
+            stratumV2AuthorityPubkey: stratumV2AuthorityPubkey,
+            fallbackStratumV2AuthorityPubkey: fallbackStratumV2AuthorityPubkey,
             poolBalance: poolBalance,
             poolMode: poolMode,
             hostname: hostname

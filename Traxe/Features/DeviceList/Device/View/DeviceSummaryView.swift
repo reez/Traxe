@@ -11,6 +11,7 @@ struct DeviceSummaryView: View {
     @State private var showingWeeklyRecap = false
     @State private var showBlockFoundToast = false
     @State private var lastBlockFoundValue: Int? = nil
+    @State private var settingsViewModel: SettingsViewModel?
     let deviceName: String
     let deviceIP: String
     let poolName: String?
@@ -141,24 +142,27 @@ struct DeviceSummaryView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
+                    settingsViewModel = SettingsViewModel(
+                        sharedUserDefaults: UserDefaults(
+                            suiteName: SettingsViewModel.sharedUserDefaultsSuiteName
+                        ),
+                        modelContext: modelContext
+                    )
                     showingSettings = true
                 } label: {
                     Image(systemName: "gearshape")
                 }
             }
         }
-        .sheet(isPresented: $showingSettings) {
-            let sharedDefaults = UserDefaults(
-                suiteName: SettingsViewModel.sharedUserDefaultsSuiteName
-            )
-            let settingsViewModel = SettingsViewModel(
-                sharedUserDefaults: sharedDefaults,
-                modelContext: modelContext
-            )
-            SettingsView(
-                viewModel: settingsViewModel,
-                onMinerDeleted: handleMinerDeleted
-            )
+        .sheet(isPresented: $showingSettings, onDismiss: {
+            settingsViewModel = nil
+        }) {
+            if let settingsViewModel {
+                SettingsView(
+                    viewModel: settingsViewModel,
+                    onMinerDeleted: handleMinerDeleted
+                )
+            }
         }
         .onAppear {
             lastBlockFoundValue = dashboardViewModel.currentMetrics.blockFound

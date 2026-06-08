@@ -2,6 +2,8 @@ import Foundation
 import SwiftUI
 
 struct DeviceMetrics {
+    private static let minimumHashrateForEfficiency = 0.0005
+
     var hashrate: Double = 0.0
     var expectedHashrate: Double = 0.0
     var temperature: Double = 0.0
@@ -31,7 +33,7 @@ struct DeviceMetrics {
     var isMiningPausedKnown: Bool = true
 
     var efficiency: Double {
-        guard hashrate > 0 else { return 0 }
+        guard hashrate.isFinite, hashrate >= Self.minimumHashrateForEfficiency else { return 0 }
         return power / (hashrate / 1000.0)
     }
 
