@@ -1,0 +1,41 @@
+{
+  "hostname": "bitaxe-601",
+  "version": "v2.14.0",
+  "ASICModel": "BM1366",
+  "hashRate": 565.0,
+  "expectedHashrate": 600.0,
+  "temp": 61.2,
+  "vrTemp": 63,
+  "power": 15.4,
+  "voltage": 5.0,
+  "current": 3.1,
+  "bestDiff": "2 M",
+  "bestSessionDiff": "3 M",
+  "stratumURL": "public-pool.io",
+  "stratumPort": 3333,
+  "stratumUser": "bc1qexample.worker",
+  "fallbackStratumURL": "backup.pool.example",
+  "fallbackStratumPort": 4333,
+  "fallbackStratumUser": "bc1qexample.backup",
+  "stratumProtocol": "SV2",
+  "fallbackStratumProtocol": "SV1",
+  "stratumV2ChannelType": "extended",
+  "fallbackStratumV2ChannelType": "standard",
+  "stratumV2AuthorityPubkey": "primaryAuthorityPubkey",
+  "fallbackStratumV2AuthorityPubkey": "fallbackAuthorityPubkey",
+  "uptimeSeconds": 1200,
+  "sharesAccepted": 12,
+  "sharesRejected": 1,
+  "fanspeed": 75,
+  "miningPaused": false,
+  "blockHeight": 900000,
+  "networkDifficulty": 123456789.0,
+  "hashrateMonitor": {
+    "asics": [
+      {
+        "total": 565.0,
+        "domains": [188.0, 188.5, 188.5]
+      }
+    ]
+  }
+}

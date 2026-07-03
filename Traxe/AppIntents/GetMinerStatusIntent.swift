@@ -43,10 +43,10 @@ struct GetMinerStatusIntent: AppIntent {
         }
 
         do {
-            let systemInfo = try await NetworkService().fetchSystemInfo(
+            let telemetry = try await NetworkService().fetchMinerTelemetry(
                 ipAddressOverride: targetDevice.ipAddress
             )
-            let metrics = DeviceMetrics(from: systemInfo)
+            let metrics = DeviceMetrics(from: telemetry)
 
             let formattedHashrate = metrics.hashrate.formattedHashRateWithUnit()
             let formattedPower = metrics.power.formatted(.number.precision(.fractionLength(1)))

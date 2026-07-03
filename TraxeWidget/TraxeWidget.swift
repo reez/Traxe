@@ -145,10 +145,10 @@ struct Provider: TimelineProvider {
                 for ip in ipAddresses {
                     group.addTask {
                         do {
-                            let systemInfo = try await networkService.fetchSystemInfo(
+                            let telemetry = try await networkService.fetchMinerTelemetry(
                                 ipAddressOverride: ip
                             )
-                            return (ip, (hash: systemInfo.hashrate, temp: systemInfo.temp))
+                            return (ip, (hash: telemetry.hashrate, temp: telemetry.temp))
                         } catch {
                             return (ip, (hash: nil, temp: nil))
                         }

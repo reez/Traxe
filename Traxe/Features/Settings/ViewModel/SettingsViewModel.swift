@@ -38,6 +38,8 @@ final class SettingsViewModel {
     var hostname: String = ""
     var isUpdatingHostname: Bool = false
     var hostnameConfigurationError: String? = nil
+    private(set) var isSettingsConfigurationEditable: Bool = false
+    private(set) var settingsConfigurationMessage: String? = nil
     var deleteMinerErrorMessage: String? = nil
 
     var canDeleteCurrentMiner: Bool {
@@ -170,14 +172,29 @@ final class SettingsViewModel {
             isDualPool = poolMode == 1
             hostname = systemInfo.hostname
             isConnected = true
+            isSettingsConfigurationEditable = true
+            settingsConfigurationMessage = nil
         } catch {
-            currentVersion = "Unknown"
-            isConnected = false
-            resetStratumProtocolDetails()
+            if let telemetry = try? await networkService.fetchMinerTelemetry() {
+                currentVersion = telemetry.version
+                fanSpeed = telemetry.fanspeed ?? 0
+                hostname = telemetry.hostname
+                isConnected = true
+                isSettingsConfigurationEditable = false
+                settingsConfigurationMessage = Self.settingsConfigurationUnavailableMessage
+                resetStratumProtocolDetails()
+            } else {
+                currentVersion = "Unknown"
+                isConnected = false
+                isSettingsConfigurationEditable = false
+                settingsConfigurationMessage = nil
+                resetStratumProtocolDetails()
+            }
         }
     }
 
     func toggleAutoFan() async {
+        guard isSettingsConfigurationEditable else { return }
         isUpdatingFan = true
         do {
             try await networkService.updateSystemSettings(autofanspeed: isAutoFan ? 0 : 1)
@@ -188,7 +205,7 @@ final class SettingsViewModel {
     }
 
     func adjustFanSpeed(by amount: Int) async {
-        guard !isAutoFan else { return }
+        guard !isAutoFan, isSettingsConfigurationEditable else { return }
         isUpdatingFan = true
         let newSpeed = max(0, min(100, fanSpeed + amount))
         do {
@@ -200,6 +217,11 @@ final class SettingsViewModel {
     }
 
     func savePoolConfiguration() async -> Bool {
+        guard isSettingsConfigurationEditable else {
+            poolConfigurationError = Self.settingsConfigurationUnavailableMessage
+            return false
+        }
+
         isUpdatingPoolConfiguration = true
         poolConfigurationError = nil
         var success = false
@@ -331,6 +353,11 @@ final class SettingsViewModel {
     }
 
     func saveHostnameConfiguration() async -> Bool {
+        guard isSettingsConfigurationEditable else {
+            hostnameConfigurationError = Self.settingsConfigurationUnavailableMessage
+            return false
+        }
+
         isUpdatingHostname = true
         hostnameConfigurationError = nil
         var success = false
@@ -371,5 +398,8 @@ final class SettingsViewModel {
         stratumV2AuthorityPubkey = ""
         fallbackStratumV2AuthorityPubkey = ""
     }
+
+    private static let settingsConfigurationUnavailableMessage =
+        "Miner settings are unavailable because this firmware returned an unsupported settings format. Metrics are still available, but use the miner web UI to change settings."
 
 }

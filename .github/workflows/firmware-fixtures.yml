@@ -1,0 +1,16 @@
+name: Firmware fixture tests
+
+on:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 15 * * 1"
+
+jobs:
+  firmware-fixtures:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run firmware fixture tests
+        run: bash scripts/test_firmware_fixtures.sh

@@ -172,6 +172,68 @@ struct DeviceMetrics {
         )
     }
 
+    init(from telemetry: MinerTelemetryDTO) {
+        let hashrate = telemetry.hashrate
+        let temperature = telemetry.temperature
+        let miningPaused = telemetry.miningPaused
+        let asicHashrateMonitors =
+            telemetry.hashrateMonitor?.asics?.enumerated().map { offset, asic in
+                ASICHashrateMonitor(
+                    index: offset + 1,
+                    total: asic.total ?? 0.0,
+                    domains: asic.domains ?? []
+                )
+            } ?? []
+        let inputVoltage = Self.normalizeVoltage(
+            telemetry.voltage ?? 0.0,
+            threshold: 1_000.0
+        )
+        let asicVoltage = Self.normalizeVoltage(
+            Double(telemetry.coreVoltage ?? telemetry.coreVoltageActual ?? 0),
+            threshold: 200.0
+        )
+        let measuredVoltage = {
+            let rawMeasured = Double(telemetry.coreVoltageActual ?? 0)
+            if rawMeasured > 0 {
+                return Self.normalizeVoltage(rawMeasured, threshold: 200.0)
+            }
+            if asicVoltage > 0 {
+                return asicVoltage
+            }
+            return inputVoltage
+        }()
+
+        self.init(
+            hashrate: hashrate ?? 0.0,
+            expectedHashrate: telemetry.expectedHashrate ?? 0.0,
+            temperature: temperature ?? 0.0,
+            power: telemetry.power ?? 0.0,
+            uptime: TimeInterval(telemetry.uptimeSeconds ?? 0),
+            fanSpeedPercent: telemetry.fanspeed ?? 0,
+            timestamp: Date(),
+            bestDifficulty: DeviceMetrics.parseBestDifficultyInMillions(telemetry.bestDiff),
+            inputVoltage: inputVoltage,
+            asicVoltage: asicVoltage,
+            measuredVoltage: measuredVoltage,
+            frequency: Double(telemetry.frequency ?? 0),
+            sharesAccepted: telemetry.sharesAccepted ?? 0,
+            sharesRejected: telemetry.sharesRejected ?? 0,
+            poolURL: telemetry.poolURL,
+            hostname: telemetry.hostname,
+            blockHeight: telemetry.blockHeight,
+            networkDifficulty: telemetry.networkDifficulty,
+            blockFound: telemetry.blockFound,
+            asicHashrateMonitors: asicHashrateMonitors,
+            asicErrorPercentage: telemetry.errorPercentage,
+            vrTemperature: telemetry.vrTemp ?? 0.0,
+            isVRTemperatureKnown: telemetry.vrTemp != nil,
+            isHashrateKnown: hashrate != nil,
+            isTemperatureKnown: temperature != nil,
+            isMiningPaused: miningPaused ?? false,
+            isMiningPausedKnown: miningPaused != nil
+        )
+    }
+
     static var placeholder: DeviceMetrics {
         DeviceMetrics(
             hashrate: 580.5,

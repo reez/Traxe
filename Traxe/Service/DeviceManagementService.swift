@@ -65,52 +65,22 @@ struct DeviceManagementService {
             switch httpResponse.statusCode {
             case 200:
                 do {
-                    let systemInfo = try decoder.decode(SystemInfoDTO.self, from: data)
-                    let hashrate = systemInfo.hashrate
-                    let temperature = systemInfo.temperature
-                    let miningPaused = systemInfo.miningPaused
-                    let lowercasedHostname = systemInfo.hostname.lowercased()
-                    let lowercasedVersion = systemInfo.version.lowercased()
-                    let uppercasedASICModel = systemInfo.ASICModel.uppercased()
+                    let telemetry = try decoder.decode(MinerTelemetryDTO.self, from: data)
+                    let hashrate = telemetry.hashrate
+                    let temperature = telemetry.temperature
+                    let miningPaused = telemetry.miningPaused
 
-                    let isBitaxeDevice =
-                        // BitAxe variants
-                        lowercasedHostname.contains("axe") || lowercasedVersion.contains("axe")
-                        // NerdAxe variants (NerdAxe, NerdQAxe, NerdQAxePlus, etc.)
-                        || lowercasedHostname.contains("nerd")
-                        // ESP-Miner variants
-                        || lowercasedHostname.contains("esp-miner")
-                        || lowercasedVersion.contains("esp-miner")
-                        || lowercasedHostname.contains("miner")
-                        || lowercasedVersion.contains("miner")
-                        // Lucky Miner / LVXX variants
-                        || lowercasedHostname.contains("lucky") || lowercasedHostname.contains("lv")
-                        // QAxe variants
-                        || lowercasedHostname.contains("qaxe")
-                        // ASIC model checks - BitMaker chips
-                        || uppercasedASICModel == "BM1366" || uppercasedASICModel == "BM1368"
-                        || (uppercasedASICModel.contains("BM")
-                            && uppercasedASICModel.rangeOfCharacter(
-                                from: CharacterSet.decimalDigits
-                            ) != nil)
-                        // ASIC model checks - Lucky Miner chips
-                        || uppercasedASICModel == "LV07" || uppercasedASICModel == "LV08"
-                        || (uppercasedASICModel.contains("LV")
-                            && uppercasedASICModel.rangeOfCharacter(
-                                from: CharacterSet.decimalDigits
-                            ) != nil)
-
-                    if isBitaxeDevice {
+                    if telemetry.isCompatibleMiner {
                         return DiscoveredDevice(
                             ip: ip,
-                            name: systemInfo.hostname,
+                            name: telemetry.hostname,
                             hashrate: hashrate ?? 0.0,
                             temperature: temperature ?? 0.0,
-                            bestDiff: systemInfo.bestDiff,
-                            power: systemInfo.power ?? 0.0,
-                            poolURL: systemInfo.poolURL,
-                            blockHeight: systemInfo.blockHeight,
-                            networkDifficulty: systemInfo.networkDifficulty,
+                            bestDiff: telemetry.bestDiff,
+                            power: telemetry.power ?? 0.0,
+                            poolURL: telemetry.poolURL,
+                            blockHeight: telemetry.blockHeight,
+                            networkDifficulty: telemetry.networkDifficulty,
                             isHashrateKnown: hashrate != nil,
                             isTemperatureKnown: temperature != nil,
                             isMiningPaused: miningPaused ?? false,

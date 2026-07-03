@@ -45,6 +45,17 @@ actor NetworkService {
     func performGET<T: Codable>(endpoint: String, ipAddressOverride: String? = nil) async throws
         -> T
     {
+        let data = try await performGETData(endpoint: endpoint, ipAddressOverride: ipAddressOverride)
+        do {
+            return try decoder.decode(T.self, from: data)
+        } catch {
+            throw NetworkError.decodingError(error, jsonData: data)
+        }
+    }
+
+    private func performGETData(endpoint: String, ipAddressOverride: String? = nil) async throws
+        -> Data
+    {
         guard let baseURL = getBaseURL(for: ipAddressOverride) else {
             throw NetworkError.configurationMissing
         }
@@ -61,11 +72,7 @@ actor NetworkService {
 
             switch httpResponse.statusCode {
             case 200:
-                do {
-                    return try decoder.decode(T.self, from: data)
-                } catch {
-                    throw NetworkError.decodingError(error, jsonData: data)
-                }
+                return data
             case 404:
                 throw NetworkError.apiError(message: "Miner not found at the specified IP address")
             case 500:
@@ -92,6 +99,18 @@ actor NetworkService {
 
     func fetchSystemInfo(ipAddressOverride: String? = nil) async throws -> SystemInfoDTO {
         try await performGET(endpoint: "/api/system/info", ipAddressOverride: ipAddressOverride)
+    }
+
+    func fetchMinerTelemetry(ipAddressOverride: String? = nil) async throws -> MinerTelemetryDTO {
+        let data = try await performGETData(
+            endpoint: "/api/system/info",
+            ipAddressOverride: ipAddressOverride
+        )
+        do {
+            return try decoder.decode(MinerTelemetryDTO.self, from: data)
+        } catch {
+            throw NetworkError.decodingError(error, jsonData: data)
+        }
     }
 
     func fetchSwarmInfo(ipAddressOverride: String? = nil) async throws -> /* SwarmInfoDTO */

@@ -1,0 +1,29 @@
+{
+  "hostname": "nerdqaxe-plus",
+  "version": "V1.0.35",
+  "deviceModel": "NerdQAxe++",
+  "ASICModel": "BM1368",
+  "hashRate": 4200000,
+  "expectedHashrate": 4500,
+  "temp": 55.0,
+  "power": 120.0,
+  "bestDiff": 12345,
+  "bestSessionDiff": 67890,
+  "stratumURL": "nerd.pool.example",
+  "stratumPort": 3333,
+  "stratumUser": "bc1qexample.nerd",
+  "fallbackStratumURL": "nerd.backup.example",
+  "fallbackStratumPort": 4333,
+  "fallbackStratumUser": "bc1qexample.nerd-backup",
+  "uptimeSeconds": 3600,
+  "sharesAccepted": 100,
+  "sharesRejected": 2,
+  "fanspeed": 80,
+  "miningPaused": false,
+  "stratum": {
+    "poolMode": 0,
+    "activePoolMode": 0,
+    "poolBalance": 50,
+    "usingFallback": false
+  }
+}
