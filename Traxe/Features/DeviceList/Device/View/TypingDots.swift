@@ -23,8 +23,18 @@ struct TypingDots: View {
         .accessibilityLabel(label ?? "Loading")
         .task {
             guard !reduceMotion else { return }
-            while true {
-                try? await Task.sleep(for: .milliseconds(450))
+            // `Task.sleep` throws as soon as SwiftUI cancels this task, so leaving the
+            // loop on that error is what keeps a view that is being removed from
+            // spinning through phases instead of holding the 450 ms cadence. Cancellation
+            // can also land just as a sleep succeeds, so the phase only advances after a
+            // second check.
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .milliseconds(450))
+                } catch {
+                    return
+                }
+                guard !Task.isCancelled else { return }
                 phase = (phase + 1) % 3
             }
         }

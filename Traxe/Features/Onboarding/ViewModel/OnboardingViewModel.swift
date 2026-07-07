@@ -35,6 +35,7 @@ final class OnboardingViewModel {
         struct DeviceManagementClient {
             var checkDevice: @Sendable (_ ip: String) async throws -> DiscoveredDevice
             var saveDevice: @Sendable (_ device: SavedDevice) throws -> Void
+            var saveDevices: @Sendable (_ devices: [SavedDevice]) throws -> Void
 
             static let live = Self(
                 checkDevice: { ip in
@@ -42,6 +43,9 @@ final class OnboardingViewModel {
                 },
                 saveDevice: { device in
                     try DeviceManagementService.saveDevice(device)
+                },
+                saveDevices: { devices in
+                    try DeviceManagementService.saveDevices(devices)
                 }
             )
         }
@@ -558,6 +562,21 @@ final class OnboardingViewModel {
             return true
         } catch {
             handleError("Failed to save the selected miner. Please try again.")
+            return false
+        }
+    }
+
+    @discardableResult
+    func selectDevices(_ devices: [DiscoveredDevice]) -> Bool {
+        let savedDevices = devices.map { device in
+            SavedDevice(name: device.name, ipAddress: device.ip)
+        }
+
+        do {
+            try dependencies.deviceManagement.saveDevices(savedDevices)
+            return true
+        } catch {
+            handleError("Failed to save the selected miners. Please try again.")
             return false
         }
     }

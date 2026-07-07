@@ -37,6 +37,9 @@ struct TraxeApp: App {
             "ai_enabled": true
         ])
 
+        // Moves the old global miner-alerts switch onto the miners saved at update time.
+        MinerAlertPreferences.appGroup()?.migrateLegacyGlobalPreferenceIfNeeded()
+
         Purchases.logLevel = .error
         Purchases.configure(withAPIKey: "appl_qmpDjLonGDKmmzmItMjeuLZLYLj")
         TraxeShortcutsProvider.updateAppShortcutParameters()
@@ -60,7 +63,9 @@ struct TraxeApp: App {
 
     var body: some Scene {
         WindowGroup {
-            NavigationStack {
+            // Each branch owns its own navigation container: DeviceListView uses a
+            // NavigationSplitView (sidebar + detail), OnboardingView a NavigationStack.
+            Group {
                 if hasCompletedOnboarding {
                     DeviceListView(
                         dashboardViewModel: dashboardViewModel,

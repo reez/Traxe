@@ -1,3 +1,4 @@
+import AppIntents
 import Foundation
 import SwiftUI
 import WidgetKit
@@ -28,7 +29,7 @@ private struct CachedDeviceMetrics: Codable {
     var lastUpdated: Date
 }
 
-struct Provider: TimelineProvider {
+struct Provider: AppIntentTimelineProvider {
     let appGroupID = "group.matthewramsden.traxe"
     let savedDevicesKey = "savedDeviceIPs"
     let cachedDataKey = "lastKnownWidgetData"
@@ -102,35 +103,70 @@ struct Provider: TimelineProvider {
         SimpleEntry(date: Date(), hashrate: "--", isPlaceholder: true, lastUpdated: nil)
     }
 
-    func getSnapshot(in context: Context, completion: @escaping (SimpleEntry) -> Void) {
-        let entry = SimpleEntry(
+    func snapshot(for configuration: SelectMinerIntent, in context: Context) async -> SimpleEntry {
+        // Prefer real cached data so the gallery preview mirrors the user's fleet;
+        // fall back to a representative fleet for first-time installs.
+        let cache = loadDeviceMetricsCache()
+        if !cache.isEmpty {
+            let total = cache.values.reduce(0.0) { $0 + $1.hashrate }
+            let deviceIDs = Array(cache.keys)
+            let pausedDeviceIDs = Set(
+                cache.compactMap { deviceID, metrics in
+                    metrics.isMiningPausedKnown == true && metrics.isMiningPaused == true
+                        ? deviceID : nil
+                }
+            )
+            return SimpleEntry(
+                date: Date(),
+                hashrate: total.formatted(
+                    .number.grouping(.never).precision(.fractionLength(1))
+                ),
+                totalDevices: cache.count,
+                successfulFetches: cache.count,
+                lastUpdated: cache.values.map(\.lastUpdated).max(),
+                fleetStatus: WidgetFleetStatus.make(
+                    deviceIDs: deviceIDs,
+                    respondedDeviceIDs: Set(deviceIDs),
+                    deviceIDsWithMetrics: Set(deviceIDs),
+                    pausedDeviceIDs: pausedDeviceIDs
+                )
+            )
+        }
+        return SimpleEntry(
             date: Date(),
-            hashrate: "416.30",
-            totalDevices: 1,
-            lastUpdated: Date()
+            hashrate: "15400.0",
+            totalDevices: 7,
+            successfulFetches: 6,
+            lastUpdated: Date(),
+            fleetStatus: WidgetFleetStatus(
+                total: 7,
+                online: 4,
+                paused: 1,
+                offline: 1,
+                unknown: 1
+            )
         )
-        completion(entry)
     }
 
-    func getTimeline(in context: Context, completion: @escaping (Timeline<Entry>) -> Void) {
-        Task {
-            guard let sharedDefaults = UserDefaults(suiteName: appGroupID),
-                let ipAddresses = sharedDefaults.array(forKey: savedDevicesKey) as? [String],
-                !ipAddresses.isEmpty
-            else {
-                let entry = SimpleEntry(
-                    date: Date(),
-                    hashrate: "Setup",
-                    totalDevices: 0,
-                    lastUpdated: nil
-                )
-                let timeline = Timeline(
-                    entries: [entry],
-                    policy: .after(Date().addingTimeInterval(60 * 15))
-                )
-                completion(timeline)
-                return
-            }
+    func timeline(
+        for configuration: SelectMinerIntent,
+        in context: Context
+    ) async -> Timeline<SimpleEntry> {
+        guard let sharedDefaults = UserDefaults(suiteName: appGroupID),
+            let ipAddresses = sharedDefaults.array(forKey: savedDevicesKey) as? [String],
+            !ipAddresses.isEmpty
+        else {
+            let entry = SimpleEntry(
+                date: Date(),
+                hashrate: "Setup",
+                totalDevices: 0,
+                lastUpdated: nil
+            )
+            return Timeline(
+                entries: [entry],
+                policy: .after(Date().addingTimeInterval(60 * 15))
+            )
+        }
 
             let currentDate = Date()
             let refreshDate = Calendar.current.date(byAdding: .minute, value: 10, to: currentDate)!
@@ -141,21 +177,32 @@ struct Provider: TimelineProvider {
             // Fetch per-device hashrates in parallel and merge with cache
             var fetchedHashrates: [String: Double] = [:]
             var fetchedTemps: [String: Double] = [:]
-            await withTaskGroup(of: (String, (hash: Double?, temp: Double?)).self) { group in
+            var respondedIPAddresses: Set<String> = []
+            await withTaskGroup(
+                of: (String, (responded: Bool, hash: Double?, temp: Double?)).self
+            ) { group in
                 for ip in ipAddresses {
                     group.addTask {
                         do {
                             let telemetry = try await networkService.fetchMinerTelemetry(
                                 ipAddressOverride: ip
                             )
-                            return (ip, (hash: telemetry.hashrate, temp: telemetry.temp))
+                            return (
+                                ip,
+                                (
+                                    responded: true,
+                                    hash: telemetry.hashrate,
+                                    temp: telemetry.temp
+                                )
+                            )
                         } catch {
-                            return (ip, (hash: nil, temp: nil))
+                            return (ip, (responded: false, hash: nil, temp: nil))
                         }
                     }
                 }
 
                 for await (ip, fresh) in group {
+                    if fresh.responded { respondedIPAddresses.insert(ip) }
                     if let hashrate = fresh.hash { fetchedHashrates[ip] = hashrate }
                     if let temp = fresh.temp { fetchedTemps[ip] = temp }
                 }
@@ -196,9 +243,21 @@ struct Provider: TimelineProvider {
 
             // Compute total from merged per-device metrics (only current IPs)
             let totalHashrate = merged.values.reduce(0.0) { $0 + $1.hashrate }
-            let successfulFetches = fetchedHashrates.count
+            let successfulFetches = respondedIPAddresses.count
             let displayHashrate =
                 totalHashrate.formatted(.number.grouping(.never).precision(.fractionLength(1)))
+            let pausedDeviceIDs = Set(
+                merged.compactMap { deviceID, metrics in
+                    metrics.isMiningPausedKnown == true && metrics.isMiningPaused == true
+                        ? deviceID : nil
+                }
+            )
+            let fleetStatus = WidgetFleetStatus.make(
+                deviceIDs: ipAddresses,
+                respondedDeviceIDs: respondedIPAddresses,
+                deviceIDsWithMetrics: Set(merged.keys),
+                pausedDeviceIDs: pausedDeviceIDs
+            )
 
             // Determine freshness timestamp
             let mostRecentUpdate = merged.values.map(\.lastUpdated).max()
@@ -212,6 +271,21 @@ struct Provider: TimelineProvider {
             // Save merged per-device cache for app + widget consistency
             saveDeviceMetricsCache(merged)
 
+            // Piggyback miner health alerts on this refresh (no-op unless the
+            // user enabled them in Settings and granted notification permission).
+            await MinerAlertEvaluator.evaluate(
+                ipAddresses: ipAddresses,
+                respondedIPAddresses: respondedIPAddresses,
+                baselineReachableIPAddresses: Set(
+                    perDeviceCache.compactMap { ipAddress, metrics in
+                        currentDate.timeIntervalSince(metrics.lastUpdated) <= 30 * 60
+                            ? ipAddress : nil
+                    }
+                ),
+                fetchedTemps: fetchedTemps,
+                hostnames: merged.compactMapValues(\.hostname)
+            )
+
             // Also keep lastKnownWidgetData for backward compatibility
             if successfulFetches > 0 {
                 cacheLastKnownData(
@@ -221,16 +295,39 @@ struct Provider: TimelineProvider {
                 )
             }
 
+            // A configured miner narrows the displayed numbers; the fetch and the
+            // shared cache above always cover the whole fleet.
+            if let selected = configuration.miner {
+                let selectedMetrics = merged[selected.id]
+                let selectedHashrate = selectedMetrics?.hashrate ?? 0
+                let entry = SimpleEntry(
+                    date: currentDate,
+                    hashrate: selectedHashrate.formatted(
+                        .number.grouping(.never).precision(.fractionLength(1))
+                    ),
+                    totalDevices: 1,
+                    successfulFetches: respondedIPAddresses.contains(selected.id) ? 1 : 0,
+                    lastUpdated: selectedMetrics?.lastUpdated ?? freshnessDate,
+                    minerName: selectedMetrics?.hostname ?? selected.name,
+                    fleetStatus: WidgetFleetStatus.make(
+                        deviceIDs: [selected.id],
+                        respondedDeviceIDs: respondedIPAddresses,
+                        deviceIDsWithMetrics: Set(merged.keys),
+                        pausedDeviceIDs: pausedDeviceIDs
+                    )
+                )
+                return Timeline(entries: [entry], policy: .after(refreshDate))
+            }
+
             let entry = SimpleEntry(
                 date: currentDate,
                 hashrate: displayHashrate,
                 totalDevices: ipAddresses.count,
                 successfulFetches: successfulFetches,
-                lastUpdated: freshnessDate
+                lastUpdated: freshnessDate,
+                fleetStatus: fleetStatus
             )
-            let timeline = Timeline(entries: [entry], policy: .after(refreshDate))
-            completion(timeline)
-        }
+            return Timeline(entries: [entry], policy: .after(refreshDate))
     }
 }
 
@@ -278,6 +375,9 @@ struct SimpleEntry: TimelineEntry {
     var successfulFetches: Int = 0
     var isPlaceholder: Bool = false
     let lastUpdated: Date?
+    /// Set when the widget is configured to a single miner.
+    var minerName: String? = nil
+    var fleetStatus: WidgetFleetStatus = .empty
 }
 
 struct TraxeWidgetEntryView: View {
@@ -409,10 +509,11 @@ struct TraxeWidgetEntryView: View {
 
             HStack {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("HASH RATE".uppercased())
+                    Text((entry.minerName ?? "Hash Rate").uppercased())
                         .font(.caption2)
                         .foregroundStyle(Color.traxeGold)
                         .fontDesign(.rounded)
+                        .lineLimit(1)
 
                     let (valueText, unitText) = Self.formatHashrate(entry.hashrate)
 
@@ -447,47 +548,19 @@ struct TraxeWidgetEntryView: View {
                 Spacer()
             }
 
+        // `.systemLarge` and `.systemExtraLargePortrait` on iOS 27 both land here —
+        // routing the new family through `default` avoids referencing the iOS 27
+        // enum case symbol, so no compiler gating is needed in this switch.
         default:
-
-            HStack {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("HASH RATE".uppercased())
-                        .font(.caption2)
-                        .foregroundStyle(Color.traxeGold)
-                        .fontDesign(.rounded)
-
-                    let (valueText, unitText) = Self.formatHashrate(entry.hashrate)
-
-                    Text(valueText)
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                        .fontDesign(.rounded)
-                        .minimumScaleFactor(0.6)
-                        .lineLimit(1)
-                        .contentTransition(.numericText())
-                        .redacted(
-                            reason: (entry.isPlaceholder || entry.hashrate == "Error")
-                                ? .placeholder : []
-                        )
-
-                    Text(unitText)
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
-                        .fontDesign(.rounded)
-
-                    Spacer()
-
-                    Text("at \(entry.lastUpdated ?? entry.date, style: .time)")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .fontDesign(.rounded)
-
-                }
-                //        .padding(.vertical, 10)
-                .padding(.all, 10.0)
-                Spacer()
-            }
+            let (valueText, unitText) = Self.formatHashrate(entry.hashrate)
+            LargeFleetWidgetView(
+                minerName: entry.minerName,
+                hashrateValue: valueText,
+                hashrateUnit: unitText,
+                updatedAt: entry.lastUpdated ?? entry.date,
+                isRedacted: entry.isPlaceholder || entry.hashrate == "Error",
+                status: entry.fleetStatus
+            )
 
         }
 
@@ -512,17 +585,15 @@ struct TraxeWidgetEntryView: View {
             return (value: hashrateString, unit: "")
         }
 
-        let partialSuffix = isPartial ? "" : ""
-
         if value >= 1000 {
             let teraValue = value / 1000
             return (
-                value: teraValue.formatted(.number.precision(.fractionLength(1))) + partialSuffix,
+                value: teraValue.formatted(.number.precision(.fractionLength(1))),
                 unit: "TH/s"
             )
         } else {
             return (
-                value: value.formatted(.number.precision(.fractionLength(1))) + partialSuffix,
+                value: value.formatted(.number.precision(.fractionLength(1))),
                 unit: "GH/s"
             )
         }
@@ -533,80 +604,46 @@ struct TraxeWidget: Widget {
     let kind: String = "TraxeWidget"
     @Environment(\.colorScheme) var colorScheme
 
-    var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: Provider()) { entry in
-            if #available(iOS 17.0, *) {
-                TraxeWidgetEntryView(entry: entry)
-                    .containerBackground(for: .widget) {
-                        //                        ZStack {
-                        //                            // Base layer - solid background
-                        //                            RoundedRectangle(cornerRadius: 20)
-                        //                                .fill(
-                        LinearGradient(
-                            colors: colorScheme == .dark
-                                ? [
-                                    Color(.systemGray6),
-                                    Color(.systemGray5),
-                                ]
-                                : [
-                                    Color(.systemGray5),
-                                    Color(.systemGray4),
-                                ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                        //                                )
-                        //                                .shadow(color: .black.opac/*ity(0.1), radius: 8, x: 0, y: 4)*/
-
-                        // Simple glass layer on top
-                        //                            RoundedRectangle(cornerRadius: 20)
-                        //                                .fill(.ultraThinMaterial)
-                        //                                .overlay(
-                        //                                    RoundedRectangle(cornerRadius: 20)
-                        //                                        .stroke(.white.opacity(0.3), lineWidth: 1)
-                        //                                )
-                        //                        }
-                    }
-            } else {
-                TraxeWidgetEntryView(entry: entry)
-                    .padding()
-                    .background(
-                        ZStack {
-                            // Base layer - solid background
-                            RoundedRectangle(cornerRadius: 20)
-                                .fill(
-                                    LinearGradient(
-                                        colors: colorScheme == .dark
-                                            ? [
-                                                Color(.systemGray6),
-                                                Color(.systemGray5),
-                                            ]
-                                            : [
-                                                Color(.systemGray5),
-                                                Color(.systemGray4),
-                                            ],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
-
-                            // Simple glass layer on top
-                            RoundedRectangle(cornerRadius: 20)
-                                .fill(.ultraThinMaterial)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 20)
-                                        .stroke(.white.opacity(0.3), lineWidth: 1)
-                                )
-                        }
-                    )
+    private var supportedFamilies: [WidgetFamily] {
+        var families: [WidgetFamily] = [
+            .accessoryCircular, .accessoryInline, .accessoryRectangular,
+            .systemSmall, .systemLarge,
+        ]
+        #if compiler(>=6.4)
+            // Full-page home screen widget, new in iOS 27.
+            if #available(iOS 27.0, *) {
+                families.append(.systemExtraLargePortrait)
             }
+        #endif
+        return families
+    }
+
+    var body: some WidgetConfiguration {
+        AppIntentConfiguration(
+            kind: kind,
+            intent: SelectMinerIntent.self,
+            provider: Provider()
+        ) { entry in
+            TraxeWidgetEntryView(entry: entry)
+                .containerBackground(for: .widget) {
+                    LinearGradient(
+                        colors: colorScheme == .dark
+                            ? [
+                                Color(.systemGray6),
+                                Color(.systemGray5),
+                            ]
+                            : [
+                                Color(.systemGray5),
+                                Color(.systemGray4),
+                            ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                }
         }
         .configurationDisplayName("Hashrate Widget")
-        .description("This is a hashrate widget.")
-        .supportedFamilies([
-            .accessoryCircular, .accessoryInline, .accessoryRectangular, .systemSmall,
-        ])
+        .description("Track your fleet or a single miner.")
+        .supportedFamilies(supportedFamilies)
     }
 }
 
@@ -731,5 +768,24 @@ struct TraxeWidget: Widget {
         totalDevices: 6,
         successfulFetches: 6,
         lastUpdated: .now
+    )
+}
+
+#Preview("systemLarge fleet", as: .systemLarge) {
+    TraxeWidget()
+} timeline: {
+    SimpleEntry(
+        date: .now,
+        hashrate: "15400.0",
+        totalDevices: 7,
+        successfulFetches: 6,
+        lastUpdated: .now,
+        fleetStatus: WidgetFleetStatus(
+            total: 7,
+            online: 4,
+            paused: 1,
+            offline: 1,
+            unknown: 1
+        )
     )
 }

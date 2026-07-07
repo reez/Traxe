@@ -42,7 +42,7 @@ final class AppStoreScreenshotRenderTests: XCTestCase {
             colorScheme: .dark,
             settleDuration: .milliseconds(800)
         ) {
-            FleetDashboardScreenshotView()
+            StoreFleetDashboardScreenshotView()
         }
 
         UserDefaults.standard.set(
@@ -141,16 +141,145 @@ final class AppStoreScreenshotRenderTests: XCTestCase {
         }
     }
 
+    /// Landscape and live-resize coverage: renders the main screens at iPhone
+    /// landscape dimensions, including one pass that starts portrait and resizes
+    /// the live window (rotation and other scene shape changes).
+    func testRenderLandscapeAndLiveResizeScreenshots() async throws {
+        let landscape = CGSize(width: 874, height: 402)
+        let portrait = CGSize(width: 402, height: 874)
+        let regularLandscape = CGSize(width: 1_194, height: 834)
+        let suiteName = "screenshots.device-list.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            XCTFail("Failed to create screenshot defaults")
+            return
+        }
+        defaults.removePersistentDomain(forName: suiteName)
+        defaults.set(
+            try JSONEncoder().encode(PreviewFixtures.sampleSavedDevices),
+            forKey: "savedDevices"
+        )
+        defaults.set(
+            WhatsNewConfig.currentWhatsNewKey(),
+            forKey: "lastSeenWhatsNewVersion"
+        )
+        let dashboardContext = PreviewFixtures.makeDashboardPreviewContext()
+        let viewModelDependencies = DeviceListViewModel.Dependencies(
+            deviceManagement: .init(
+                checkDevice: { ipAddress in
+                    guard let metrics = PreviewFixtures.sampleDeviceMetricsByIP[ipAddress] else {
+                        throw DeviceCheckError.requestFailed(.timedOut)
+                    }
+                    return DiscoveredDevice(
+                        ip: ipAddress,
+                        name: metrics.hostname ?? ipAddress,
+                        hashrate: metrics.hashrate,
+                        temperature: metrics.temperature,
+                        bestDiff: "\(metrics.bestDifficulty)",
+                        power: metrics.power,
+                        poolURL: metrics.poolURL,
+                        blockHeight: metrics.blockHeight,
+                        networkDifficulty: metrics.networkDifficulty,
+                        isHashrateKnown: metrics.isHashrateKnown,
+                        isTemperatureKnown: metrics.isTemperatureKnown,
+                        isMiningPaused: metrics.isMiningPaused,
+                        isMiningPausedKnown: metrics.isMiningPausedKnown
+                    )
+                },
+                deleteDevice: { _ in },
+                reorderDevices: { _ in }
+            ),
+            reloadWidget: {},
+            autoRefreshOnLoad: false
+        )
+
+        try await render(
+            fileName: "L1_fleet-dashboard-landscape.png",
+            colorScheme: .dark,
+            settleDuration: .milliseconds(800),
+            size: landscape
+        ) {
+            FleetDashboardScreenshotView(
+                dashboardViewModel: dashboardContext.viewModel,
+                defaults: defaults,
+                viewModelDependencies: viewModelDependencies,
+                modelContainer: dashboardContext.container
+            )
+        }
+
+        try await render(
+            fileName: "L2_device-summary-landscape.png",
+            colorScheme: .dark,
+            settleDuration: .seconds(6),
+            size: landscape
+        ) {
+            DeviceSummaryScreenshotView(
+                deviceID: PreviewFixtures.sampleSecondaryDeviceID,
+                deviceName: "bitaxe",
+                metrics: makeSummaryMetrics(
+                    deviceID: PreviewFixtures.sampleSecondaryDeviceID,
+                    profile: .bitaxeRecovery
+                ),
+                historicalData: makeSummaryHistoricalData(
+                    deviceID: PreviewFixtures.sampleSecondaryDeviceID,
+                    profile: .bitaxeRecovery
+                )
+            )
+        }
+
+        try await render(
+            fileName: "L3_fleet-dashboard-live-resize.png",
+            colorScheme: .dark,
+            settleDuration: .milliseconds(800),
+            size: landscape,
+            initialSize: portrait
+        ) {
+            FleetDashboardScreenshotView(
+                dashboardViewModel: dashboardContext.viewModel,
+                defaults: defaults,
+                viewModelDependencies: viewModelDependencies,
+                modelContainer: dashboardContext.container
+            )
+        }
+
+        try await render(
+            fileName: "L4_fleet-dashboard-regular-split.png",
+            colorScheme: .dark,
+            settleDuration: .milliseconds(800),
+            size: regularLandscape,
+            horizontalSizeClass: .regular
+        ) {
+            FleetDashboardScreenshotView(
+                dashboardViewModel: dashboardContext.viewModel,
+                defaults: defaults,
+                viewModelDependencies: viewModelDependencies,
+                modelContainer: dashboardContext.container
+            )
+        }
+    }
+
     private func render<Content: View>(
         fileName: String,
         colorScheme: ColorScheme,
         settleDuration: Duration,
+        size: CGSize = screenshotPointSize,
+        initialSize: CGSize? = nil,
+        horizontalSizeClass: UIUserInterfaceSizeClass? = nil,
         @ViewBuilder content: @escaping () -> Content
     ) async throws {
-        let rootView = ScreenshotCanvas(colorScheme: colorScheme, content: content)
+        let rootView = ScreenshotCanvas(
+            colorScheme: colorScheme,
+            size: initialSize == nil ? size : nil,
+            content: content
+        )
         let host = UIHostingController(rootView: rootView)
         host.overrideUserInterfaceStyle =
             colorScheme == .dark ? UIUserInterfaceStyle.dark : UIUserInterfaceStyle.light
+        if let horizontalSizeClass {
+            // Overriding the trait rather than the SwiftUI environment is what actually
+            // expands a NavigationSplitView; the simulator scene is always compact, so
+            // the window size alone never produces the side-by-side layout.
+            host.traitOverrides.horizontalSizeClass = horizontalSizeClass
+        }
 
         let window: UIWindow
         if let scene = UIApplication.shared.connectedScenes
@@ -159,10 +288,12 @@ final class AppStoreScreenshotRenderTests: XCTestCase {
         {
             window = UIWindow(windowScene: scene)
         } else {
-            window = UIWindow(frame: CGRect(origin: .zero, size: screenshotPointSize))
+            window = UIWindow(frame: CGRect(origin: .zero, size: size))
         }
 
-        window.frame = CGRect(origin: .zero, size: screenshotPointSize)
+        // Starting at initialSize and resizing to `size` before capture exercises a
+        // live window resize such as a rotation.
+        window.frame = CGRect(origin: .zero, size: initialSize ?? size)
         window.rootViewController = host
         window.makeKeyAndVisible()
         host.view.frame = window.bounds
@@ -172,13 +303,21 @@ final class AppStoreScreenshotRenderTests: XCTestCase {
 
         try await Task.sleep(for: settleDuration)
 
+        if initialSize != nil {
+            window.frame = CGRect(origin: .zero, size: size)
+            host.view.frame = window.bounds
+            host.view.setNeedsLayout()
+            host.view.layoutIfNeeded()
+            try await Task.sleep(for: .milliseconds(500))
+        }
+
         host.view.setNeedsLayout()
         host.view.layoutIfNeeded()
 
         let format = UIGraphicsImageRendererFormat()
         format.scale = screenshotScale
         format.opaque = true
-        let renderer = UIGraphicsImageRenderer(size: screenshotPointSize, format: format)
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
         let image = renderer.image { _ in
             window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
         }
@@ -230,18 +369,24 @@ final class AppStoreScreenshotRenderTests: XCTestCase {
 
 private struct ScreenshotCanvas<Content: View>: View {
     let colorScheme: ColorScheme
+    // nil = fill the window instead of pinning, so live window resizes propagate.
+    var size: CGSize?
     let content: () -> Content
 
     var body: some View {
         content()
-            .frame(width: screenshotPointSize.width, height: screenshotPointSize.height)
+            .frame(width: size?.width, height: size?.height)
             .clipped()
             .preferredColorScheme(colorScheme)
             .environment(\.dynamicTypeSize, .medium)
             .environment(\.locale, Locale(identifier: "en_US"))
             .environment(\.timeZone, TimeZone(secondsFromGMT: 0) ?? .current)
             .overlay(alignment: .top) {
-                ScreenshotStatusBar(colorScheme: colorScheme)
+                GeometryReader { geometry in
+                    if geometry.size.height >= geometry.size.width {
+                        ScreenshotStatusBar(colorScheme: colorScheme)
+                    }
+                }
             }
     }
 }
@@ -276,6 +421,23 @@ private struct ScreenshotStatusBar: View {
 }
 
 private struct FleetDashboardScreenshotView: View {
+    let dashboardViewModel: DashboardViewModel
+    let defaults: UserDefaults
+    let viewModelDependencies: DeviceListViewModel.Dependencies
+    let modelContainer: ModelContainer
+
+    var body: some View {
+        DeviceListView(
+            dashboardViewModel: dashboardViewModel,
+            navigateToDeviceList: .constant(true),
+            mockUserDefaults: defaults,
+            viewModelDependencies: viewModelDependencies
+        )
+        .modelContainer(modelContainer)
+    }
+}
+
+private struct StoreFleetDashboardScreenshotView: View {
     @State private var viewModel: DeviceListViewModel
 
     @MainActor

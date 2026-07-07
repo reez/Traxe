@@ -101,7 +101,9 @@ struct WeeklyRecapView: View {
     @State private var fleetRecaps: [WeeklyRecapFleetRecap] = []
     @State private var isLoading = false
     @State private var expandedFleetDeviceIDs: Set<String> = []
-    @State private var latestBlockHeightsByPoolSlug: [String: Int] = [:]
+    // No declaration default: init assigns this, and the iOS 27 @State macro
+    // would observe a default here instead of the injected value.
+    @State private var latestBlockHeightsByPoolSlug: [String: Int]
 
     private let poolBlockLookupService = PoolBlockLookupService()
 

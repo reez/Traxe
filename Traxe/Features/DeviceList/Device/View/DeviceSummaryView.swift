@@ -4,6 +4,11 @@ import SwiftData
 import SwiftUI
 
 struct DeviceSummaryView: View {
+    private struct AISummaryTaskID: Equatable {
+        let deviceIP: String
+        let isDataLoaded: Bool
+    }
+
     let dashboardViewModel: DashboardViewModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -17,21 +22,24 @@ struct DeviceSummaryView: View {
     let poolName: String?
     let onMinerDeleted: (String) -> Void
 
-    @State private var deviceAISummary: AISummary?
-    @State private var isGeneratingDeviceSummary = false
+    @State private var summaryController: DeviceAISummaryController
 
     init(
         dashboardViewModel: DashboardViewModel,
         deviceName: String,
         deviceIP: String,
         poolName: String?,
-        onMinerDeleted: @escaping (String) -> Void = { _ in }
+        onMinerDeleted: @escaping (String) -> Void = { _ in },
+        summaryController: DeviceAISummaryController? = nil
     ) {
         self.dashboardViewModel = dashboardViewModel
         self.deviceName = deviceName
         self.deviceIP = deviceIP
         self.poolName = poolName
         self.onMinerDeleted = onMinerDeleted
+        self._summaryController = State(
+            initialValue: summaryController ?? DeviceAISummaryController()
+        )
     }
 
     private var displayPoolName: String? { dashboardViewModel.currentMetrics.poolURL ?? poolName }
@@ -63,30 +71,12 @@ struct DeviceSummaryView: View {
                             AIFeatureFlags.isEnabledByUser
                         {
                             DeviceAISummarySectionView(
-                                summary: deviceAISummary,
+                                summary: summaryController.summary,
                                 isDataLoaded: dashboardViewModel.connectionState == .connected,
                                 historicalData: dashboardViewModel.connectionState == .connected
                                     ? dashboardViewModel.historicalData
                                     : []
                             )
-                            .onAppear {
-                                if deviceAISummary == nil {
-                                    Task {
-                                        try? await Task.sleep(for: .milliseconds(500))
-                                        if ProcessInfo.isPreview {
-                                            let seeded = UserDefaults.standard.string(
-                                                forKey: "preview_device_summary"
-                                            )
-                                            let content =
-                                                seeded
-                                                ?? "Hashrate steady around 2.5 TH/s; temps mid‑60s °C; power ~620W. This miner's solo odds to hit a block are 1 in 5.7M today (15.7K yr expected)."
-                                            deviceAISummary = AISummary(content: content)
-                                        } else {
-                                            generateDeviceAISummary()
-                                        }
-                                    }
-                                }
-                            }
                         }
 
                         WeeklyRecapNavigationTile(viewData: .device) {
@@ -131,7 +121,7 @@ struct DeviceSummaryView: View {
                         .padding(.bottom)
                     }
                 }
-                .animation(.easeInOut(duration: 0.4), value: deviceAISummary != nil)
+                .animation(.easeInOut(duration: 0.4), value: summaryController.summary != nil)
             }
             .debugBlockFoundToast {
                 showBlockFoundToast = true
@@ -191,10 +181,37 @@ struct DeviceSummaryView: View {
             )
             .padding(.horizontal, 24)
         }
-        .task {
-            guard !ProcessInfo.isPreview else { return }
+        .task(id: deviceIP) {
+            // Device-list navigation connects before presenting this screen. Starting a
+            // second connection here would put the already-populated metrics back into the
+            // redacted `.connecting` state while the summary is being prepared.
+            guard !ProcessInfo.isPreview,
+                dashboardViewModel.connectionState != .connected
+            else { return }
             await dashboardViewModel.connect()
-            dashboardViewModel.loadHistoricalData()
+        }
+        // Generation begins only after the first telemetry fetch. This preserves the
+        // original ordering: historical data is loaded first, the summary is generated once,
+        // and the completed value then enters the character-by-character reveal.
+        .task(
+            id: AISummaryTaskID(
+                deviceIP: deviceIP,
+                isDataLoaded: dashboardViewModel.connectionState == .connected
+            )
+        ) {
+            guard AIFeatureFlags.isAvailable,
+                AIFeatureFlags.isEnabledByUser,
+                dashboardViewModel.connectionState == .connected
+            else { return }
+
+            if !ProcessInfo.isPreview {
+                dashboardViewModel.loadHistoricalData()
+            }
+
+            await summaryController.loadSummary(
+                for: deviceIP,
+                historicalData: dashboardViewModel.historicalData
+            )
         }
         .navigationDestination(isPresented: $showingWeeklyRecap) {
             WeeklyRecapView(
@@ -204,40 +221,6 @@ struct DeviceSummaryView: View {
                     poolName: displayPoolName
                 )
             )
-        }
-    }
-
-    private func generateDeviceAISummary() {
-        guard #available(iOS 18.0, macOS 15.0, *) else { return }
-
-        guard let sharedDefaults = UserDefaults(suiteName: "group.matthewramsden.traxe"),
-            let deviceIP = sharedDefaults.string(forKey: "bitaxeIPAddress"),
-            !deviceIP.isEmpty
-        else {
-            return
-        }
-
-        isGeneratingDeviceSummary = true
-
-        Task {
-            do {
-                let aiService = AIAnalysisService()
-                let summary = try await aiService.generateDeviceSummary(
-                    forDevice: deviceIP,
-                    withHistoricalData: dashboardViewModel.historicalData
-                )
-
-                await MainActor.run {
-                    withAnimation(.easeInOut(duration: 0.4)) {
-                        deviceAISummary = summary
-                        isGeneratingDeviceSummary = false
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    isGeneratingDeviceSummary = false
-                }
-            }
         }
     }
 

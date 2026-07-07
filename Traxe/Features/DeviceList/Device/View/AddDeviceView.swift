@@ -2,21 +2,99 @@ import SwiftUI
 
 struct AddDeviceView: View {
     @Environment(\.dismiss) var dismiss
-    @State private var viewModel = OnboardingViewModel()
+    @State private var viewModel: OnboardingViewModel
 
     @State private var ipAddress: String = ""
     @State private var isSaving: Bool = false
     @State private var showingErrorAlert = false
     @State private var errorMessage: String = ""
     @State private var showSettingsAlert = false
-    @State private var selectedDevice: DiscoveredDevice?
+    @State private var selectedDeviceIPs: Set<String>
     @FocusState private var isIPAddressFocused: Bool
+
+    private let existingDeviceIPs: Set<String>
+    private let deviceLimit: Int
 
     private let ipRegex =
         #"^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"#
 
+    @MainActor
+    init(
+        existingDeviceIPs: Set<String> = [],
+        deviceLimit: Int = Int.max
+    ) {
+        self.init(
+            existingDeviceIPs: existingDeviceIPs,
+            deviceLimit: deviceLimit,
+            viewModel: OnboardingViewModel(),
+            selectedDeviceIPs: []
+        )
+    }
+
+    init(
+        existingDeviceIPs: Set<String>,
+        deviceLimit: Int,
+        viewModel: OnboardingViewModel,
+        selectedDeviceIPs: Set<String>
+    ) {
+        self.existingDeviceIPs = existingDeviceIPs
+        self.deviceLimit = deviceLimit
+        self._viewModel = State(initialValue: viewModel)
+        self._selectedDeviceIPs = State(initialValue: selectedDeviceIPs)
+    }
+
+    private var remainingDeviceSlots: Int {
+        guard deviceLimit != Int.max else { return Int.max }
+        return max(deviceLimit - existingDeviceIPs.count, 0)
+    }
+
+    private var selectableDiscoveredDevices: [DiscoveredDevice] {
+        viewModel.discoveredDevices.filter { !existingDeviceIPs.contains($0.ip) }
+    }
+
+    private var limitedSelectableDiscoveredDevices: [DiscoveredDevice] {
+        guard remainingDeviceSlots != Int.max else { return selectableDiscoveredDevices }
+        return Array(selectableDiscoveredDevices.prefix(remainingDeviceSlots))
+    }
+
+    private var selectedDiscoveredDevices: [DiscoveredDevice] {
+        viewModel.discoveredDevices.filter {
+            selectedDeviceIPs.contains($0.ip) && !existingDeviceIPs.contains($0.ip)
+        }
+    }
+
+    private var canSelectMoreDiscoveredDevices: Bool {
+        remainingDeviceSlots == Int.max || selectedDiscoveredDevices.count < remainingDeviceSlots
+    }
+
     private var canAddDevice: Bool {
-        selectedDevice != nil || (isValidIP(ipAddress) && !ipAddress.isEmpty)
+        remainingDeviceSlots != 0
+            && (!selectedDiscoveredDevices.isEmpty || (isValidIP(ipAddress) && !ipAddress.isEmpty))
+    }
+
+    private var selectionStatusText: String? {
+        guard remainingDeviceSlots != Int.max, !selectableDiscoveredDevices.isEmpty else {
+            return nil
+        }
+
+        let selectedCount = selectedDiscoveredDevices.count
+        let slotLabel = remainingDeviceSlots == 1 ? "slot" : "slots"
+        let baseStatus = "\(selectedCount) of \(remainingDeviceSlots) \(slotLabel) selected"
+
+        if remainingDeviceSlots == 0 || selectedCount == remainingDeviceSlots {
+            return "\(baseStatus). No more slots available."
+        }
+
+        return baseStatus
+    }
+
+    private var areAllSelectableDevicesSelected: Bool {
+        !limitedSelectableDiscoveredDevices.isEmpty
+            && limitedSelectableDiscoveredDevices.allSatisfy { selectedDeviceIPs.contains($0.ip) }
+    }
+
+    private var selectAllButtonTitle: String {
+        areAllSelectableDevicesSelected ? "Deselect All" : "Select All"
     }
 
     var body: some View {
@@ -116,32 +194,16 @@ struct AddDeviceView: View {
             } else {
 
                 if #available(iOS 26.0, *) {
-                    Button("Scan Network") {
-                        isIPAddressFocused = false
-                        Task {
-                            let result = await viewModel.startScan()
-                            if result == .permissionDenied {
-                                self.showSettingsAlert = true
-                            }
-                        }
-                    }
-                    .buttonStyle(.glassProminent)
-                    .tint(Color.traxeGold)
-                    .disabled(viewModel.isScanning)
+                    Button("Scan Network", action: startScan)
+                        .buttonStyle(.glassProminent)
+                        .tint(Color.traxeGold)
+                        .disabled(viewModel.isScanning)
 
                 } else {
-                    Button("Scan Network") {
-                        isIPAddressFocused = false
-                        Task {
-                            let result = await viewModel.startScan()
-                            if result == .permissionDenied {
-                                self.showSettingsAlert = true
-                            }
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Color.traxeGold)
-                    .disabled(viewModel.isScanning)
+                    Button("Scan Network", action: startScan)
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color.traxeGold)
+                        .disabled(viewModel.isScanning)
 
                 }
 
@@ -152,6 +214,8 @@ struct AddDeviceView: View {
     @ViewBuilder
     private func discoveredDevicesSection() -> some View {
         VStack(alignment: .leading, spacing: 8) {
+            selectionControls()
+
             VStack(spacing: 8) {
                 ForEach(viewModel.discoveredDevices) { device in
                     deviceRow(device)
@@ -160,51 +224,42 @@ struct AddDeviceView: View {
         }
     }
 
-    private func deviceRow(_ device: DiscoveredDevice) -> some View {
-        Button(action: {
-            selectedDevice = device
-            ipAddress = ""
-        }) {
-            VStack(alignment: .leading) {
-                HStack {
-                    Text(device.name)
-                        .font(.headline)
-                    Spacer()
-                    if selectedDevice?.id == device.id {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(Color.traxeGold)
-                    }
-                }
-                HStack {
-                    Text(device.ip)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text(
-                        "\(device.hashrate.formatted(.number.precision(.fractionLength(1)))) GH/s"
-                    )
-                    .font(.subheadline)
+    private func selectionControls() -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            if let selectionStatusText {
+                Text(selectionStatusText)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
-                    Text(
-                        "\(device.temperature.formatted(.number.precision(.fractionLength(1))))°C"
-                    )
-                    .font(.subheadline)
-                    .foregroundStyle(device.temperature > 80 ? .red : .blue)
-                }
             }
-            .padding()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.secondarySystemBackground))
-            .clipShape(.rect(cornerRadius: 10))
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(
-                        selectedDevice?.id == device.id ? Color.traxeGold : Color.clear,
-                        lineWidth: 2
-                    )
-            )
+
+            Spacer()
+
+            if !selectableDiscoveredDevices.isEmpty {
+                Button(selectAllButtonTitle, action: toggleSelectAllDiscoveredDevices)
+                    .font(.subheadline)
+                    .disabled(remainingDeviceSlots == 0)
+            }
         }
-        .buttonStyle(PressableButtonStyle())
+        .padding(.horizontal)
+    }
+
+    private func deviceRow(_ device: DiscoveredDevice) -> some View {
+        let isSelected = selectedDeviceIPs.contains(device.ip)
+        let isAlreadySaved = existingDeviceIPs.contains(device.ip)
+        let isSelectionDisabled = !isSelected && !canSelectMoreDiscoveredDevices
+
+        return AddDeviceDiscoveredDeviceRow(
+            name: device.name,
+            ip: device.ip,
+            hashrate: device.hashrate,
+            temperature: device.temperature,
+            isSelected: isSelected,
+            isAlreadySaved: isAlreadySaved,
+            isSelectionDisabled: isSelectionDisabled,
+            action: {
+                toggleDiscoveredDeviceSelection(device)
+            }
+        )
         .padding(.horizontal)
     }
 
@@ -230,7 +285,7 @@ struct AddDeviceView: View {
                     .focused($isIPAddressFocused)
                     .onChange(of: ipAddress) {
                         if !ipAddress.isEmpty {
-                            selectedDevice = nil
+                            selectedDeviceIPs.removeAll()
                         }
                     }
             }
@@ -240,11 +295,46 @@ struct AddDeviceView: View {
         }
     }
 
-    private func addSelectedDevice() {
-        guard let device = selectedDevice else { return }
+    private func startScan() {
+        isIPAddressFocused = false
+        selectedDeviceIPs.removeAll()
+        Task {
+            let result = await viewModel.startScan()
+            if result == .permissionDenied {
+                self.showSettingsAlert = true
+            }
+        }
+    }
+
+    private func toggleDiscoveredDeviceSelection(_ device: DiscoveredDevice) {
+        guard !existingDeviceIPs.contains(device.ip) else { return }
+
+        ipAddress = ""
+
+        if selectedDeviceIPs.contains(device.ip) {
+            selectedDeviceIPs.remove(device.ip)
+        } else if canSelectMoreDiscoveredDevices {
+            selectedDeviceIPs.insert(device.ip)
+        }
+    }
+
+    private func toggleSelectAllDiscoveredDevices() {
+        ipAddress = ""
+        let selectableIPs = Set(selectableDiscoveredDevices.map(\.ip))
+
+        if areAllSelectableDevicesSelected {
+            selectedDeviceIPs.subtract(selectableIPs)
+        } else {
+            selectedDeviceIPs = Set(limitedSelectableDiscoveredDevices.map(\.ip))
+        }
+    }
+
+    private func addSelectedDevices() {
+        let devices = selectedDiscoveredDevices
+        guard !devices.isEmpty else { return }
 
         isSaving = true
-        guard viewModel.selectDevice(device) else {
+        guard viewModel.selectDevices(devices) else {
             isSaving = false
             return
         }
@@ -301,8 +391,8 @@ struct AddDeviceView: View {
 
     private func addDevice() {
         isIPAddressFocused = false
-        if selectedDevice != nil {
-            addSelectedDevice()
+        if !selectedDiscoveredDevices.isEmpty {
+            addSelectedDevices()
         } else if isValidIP(ipAddress) && !ipAddress.isEmpty {
             addManualDevice()
         }

@@ -19,7 +19,8 @@ final class OnboardingViewModelTests: XCTestCase {
                 checkedIPs.withValue { $0.append(ip) }
                 throw DeviceCheckError.requestFailed(.timedOut)
             },
-            saveDevice: { _ in }
+            saveDevice: { _ in },
+            saveDevices: { _ in }
         )
 
         let viewModel = OnboardingViewModel(dependencies: dependencies)
@@ -54,7 +55,8 @@ final class OnboardingViewModelTests: XCTestCase {
                 checkedIPs.withValue { $0.append(ip) }
                 throw DeviceCheckError.requestFailed(.timedOut)
             },
-            saveDevice: { _ in }
+            saveDevice: { _ in },
+            saveDevices: { _ in }
         )
 
         let viewModel = OnboardingViewModel(dependencies: dependencies)
@@ -88,7 +90,8 @@ final class OnboardingViewModelTests: XCTestCase {
             },
             saveDevice: { device in
                 savedDevices.withValue { $0.append(device) }
-            }
+            },
+            saveDevices: { _ in }
         )
 
         let viewModel = OnboardingViewModel(dependencies: dependencies)
@@ -113,6 +116,9 @@ final class OnboardingViewModelTests: XCTestCase {
             },
             saveDevice: { _ in
                 throw NSError(domain: "OnboardingViewModelTests", code: 1)
+            },
+            saveDevices: { _ in
+                throw NSError(domain: "OnboardingViewModelTests", code: 1)
             }
         )
 
@@ -124,6 +130,66 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertEqual(
             viewModel.errorMessage,
             "Failed to save the selected miner. Please try again."
+        )
+    }
+
+    func testSelectDevicesUsesBatchSave() {
+        let savedDeviceBatches = LockedBox<[[SavedDevice]]>([])
+        var dependencies = makeBaseDependencies()
+        dependencies.deviceManagement = .init(
+            checkDevice: { _ in
+                XCTFail(
+                    "checkDevice should not be called when selecting existing discovery results"
+                )
+                throw DeviceCheckError.notBitaxeDevice
+            },
+            saveDevice: { _ in
+                XCTFail("saveDevice should not be called for batch selection")
+            },
+            saveDevices: { devices in
+                savedDeviceBatches.withValue { $0.append(devices) }
+            }
+        )
+
+        let viewModel = OnboardingViewModel(dependencies: dependencies)
+        let didSave = viewModel.selectDevices([
+            Self.makeDiscoveredDevice(ip: "192.168.1.55"),
+            Self.makeDiscoveredDevice(ip: "192.168.1.56"),
+        ])
+
+        XCTAssertTrue(didSave)
+        XCTAssertEqual(savedDeviceBatches.value.count, 1)
+        XCTAssertEqual(
+            savedDeviceBatches.value.first?.map(\.ipAddress),
+            ["192.168.1.55", "192.168.1.56"]
+        )
+    }
+
+    func testSelectDevicesReturnsFalseWhenBatchSaveFails() {
+        var dependencies = makeBaseDependencies()
+        dependencies.deviceManagement = .init(
+            checkDevice: { _ in
+                XCTFail(
+                    "checkDevice should not be called when selecting existing discovery results"
+                )
+                throw DeviceCheckError.notBitaxeDevice
+            },
+            saveDevice: { _ in },
+            saveDevices: { _ in
+                throw NSError(domain: "OnboardingViewModelTests", code: 1)
+            }
+        )
+
+        let viewModel = OnboardingViewModel(dependencies: dependencies)
+        let didSave = viewModel.selectDevices([
+            Self.makeDiscoveredDevice(ip: "192.168.1.55")
+        ])
+
+        XCTAssertFalse(didSave)
+        XCTAssertTrue(viewModel.showErrorAlert)
+        XCTAssertEqual(
+            viewModel.errorMessage,
+            "Failed to save the selected miners. Please try again."
         )
     }
 
@@ -144,7 +210,8 @@ final class OnboardingViewModelTests: XCTestCase {
                 checkedIPs.withValue { $0.append(ip) }
                 throw DeviceCheckError.requestFailed(.notConnectedToInternet)
             },
-            saveDevice: { _ in }
+            saveDevice: { _ in },
+            saveDevices: { _ in }
         )
 
         let viewModel = OnboardingViewModel(dependencies: dependencies)
@@ -177,7 +244,8 @@ final class OnboardingViewModelTests: XCTestCase {
             checkDevice: { _ in
                 throw DeviceCheckError.notBitaxeDevice
             },
-            saveDevice: { _ in }
+            saveDevice: { _ in },
+            saveDevices: { _ in }
         )
         return dependencies
     }

@@ -3,10 +3,27 @@ import SwiftUI
 
 #if canImport(FoundationModels)
     import FoundationModels
+
+    /// Structured output keeps the model from drifting into preambles — the schema
+    /// only has room for the summary text itself.
+    @available(iOS 26.0, macOS 26.0, *)
+    @Generable
+    private struct MinerSummaryOutput {
+        @Guide(description: "The summary sentence(s) only. No introductory phrases.")
+        var summary: String
+    }
 #endif
 
 @available(iOS 18.0, macOS 15.0, *)
 actor AIAnalysisService {
+
+    private static let summaryInstructions = """
+        You are a technical analyst. Write concise miner summaries.
+
+        CRITICAL: Only output the summary text. NO introductory phrases.
+
+        Be natural and conversational while including all technical details.
+        """
     private let networkService: NetworkService
     private var languageSession: Any?  // Type-erased to avoid availability issues
     private var lastGenerationFailed: Bool = false
@@ -30,17 +47,14 @@ actor AIAnalysisService {
                 switch availability {
                 case .available:
                     languageSession = LanguageModelSession(
-                        instructions: """
-                            You are a technical analyst. Write concise miner summaries.
-
-                            CRITICAL: Only output the summary text. NO introductory phrases.
-
-                            Be natural and conversational while including all technical details.
-                            """
+                        instructions: Self.summaryInstructions
                     )
                     lastGenerationFailed = false
                     lastErrorMessage = nil
                 case .unavailable(let reason):
+                    if setupPrivateCloudComputeFallback() {
+                        return
+                    }
                     languageSession = nil
                     lastGenerationFailed = true
                     lastErrorMessage =
@@ -55,12 +69,36 @@ actor AIAnalysisService {
                             "Model unavailable"
                         }
                 @unknown default:
+                    if setupPrivateCloudComputeFallback() {
+                        return
+                    }
                     languageSession = nil
                     lastGenerationFailed = true
                     lastErrorMessage = "Unknown availability status"
                 }
             }
         #endif
+    }
+
+    /// iOS 27 can run the same session against Private Cloud Compute when the
+    /// on-device model can't (older device, Apple Intelligence off). Free under
+    /// the Small Business Program quota; unavailable falls through to heuristics.
+    /// Returns true when a cloud-backed session was installed.
+    private func setupPrivateCloudComputeFallback() -> Bool {
+        #if canImport(FoundationModels) && compiler(>=6.4)
+            if #available(iOS 27.0, macOS 27.0, *) {
+                let cloudModel = PrivateCloudComputeLanguageModel()
+                guard cloudModel.isAvailable else { return false }
+                languageSession = LanguageModelSession(
+                    model: cloudModel,
+                    instructions: Self.summaryInstructions
+                )
+                lastGenerationFailed = false
+                lastErrorMessage = nil
+                return true
+            }
+        #endif
+        return false
     }
 
     func refreshFoundationModelsSetup() async {
@@ -349,8 +387,11 @@ actor AIAnalysisService {
                     """
             }
 
-            let response = try await session.respond(to: prompt)
-            return response.content
+            let response = try await session.respond(
+                to: prompt,
+                generating: MinerSummaryOutput.self
+            )
+            return response.content.summary
         }
 
         @available(iOS 26.0, macOS 26.0, *)
@@ -360,8 +401,11 @@ actor AIAnalysisService {
         ) async throws -> String {
             let prompt = basicData
 
-            let response = try await session.respond(to: prompt)
-            return response.content
+            let response = try await session.respond(
+                to: prompt,
+                generating: MinerSummaryOutput.self
+            )
+            return response.content.summary
         }
     #endif
 

@@ -3,7 +3,6 @@ import SwiftUI
 
 struct OnboardingView: View {
     @State private var viewModel = OnboardingViewModel()
-    @State private var navigateToDeviceList = false
     @State private var showSettingsAlert = false
     @State private var showConnectionError = false
     @State private var connectionError = ""
@@ -94,12 +93,6 @@ struct OnboardingView: View {
                 } message: {
                     Text(connectionError)
                 }
-                .navigationDestination(isPresented: $navigateToDeviceList) {
-                    DeviceListView(
-                        dashboardViewModel: dashboardViewModel,
-                        navigateToDeviceList: $navigateToDeviceList
-                    )
-                }
             }
         }
     }
@@ -114,7 +107,6 @@ struct OnboardingView: View {
             }
             Task {
                 try? await Task.sleep(for: .milliseconds(200))
-                navigateToDeviceList = true
                 isConnecting = false
             }
         }) {
@@ -265,9 +257,7 @@ struct OnboardingView: View {
                                     guard !isConnecting else { return }
                                     isConnecting = true
                                     Task {
-                                        if await viewModel.connectManually() {
-                                            navigateToDeviceList = true
-                                        }
+                                        _ = await viewModel.connectManually()
                                         isConnecting = false
                                     }
                                 }) {
@@ -284,9 +274,7 @@ struct OnboardingView: View {
                                     guard !isConnecting else { return }
                                     isConnecting = true
                                     Task {
-                                        if await viewModel.connectManually() {
-                                            navigateToDeviceList = true
-                                        }
+                                        _ = await viewModel.connectManually()
                                         isConnecting = false
                                     }
                                 }) {

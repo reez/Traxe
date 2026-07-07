@@ -130,6 +130,10 @@ struct DeviceManagementService {
     }
 
     static func saveDevice(_ deviceToSave: SavedDevice) throws {
+        try saveDevices([deviceToSave])
+    }
+
+    static func saveDevices(_ devicesToSave: [SavedDevice]) throws {
         guard let sharedDefaults else {
             throw NSError(
                 domain: "DeviceSaveError",
@@ -139,17 +143,26 @@ struct DeviceManagementService {
         }
 
         var savedDevices = loadSavedDevices(from: sharedDefaults)
+        var savedDeviceIPs = Set(savedDevices.map(\.ipAddress))
+        var firstAddedIPAddress: String?
 
-        if !savedDevices.contains(where: { $0.ipAddress == deviceToSave.ipAddress }) {
+        for deviceToSave in devicesToSave where !savedDeviceIPs.contains(deviceToSave.ipAddress) {
             savedDevices.append(deviceToSave)
-        } else {
+            savedDeviceIPs.insert(deviceToSave.ipAddress)
+
+            if firstAddedIPAddress == nil {
+                firstAddedIPAddress = deviceToSave.ipAddress
+            }
+        }
+
+        guard let firstAddedIPAddress else {
             return
         }
 
         do {
             try persistSavedDevices(savedDevices, in: sharedDefaults)
 
-            sharedDefaults.set(deviceToSave.ipAddress, forKey: selectedDeviceKey)
+            sharedDefaults.set(firstAddedIPAddress, forKey: selectedDeviceKey)
 
             onboardingDefaults.set(true, forKey: hasCompletedOnboardingKey)
 
@@ -185,6 +198,11 @@ struct DeviceManagementService {
             {
                 sharedDefaults.removeObject(forKey: selectedDeviceKey)
             }
+
+            // A deleted miner must not keep alerting, and re-adding its IP starts fresh.
+            MinerAlertPreferences(defaults: sharedDefaults).removePreference(
+                for: ipAddressToDelete
+            )
 
             reloadWidgetTimelines("TraxeWidget")
 
