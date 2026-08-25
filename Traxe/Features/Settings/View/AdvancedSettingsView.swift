@@ -20,13 +20,17 @@ struct AdvancedSettingsView: View {
             Form {
                 FanControlSection(viewModel: viewModel)
                     .safeAreaPadding(.bottom, 10)
-                Section("Network Configuration") {
-                    NavigationLink("Pool Configuration") {
-                        PoolConfigurationView(viewModel: viewModel)
+                Section("Pools") {
+                    NavigationLink("Pool Settings") {
+                        if viewModel.supportsMultiPoolSettings {
+                            PoolCatalogView(viewModel: viewModel)
+                        } else {
+                            PoolConfigurationView(viewModel: viewModel)
+                        }
                     }
                 }
 
-                Section("Miner Configuration") {
+                Section("Miner") {
                     NavigationLink("Hostname") {
                         HostnameConfigurationView(viewModel: viewModel)
                     }
@@ -41,7 +45,7 @@ struct AdvancedSettingsView: View {
             }
         } message: {
             Text(
-                "Are you sure you want to restart the miner? This will temporarily stop mining operations."
+                "Mining pauses while the miner restarts."
             )
         }
     }

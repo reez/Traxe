@@ -49,9 +49,9 @@ enum WeeklyRecapChartPresenter {
     }
 
     static func trendSubtitle(from percent: Double?) -> String {
-        guard let percent else { return "Need more data for trend" }
+        guard let percent else { return "No active hashrate to compare" }
         if percent == 0 {
-            return "Flat week-over-week trend"
+            return "0% change from first active day"
         }
         let direction = percent > 0 ? "up" : "down"
         let magnitude = abs(percent).formatted(.number.precision(.fractionLength(1)))

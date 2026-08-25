@@ -148,6 +148,8 @@ struct WeeklyRecapView: View {
                     }
                 }
                 .padding(.vertical)
+                .frame(maxWidth: 700)
+                .frame(maxWidth: .infinity)
             }
         }
         .navigationTitle("Weekly Recap")

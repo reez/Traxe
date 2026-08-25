@@ -117,6 +117,7 @@ final class SystemInfoDTOTests: XCTestCase {
         XCTAssertEqual(systemInfo.primaryPoolID, 2)
         XCTAssertEqual(systemInfo.secondaryPoolID, 3)
         XCTAssertEqual(systemInfo.useFallbackStratum, true)
+        XCTAssertTrue(systemInfo.supportsActivePoolSelection)
 
         let primaryPool = try XCTUnwrap(systemInfo.pool(withID: 2))
         XCTAssertEqual(primaryPool.stratumURL, "public-pool.io")
@@ -166,6 +167,7 @@ final class SystemInfoDTOTests: XCTestCase {
         XCTAssertNil(systemInfo.primaryPoolIndex)
         XCTAssertNil(systemInfo.secondaryPoolIndex)
         XCTAssertNil(systemInfo.useFallbackStratum)
+        XCTAssertFalse(systemInfo.supportsActivePoolSelection)
         XCTAssertEqual(systemInfo.primaryPoolID, 0)
         XCTAssertEqual(systemInfo.secondaryPoolID, 1)
     }

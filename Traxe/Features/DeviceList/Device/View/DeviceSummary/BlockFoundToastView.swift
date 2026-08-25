@@ -30,14 +30,27 @@ struct BlockFoundToastView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(
-            Color(uiColor: .secondarySystemBackground),
-            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(.secondary.opacity(0.3), lineWidth: 0.5)
-        )
+        .toastSurface()
+    }
+}
+
+extension View {
+    /// The toast floats over the scroll view rather than inside it, so it can be
+    /// Liquid Glass on iOS 26 without the instability glass shows while scrolling.
+    @ViewBuilder
+    fileprivate func toastSurface() -> some View {
+        if #available(iOS 26.0, *) {
+            glassEffect(.regular, in: .rect(cornerRadius: 12, style: .continuous))
+        } else {
+            background(
+                Color(uiColor: .secondarySystemBackground),
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(.secondary.opacity(0.3), lineWidth: 0.5)
+            )
+        }
     }
 }
 

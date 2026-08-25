@@ -30,6 +30,12 @@ final class SettingsViewModel {
     var fallbackStratumV2ChannelType: String = ""
     var stratumV2AuthorityPubkey: String = ""
     var fallbackStratumV2AuthorityPubkey: String = ""
+    var supportsActivePoolSelection: Bool = false
+    var useFallbackStratum: Bool = false
+    // ESP-Miner v2.15 pool slots. `poolCatalog` is the miner's current list; Pool Settings
+    // edits a copy and hands it back through `savePoolCatalog`.
+    var supportsMultiPoolSettings: Bool = false
+    var poolCatalog: PoolCatalogDraft? = nil
     var supportsPoolModeSettings: Bool = false
     var poolBalance: Int = 50
     var isDualPool: Bool = false
@@ -130,6 +136,9 @@ final class SettingsViewModel {
             currentVersion = "Unknown"
             isConnected = false
             supportsPoolModeSettings = false
+            supportsActivePoolSelection = false
+            supportsMultiPoolSettings = false
+            poolCatalog = nil
             deleteMinerErrorMessage = nil
             resetStratumProtocolDetails()
             return ipAddressToDelete
@@ -160,6 +169,9 @@ final class SettingsViewModel {
                 isSettingsConfigurationEditable = false
                 settingsConfigurationMessage = Self.settingsConfigurationUnavailableMessage
                 supportsPoolModeSettings = false
+                supportsActivePoolSelection = false
+                supportsMultiPoolSettings = false
+                poolCatalog = nil
                 resetStratumProtocolDetails()
             } else {
                 currentVersion = "Unknown"
@@ -167,6 +179,9 @@ final class SettingsViewModel {
                 isSettingsConfigurationEditable = false
                 settingsConfigurationMessage = nil
                 supportsPoolModeSettings = false
+                supportsActivePoolSelection = false
+                supportsMultiPoolSettings = false
+                poolCatalog = nil
                 resetStratumProtocolDetails()
             }
         }
@@ -190,6 +205,11 @@ final class SettingsViewModel {
         fallbackStratumV2ChannelType = systemInfo.fallbackStratumV2ChannelType ?? ""
         stratumV2AuthorityPubkey = systemInfo.stratumV2AuthorityPubkey ?? ""
         fallbackStratumV2AuthorityPubkey = systemInfo.fallbackStratumV2AuthorityPubkey ?? ""
+        supportsActivePoolSelection = systemInfo.supportsActivePoolSelection
+        useFallbackStratum = systemInfo.useFallbackStratum ?? false
+        supportsMultiPoolSettings = systemInfo.supportsMultiPoolSettings
+        poolCatalog =
+            systemInfo.supportsMultiPoolSettings ? PoolCatalogDraft(systemInfo: systemInfo) : nil
         supportsPoolModeSettings = systemInfo.supportsPoolModeSettings
         poolBalance = max(0, min(100, systemInfo.stratum?.poolBalance ?? 50))
         let detectedPoolMode =
@@ -327,12 +347,31 @@ final class SettingsViewModel {
                         stratumV2AuthorityPubkey: fallbackStratumV2AuthorityPubkeyToSave
                     ),
                 ]
-                // Pool indices and `useFallbackStratum` are left out of the body so the miner
-                // keeps its current values; this screen does not edit them.
+                // Pool indices are left out of the body so the miner keeps its current values;
+                // this screen does not edit them. `useFallbackStratum` is only sent when the
+                // user picked a different active pool.
                 let poolsToSave = MultiPoolSettingsPlan.pools(
                     for: poolEdits,
                     from: currentSystemInfo
                 )
+                let useFallbackStratumToSave: Bool? =
+                    supportsActivePoolSelection
+                        && currentSystemInfo.supportsActivePoolSelection
+                        && currentSystemInfo.useFallbackStratum != useFallbackStratum
+                    ? useFallbackStratum : nil
+
+                // "Fallback" needs a fallback pool the miner already has, or a complete new
+                // slot in this save; otherwise the miner would boot onto an empty slot.
+                let secondaryPoolID = currentSystemInfo.secondaryPoolID
+                if useFallbackStratumToSave == true,
+                    currentSystemInfo.pool(withID: secondaryPoolID) == nil,
+                    !poolsToSave.contains(where: { $0.id == secondaryPoolID })
+                {
+                    poolConfigurationError = Self.fallbackPoolRequiredMessage
+                    isUpdatingPoolConfiguration = false
+                    return false
+                }
+
                 if !poolsToSave.isEmpty {
                     try await networkService.updatePoolSettings(pools: poolsToSave)
                 }
@@ -344,13 +383,55 @@ final class SettingsViewModel {
                     for: poolEdits,
                     in: savedSystemInfo
                 )
-                applySettings(from: savedSystemInfo)
-                isUpdatingPoolConfiguration = false
-
                 guard unsavedPoolIDs.isEmpty else {
+                    applySettings(from: savedSystemInfo)
+                    isUpdatingPoolConfiguration = false
                     poolConfigurationError = Self.poolSettingsNotAppliedMessage
                     return false
                 }
+                guard let useFallbackStratumToSave else {
+                    applySettings(from: savedSystemInfo)
+                    isUpdatingPoolConfiguration = false
+                    return true
+                }
+
+                // Only now persist the active pool, in its own PATCH: the firmware stores
+                // scalar keys before it gets to the pools array, so sending it together with
+                // the pools would leave it behind in NVS whenever the pool change did not apply.
+                try await networkService.updatePoolSettings(
+                    pools: [],
+                    useFallbackStratum: useFallbackStratumToSave
+                )
+
+                // The miner reads `useFallbackStratum` only while booting, so the new active
+                // pool takes effect, and shows up in system info, once it restarted.
+                do {
+                    try await networkService.restartDevice()
+                } catch {
+                    applySettings(from: savedSystemInfo)
+                    isUpdatingPoolConfiguration = false
+                    poolConfigurationError = Self.activePoolRestartFailedMessage
+                    return false
+                }
+                let deadline = Date().addingTimeInterval(45)
+                var restartedSystemInfo: SystemInfoDTO? = nil
+                while Date() < deadline {
+                    if let updatedInfo = try? await networkService.fetchSystemInfo(),
+                        updatedInfo.useFallbackStratum == useFallbackStratumToSave
+                    {
+                        restartedSystemInfo = updatedInfo
+                        break
+                    }
+                    try? await Task.sleep(for: .seconds(2))
+                }
+                isUpdatingPoolConfiguration = false
+
+                guard let restartedSystemInfo else {
+                    applySettings(from: savedSystemInfo)
+                    poolConfigurationError = Self.activePoolNotAppliedMessage
+                    return false
+                }
+                applySettings(from: restartedSystemInfo)
                 return true
             }
 
@@ -414,6 +495,139 @@ final class SettingsViewModel {
         return success
     }
 
+    // Applies a Pool Settings draft to an ESP-Miner v2.15 miner: changed slots first, then the
+    // primary/fallback selection and active pool, then cleared slots, then a restart when the
+    // pools the miner mines on changed. Every step is read back because v2.15 answers with
+    // HTTP success even when it ignored the submitted values.
+    func savePoolCatalog(_ draft: PoolCatalogDraft) async -> Bool {
+        guard isSettingsConfigurationEditable else {
+            poolConfigurationError = Self.settingsConfigurationUnavailableMessage
+            return false
+        }
+        if let validationError = PoolCatalogSavePlan.validationError(for: draft) {
+            poolConfigurationError = validationError
+            return false
+        }
+
+        isUpdatingPoolConfiguration = true
+        poolConfigurationError = nil
+
+        do {
+            let currentSystemInfo = try await networkService.fetchSystemInfo()
+            guard currentSystemInfo.supportsMultiPoolSettings else {
+                applySettings(from: currentSystemInfo)
+                isUpdatingPoolConfiguration = false
+                poolConfigurationError = Self.poolCatalogUnsupportedMessage
+                return false
+            }
+
+            let poolsToSave = PoolCatalogSavePlan.poolsToSave(for: draft, from: currentSystemInfo)
+            let selectionChange = PoolCatalogSavePlan.selectionChange(
+                for: draft,
+                from: currentSystemInfo
+            )
+            let poolIDsToDelete = PoolCatalogSavePlan.poolIDsToDelete(
+                for: draft,
+                from: currentSystemInfo
+            )
+
+            if poolsToSave.isEmpty, selectionChange.isEmpty, poolIDsToDelete.isEmpty {
+                applySettings(from: currentSystemInfo)
+                isUpdatingPoolConfiguration = false
+                return true
+            }
+
+            // Pool slots go first, on their own, and are read back before anything points at
+            // them.
+            var latestSystemInfo = currentSystemInfo
+            if !poolsToSave.isEmpty {
+                try await networkService.updatePoolSettings(pools: poolsToSave)
+                latestSystemInfo = try await networkService.fetchSystemInfo()
+                let unsavedPoolIDs = MultiPoolSettingsPlan.unsavedPoolIDs(
+                    for: PoolCatalogSavePlan.settingsEdits(for: draft),
+                    in: latestSystemInfo
+                )
+                guard unsavedPoolIDs.isEmpty else {
+                    applySettings(from: latestSystemInfo)
+                    isUpdatingPoolConfiguration = false
+                    poolConfigurationError = Self.poolSettingsNotAppliedMessage
+                    return false
+                }
+            }
+
+            // Only now move the selection: the firmware stores these scalar keys even when it
+            // drops a pool object from the same body, which could point it at an empty slot.
+            if !selectionChange.isEmpty {
+                try await networkService.updatePoolSettings(
+                    pools: [],
+                    primaryPoolIndex: selectionChange.primaryPoolIndex,
+                    secondaryPoolIndex: selectionChange.secondaryPoolIndex,
+                    useFallbackStratum: selectionChange.useFallbackStratum
+                )
+            }
+
+            // Cleared after the selection moved off them; the firmware refuses to clear a
+            // selected slot.
+            for poolID in poolIDsToDelete {
+                try await networkService.deletePool(id: poolID)
+            }
+
+            let requiresRestart = PoolCatalogSavePlan.requiresRestart(
+                for: draft,
+                poolsToSave: poolsToSave,
+                selectionChange: selectionChange
+            )
+            guard requiresRestart else {
+                if !poolIDsToDelete.isEmpty {
+                    latestSystemInfo = try await networkService.fetchSystemInfo()
+                }
+                applySettings(from: latestSystemInfo)
+                isUpdatingPoolConfiguration = false
+                guard PoolCatalogSavePlan.isApplied(draft, in: latestSystemInfo) else {
+                    poolConfigurationError = Self.poolSettingsNotAppliedMessage
+                    return false
+                }
+                return true
+            }
+
+            // The pool selection and active pool are read while booting, so the change takes
+            // effect, and shows up in system info, once the miner restarted.
+            do {
+                try await networkService.restartDevice()
+            } catch {
+                applySettings(from: latestSystemInfo)
+                isUpdatingPoolConfiguration = false
+                poolConfigurationError = Self.poolCatalogRestartFailedMessage
+                return false
+            }
+            let deadline = Date().addingTimeInterval(45)
+            var restartedSystemInfo: SystemInfoDTO? = nil
+            while Date() < deadline {
+                if let updatedInfo = try? await networkService.fetchSystemInfo(),
+                    PoolCatalogSavePlan.isApplied(draft, in: updatedInfo)
+                {
+                    restartedSystemInfo = updatedInfo
+                    break
+                }
+                try? await Task.sleep(for: .seconds(2))
+            }
+            isUpdatingPoolConfiguration = false
+
+            guard let restartedSystemInfo else {
+                applySettings(from: latestSystemInfo)
+                poolConfigurationError = Self.poolCatalogRestartNotConfirmedMessage
+                return false
+            }
+            applySettings(from: restartedSystemInfo)
+            return true
+        } catch let error {
+            isUpdatingPoolConfiguration = false
+            poolConfigurationError =
+                "Failed to save pool configuration: \(error.localizedDescription)"
+            return false
+        }
+    }
+
     func saveHostnameConfiguration() async -> Bool {
         guard isSettingsConfigurationEditable else {
             hostnameConfigurationError = Self.settingsConfigurationUnavailableMessage
@@ -463,6 +677,24 @@ final class SettingsViewModel {
 
     private static let poolSettingsNotAppliedMessage =
         "The miner accepted the request but did not apply the pool settings. Please try again, or change the pool from the miner web UI."
+
+    private static let activePoolNotAppliedMessage =
+        "The miner is restarting but has not confirmed the active pool change yet. Check Pool Settings again in a moment, or change the active pool from the miner web UI."
+
+    private static let activePoolRestartFailedMessage =
+        "The active pool was saved but the miner could not be restarted. Restart the miner to apply the change."
+
+    private static let poolCatalogUnsupportedMessage =
+        "This miner no longer reports its pool list. Reopen Pool Settings and try again."
+
+    private static let poolCatalogRestartFailedMessage =
+        "The pool settings were saved but the miner could not be restarted. Restart the miner to apply the change."
+
+    private static let poolCatalogRestartNotConfirmedMessage =
+        "The miner is restarting but has not confirmed the pool changes yet. Check Pool Settings again in a moment, or verify them from the miner web UI."
+
+    private static let fallbackPoolRequiredMessage =
+        "Enter the fallback pool host, port and user before selecting it as the active pool."
 
     private static let settingsConfigurationUnavailableMessage =
         "Miner settings are unavailable because this firmware returned an unsupported settings format. Metrics are still available, but use the miner web UI to change settings."

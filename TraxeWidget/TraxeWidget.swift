@@ -298,7 +298,7 @@ struct Provider: AppIntentTimelineProvider {
             // A configured miner narrows the displayed numbers; the fetch and the
             // shared cache above always cover the whole fleet.
             if let selected = configuration.miner {
-                let selectedMetrics = merged[selected.id]
+                let selectedMetrics = merged[selected.ipAddress]
                 let selectedHashrate = selectedMetrics?.hashrate ?? 0
                 let entry = SimpleEntry(
                     date: currentDate,
@@ -306,11 +306,11 @@ struct Provider: AppIntentTimelineProvider {
                         .number.grouping(.never).precision(.fractionLength(1))
                     ),
                     totalDevices: 1,
-                    successfulFetches: respondedIPAddresses.contains(selected.id) ? 1 : 0,
+                    successfulFetches: respondedIPAddresses.contains(selected.ipAddress) ? 1 : 0,
                     lastUpdated: selectedMetrics?.lastUpdated ?? freshnessDate,
                     minerName: selectedMetrics?.hostname ?? selected.name,
                     fleetStatus: WidgetFleetStatus.make(
-                        deviceIDs: [selected.id],
+                        deviceIDs: [selected.ipAddress],
                         respondedDeviceIDs: respondedIPAddresses,
                         deviceIDsWithMetrics: Set(merged.keys),
                         pausedDeviceIDs: pausedDeviceIDs
@@ -782,10 +782,10 @@ struct TraxeWidget: Widget {
         lastUpdated: .now,
         fleetStatus: WidgetFleetStatus(
             total: 7,
-            online: 4,
-            paused: 1,
-            offline: 1,
-            unknown: 1
+            online: 5,
+            paused: 0,
+            offline: 2,
+            unknown: 0
         )
     )
 }

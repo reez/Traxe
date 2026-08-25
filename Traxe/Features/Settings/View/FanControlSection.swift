@@ -56,7 +56,7 @@ struct FanControlSection: View {
             Text("Fan Control")
         } footer: {
             VStack(alignment: .leading) {
-                Text("Switch Auto Fan **Off** to manually control fan speed.")
+                Text("Turn off Auto Fan to set the fan speed yourself.")
                     .foregroundStyle(viewModel.isAutoFan ? Color.secondary : Color.clear)
                 if let minimumFanSpeed = viewModel.minimumFanSpeed {
                     Text("Auto fan minimum: \(minimumFanSpeed)%")

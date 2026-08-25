@@ -23,6 +23,32 @@ final class MinerEntityQueryTests: XCTestCase {
         XCTAssertEqual(entities.first?.name, "Miner 2")
     }
 
+    func testEntitiesForIdentifiersFollowMovedMinerThroughMACAndAddressAlias() async throws {
+        let devices = [
+            SavedDevice(name: "Miner 1", ipAddress: "192.168.1.42", macAddress: "AA:BB:CC:DD:EE:01")
+        ]
+        let query = MinerEntityQuery(
+            loadSavedDevices: { devices },
+            resolveSubscriptionAccessPolicy: {
+                .init(proIsActive: true, miners5IsActive: false, hasLoadedSubscription: true)
+            },
+            resolveCurrentIPAddress: { identifier in
+                identifier == "192.168.1.10" ? "192.168.1.42" : identifier
+            }
+        )
+
+        let byMACAddress = try await query.entities(for: ["AA:BB:CC:DD:EE:01"])
+        XCTAssertEqual(byMACAddress.map(\.id), ["AA:BB:CC:DD:EE:01"])
+        XCTAssertEqual(byMACAddress.first?.ipAddress, "192.168.1.42")
+
+        let byPreviousAddress = try await query.entities(for: ["192.168.1.10"])
+        XCTAssertEqual(byPreviousAddress.map(\.id), ["192.168.1.10"])
+        XCTAssertEqual(byPreviousAddress.first?.ipAddress, "192.168.1.42")
+
+        let suggested = try await query.suggestedEntities()
+        XCTAssertEqual(suggested.map(\.id), ["AA:BB:CC:DD:EE:01"])
+    }
+
     func testSuggestedEntitiesRemainLimitedToAccessibleDevices() async throws {
         let devices = [
             SavedDevice(name: "Miner 1", ipAddress: "192.168.1.10"),

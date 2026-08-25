@@ -5,14 +5,13 @@ import SwiftUI
 struct MetricsSummaryGrid: View {
     @Bindable var viewModel: DashboardViewModel
 
+    // Adaptive columns: two on today's iPhones in portrait, more as the window widens.
     private let columns = [
-        GridItem(.flexible(), spacing: 8),
-        GridItem(.flexible(), spacing: 8),
+        GridItem(.adaptive(minimum: 130), spacing: 8)
     ]
 
     var body: some View {
         LazyVGrid(columns: columns, spacing: 8) {
-            // Row 1
             MetricSummaryItem(
                 label: "Hash Rate",
                 value: viewModel.connectionState == .connected
@@ -39,7 +38,6 @@ struct MetricsSummaryGrid: View {
                 isLoading: viewModel.connectionState != .connected
             )
 
-            // Row 2
             MetricSummaryItem(
                 label: "Efficiency",
                 value: viewModel.connectionState == .connected
@@ -69,7 +67,6 @@ struct MetricsSummaryGrid: View {
                 isLoading: viewModel.connectionState != .connected
             )
 
-            // Row 3
             MetricSummaryItem(
                 label: "Input",
                 value: viewModel.connectionState == .connected
@@ -97,7 +94,6 @@ struct MetricsSummaryGrid: View {
                 isLoading: viewModel.connectionState != .connected
             )
 
-            // Row 4
             MetricSummaryItem(
                 label: "Fan",
                 value: viewModel.connectionState == .connected

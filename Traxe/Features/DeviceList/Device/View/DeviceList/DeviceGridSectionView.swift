@@ -6,9 +6,10 @@ struct DeviceGridSectionView: View {
     let showFleetWeeklyRecap: () -> Void
     let handleSelection: (SavedDevice, Bool) -> Void
 
+    // The column count follows the available width rather than a fixed two, so a
+    // wide window adds columns and a narrow multitasking window still fits two.
     private let columns = [
-        GridItem(.flexible(), spacing: 12),
-        GridItem(.flexible(), spacing: 12),
+        GridItem(.adaptive(minimum: 130), spacing: 12)
     ]
 
     var body: some View {

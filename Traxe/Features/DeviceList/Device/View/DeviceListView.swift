@@ -176,7 +176,10 @@ struct DeviceListView: View {
         .onChange(of: viewModel.savedDevices.map(\.ipAddress)) { _, ipAddresses in
             // Any deletion path, including the edit-mode list, must drop a retained
             // selection for the removed miner so no column shows stale detail.
-            navigation.reconcileSelection(withSavedMinerIPAddresses: Set(ipAddresses))
+            navigation.reconcileSelection(
+                withSavedMinerIPAddresses: Set(ipAddresses),
+                relocatedIPAddresses: viewModel.recentRelocations
+            )
 
             if ipAddresses.isEmpty {
                 self.navigateToDeviceList = false
@@ -208,9 +211,6 @@ struct DeviceListView: View {
             WhatsNewSheetView(
                 content: WhatsNewConfig.content,
                 accentColor: .traxeGold,
-                requestReview: {
-                    viewModel.requestReview()
-                },
                 sendSupportEmail: {
                     viewModel.sendSupportEmail()
                 },
@@ -231,10 +231,10 @@ struct DeviceListView: View {
             }
             return Text(message)
         }
-        .alert("Monthly Subscription Expired", isPresented: $showingSubscriptionExpiredAlert) {
+        .alert("Plan Limit Reached", isPresented: $showingSubscriptionExpiredAlert) {
             Button("OK") {}
         } message: {
-            Text("Your monthly subscription has expired. Please renew to access this miner.")
+            Text("Your current plan includes one miner; this miner is outside that limit.")
         }
         .task {
             for await info in Purchases.shared.customerInfoStream {
@@ -331,7 +331,7 @@ struct DeviceListView: View {
         .navigationTitle("Traxe")
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
+            ToolbarItem(placement: .topBarLeading) {
                 if !viewModel.savedDevices.isEmpty {
                     Button(viewModel.isEditMode ? "Done" : "Edit") {
                         withAnimation {
@@ -341,7 +341,7 @@ struct DeviceListView: View {
                 }
             }
 
-            ToolbarItem(placement: .navigationBarTrailing) {
+            ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     if viewModel.savedDevices.count < addDeviceLimit {
                         showingAddSheet = true
@@ -350,9 +350,9 @@ struct DeviceListView: View {
                         showingPaywallSheet = true
                     }
                 } label: {
-                    Image(systemName: "plus")
-                        .foregroundStyle(Color.traxeGold)
+                    Label("Add Miner", systemImage: "plus")
                 }
+                .tint(Color.traxeGold)
             }
         }
     }

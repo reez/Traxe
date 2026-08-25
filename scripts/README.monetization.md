@@ -10,7 +10,9 @@ This repo’s expected catalog is:
 - one monthly subscription: `com.matthewramsden.Traxe.Monthly`
 - one non-consumable IAP: `miners_5`
 - RevenueCat entitlements: `Pro`, `Miners_5`
-- RevenueCat offering: `miners_5`
+- RevenueCat offering: `miners_5`, with only the monthly package
+
+The `miners_5` product remains attached to the `Miners_5` entitlement so existing one-time purchasers keep their access. Its package is removed from the offering, and the published RevenueCat paywall for that offering contains only the monthly purchase card. Both changes are needed: removing a package does not automatically remove its card from a custom paywall. The product can be offered again later by recreating the package and updating the paywall.
 
 ## Scripts
 
@@ -41,9 +43,11 @@ export RC_PROJECT_NAME="Traxe"
 export RC_OFFERING_LOOKUP="miners_5"
 export RC_PRO_ENTITLEMENT_LOOKUP="Pro"
 export RC_MINERS_ENTITLEMENT_LOOKUP="Miners_5"
-export RC_MONTHLY_PACKAGE_LOOKUP="monthly"
+export RC_MONTHLY_PACKAGE_LOOKUP='$rc_monthly'
 export RC_ONE_TIME_PACKAGE_LOOKUP="miners_5"
 ```
+
+`RC_ONE_TIME_PACKAGE_LOOKUP` identifies the package the RevenueCat setup removes from the offering. It does not remove the `miners_5` product or its entitlement attachment.
 
 ## Audit only
 
@@ -93,4 +97,5 @@ STRICT_AUDIT=1 IAP_VALIDATION_STRICT=1 MONETIZATION_MODE=audit ./scripts/setup_m
 - Scripts are intended to be safe to re-run.
 - ASC app creation remains optional and only matters if the app record does not exist yet.
 - The built-in validators cover App Store review readiness; the custom audit covers the expected Traxe catalog shape across ASC and RevenueCat.
+- The catalog audit does not inspect custom paywall layouts. After changing packages, check the published paywall in RevenueCat for stale purchase cards.
 - Audit report output defaults to `/tmp/traxe_monetization_audit.json`.

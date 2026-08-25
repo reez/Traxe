@@ -20,7 +20,7 @@ struct DeviceBestDifficultyMetricView: View {
         .lineLimit(1)
         .minimumScaleFactor(0.8)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Best diff \(valueText) \(unitText)")
+        .accessibilityLabel("Best difficulty \(valueText) \(unitText)")
     }
 }
 

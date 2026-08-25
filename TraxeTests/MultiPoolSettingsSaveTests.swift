@@ -115,10 +115,332 @@ final class MultiPoolSettingsSaveTests: XCTestCase {
         ] {
             XCTAssertNil(body[removedKey], "PATCH must not send the obsolete \(removedKey)")
         }
-        // Pool indices and fallback usage are not edited by this screen.
+        // Pool indices are not edited by this screen, and the active pool did not change.
         XCTAssertNil(body["primaryPoolIndex"])
         XCTAssertNil(body["secondaryPoolIndex"])
         XCTAssertNil(body["useFallbackStratum"])
+    }
+
+    func testEspMiner215SaveSendsActivePoolChangeThenRestartsAndVerifiesIt() async throws {
+        let appGroupDefaults = try XCTUnwrap(
+            UserDefaults(suiteName: SettingsViewModel.sharedUserDefaultsSuiteName)
+        )
+        appGroupDefaults.set("192.0.2.10", forKey: "bitaxeIPAddress")
+        let fixtureURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures")
+            .appendingPathComponent("Firmware")
+            .appendingPathComponent("esp-miner-2-15-0-system-info.json")
+        let currentPayload = try Data(contentsOf: fixtureURL)
+        // The miner applies `useFallbackStratum` while booting, so system info keeps
+        // reporting the old value until the restart completed.
+        let currentJSON = String(decoding: currentPayload, as: UTF8.self)
+        let restartedJSON = currentJSON.replacing(
+            "\"useFallbackStratum\": 1",
+            with: "\"useFallbackStratum\": 0"
+        )
+        XCTAssertNotEqual(restartedJSON, currentJSON)
+        let restartedPayload = Data(restartedJSON.utf8)
+
+        MultiPoolURLProtocolStub.requestHandler = { request in
+            let response = try XCTUnwrap(
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )
+            )
+            guard request.httpMethod == "GET" else {
+                return (response, Data())
+            }
+            let didRestart = MultiPoolURLProtocolStub.capturedRequests.contains {
+                $0.url?.path == "/api/system/restart"
+            }
+            return (response, didRestart ? restartedPayload : currentPayload)
+        }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MultiPoolURLProtocolStub.self]
+        let schema = Schema([HistoricalDataPoint.self])
+        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
+        let viewModel = SettingsViewModel(
+            sharedUserDefaults: appGroupDefaults,
+            networkService: NetworkService(session: URLSession(configuration: configuration)),
+            modelContext: container.mainContext,
+            shouldFetchDeviceSettingsOnLoad: false
+        )
+
+        await viewModel.fetchDeviceSettings()
+        XCTAssertTrue(viewModel.supportsActivePoolSelection)
+        XCTAssertTrue(viewModel.useFallbackStratum)
+        MultiPoolURLProtocolStub.capturedRequests = []
+
+        viewModel.useFallbackStratum = false
+
+        let didSave = await viewModel.savePoolConfiguration()
+
+        XCTAssertTrue(didSave)
+        XCTAssertNil(viewModel.poolConfigurationError)
+        XCTAssertFalse(viewModel.isUpdatingPoolConfiguration)
+        XCTAssertFalse(viewModel.useFallbackStratum)
+        XCTAssertEqual(
+            MultiPoolURLProtocolStub.capturedRequests.map { $0.httpMethod },
+            ["GET", "PATCH", "GET", "PATCH", "POST", "GET"]
+        )
+        XCTAssertEqual(
+            MultiPoolURLProtocolStub.capturedRequests.map { $0.url?.absoluteString },
+            [
+                "http://192.0.2.10/api/system/info",
+                "http://192.0.2.10/api/system",
+                "http://192.0.2.10/api/system/info",
+                "http://192.0.2.10/api/system",
+                "http://192.0.2.10/api/system/restart",
+                "http://192.0.2.10/api/system/info",
+            ]
+        )
+
+        let patchRequests = MultiPoolURLProtocolStub.capturedRequests.filter {
+            $0.httpMethod == "PATCH"
+        }
+        XCTAssertEqual(patchRequests.count, 2)
+        // The pool slots go first, without the flag, so a pool change the miner ignores
+        // cannot leave the flag behind in NVS.
+        let poolsBody = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: try XCTUnwrap(patchRequests[0].capturedBody))
+                as? [String: Any]
+        )
+        let pools = try XCTUnwrap(poolsBody["pools"] as? [[String: Any]])
+        XCTAssertEqual(pools.compactMap { $0["id"] as? Int }, [2, 3])
+        XCTAssertNil(poolsBody["useFallbackStratum"])
+        XCTAssertNil(poolsBody["primaryPoolIndex"])
+        XCTAssertNil(poolsBody["secondaryPoolIndex"])
+        // Once the pools are verified the flag is sent on its own, as 0/1 like AxeOS does.
+        let activePoolBody = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: try XCTUnwrap(patchRequests[1].capturedBody))
+                as? [String: Any]
+        )
+        XCTAssertEqual(activePoolBody as? [String: Int], ["useFallbackStratum": 0])
+    }
+
+    func testEspMiner215SaveDoesNotRestartWhenTheMinerIgnoresThePoolChanges() async throws {
+        let appGroupDefaults = try XCTUnwrap(
+            UserDefaults(suiteName: SettingsViewModel.sharedUserDefaultsSuiteName)
+        )
+        appGroupDefaults.set("192.0.2.10", forKey: "bitaxeIPAddress")
+        let fixtureURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures")
+            .appendingPathComponent("Firmware")
+            .appendingPathComponent("esp-miner-2-15-0-system-info.json")
+        let unchangedPayload = try Data(contentsOf: fixtureURL)
+
+        MultiPoolURLProtocolStub.requestHandler = { request in
+            let response = try XCTUnwrap(
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )
+            )
+            return (response, request.httpMethod == "GET" ? unchangedPayload : Data())
+        }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MultiPoolURLProtocolStub.self]
+        let schema = Schema([HistoricalDataPoint.self])
+        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
+        let viewModel = SettingsViewModel(
+            sharedUserDefaults: appGroupDefaults,
+            networkService: NetworkService(session: URLSession(configuration: configuration)),
+            modelContext: container.mainContext,
+            shouldFetchDeviceSettingsOnLoad: false
+        )
+
+        await viewModel.fetchDeviceSettings()
+        MultiPoolURLProtocolStub.capturedRequests = []
+        viewModel.stratumURL = "solo.ckpool.org"
+        viewModel.stratumUser = "bc1qnew.primary"
+        viewModel.useFallbackStratum = false
+
+        let didSave = await viewModel.savePoolConfiguration()
+
+        XCTAssertFalse(didSave)
+        XCTAssertEqual(
+            viewModel.poolConfigurationError,
+            "The miner accepted the request but did not apply the pool settings. Please try again, or change the pool from the miner web UI."
+        )
+        // The readback shows the pool change was not applied, so Traxe reports the failure,
+        // never sends the active pool, and does not restart. Nothing is left on the miner.
+        XCTAssertEqual(
+            MultiPoolURLProtocolStub.capturedRequests.map { $0.httpMethod },
+            ["GET", "PATCH", "GET"]
+        )
+        let patchRequest = try XCTUnwrap(
+            MultiPoolURLProtocolStub.capturedRequests.first { $0.httpMethod == "PATCH" }
+        )
+        let body = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: try XCTUnwrap(patchRequest.capturedBody))
+                as? [String: Any]
+        )
+        XCTAssertNotNil(body["pools"])
+        XCTAssertNil(body["useFallbackStratum"])
+        // The screen shows the selection the miner still reports.
+        XCTAssertTrue(viewModel.useFallbackStratum)
+    }
+
+    func testEspMiner215SaveRefusesFallbackActivePoolWithoutAFallbackPool() async throws {
+        let appGroupDefaults = try XCTUnwrap(
+            UserDefaults(suiteName: SettingsViewModel.sharedUserDefaultsSuiteName)
+        )
+        appGroupDefaults.set("192.0.2.10", forKey: "bitaxeIPAddress")
+        // Only the primary slot exists on the miner; the fallback slot 3 was never created.
+        let currentJSON = """
+            {
+              "hostname": "bitaxe-215",
+              "version": "v2.15.0",
+              "primaryPoolIndex": 2,
+              "secondaryPoolIndex": 3,
+              "useFallbackStratum": 0,
+              "pools": [
+                {
+                  "id": 2,
+                  "stratumProtocol": "SV1",
+                  "stratumURL": "public-pool.io",
+                  "stratumPort": 21496,
+                  "stratumUser": "bc1qexample.primary",
+                  "stratumPassword": "*****",
+                  "stratumV2ChannelType": "extended",
+                  "stratumV2AuthorityPubkey": ""
+                }
+              ],
+              "stratumURL": "public-pool.io",
+              "stratumPort": 21496,
+              "stratumUser": "bc1qexample.primary",
+              "stratumProtocol": "SV1",
+              "stratumV2ChannelType": "extended",
+              "stratumV2AuthorityPubkey": "",
+              "fallbackStratumURL": "",
+              "fallbackStratumPort": 3333,
+              "fallbackStratumUser": "",
+              "fallbackStratumProtocol": "SV1",
+              "fallbackStratumV2ChannelType": "extended",
+              "fallbackStratumV2AuthorityPubkey": ""
+            }
+            """
+        let currentPayload = Data(currentJSON.utf8)
+
+        MultiPoolURLProtocolStub.requestHandler = { request in
+            let response = try XCTUnwrap(
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )
+            )
+            return (response, request.httpMethod == "GET" ? currentPayload : Data())
+        }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MultiPoolURLProtocolStub.self]
+        let schema = Schema([HistoricalDataPoint.self])
+        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
+        let viewModel = SettingsViewModel(
+            sharedUserDefaults: appGroupDefaults,
+            networkService: NetworkService(session: URLSession(configuration: configuration)),
+            modelContext: container.mainContext,
+            shouldFetchDeviceSettingsOnLoad: false
+        )
+
+        await viewModel.fetchDeviceSettings()
+        XCTAssertTrue(viewModel.supportsActivePoolSelection)
+        XCTAssertFalse(viewModel.useFallbackStratum)
+        MultiPoolURLProtocolStub.capturedRequests = []
+        // A host alone does not make a pool; the plan drops this incomplete new slot.
+        viewModel.fallbackStratumURL = "eu.backup.example"
+        viewModel.fallbackStratumPortString = ""
+        viewModel.fallbackStratumUser = ""
+        viewModel.useFallbackStratum = true
+
+        let didSave = await viewModel.savePoolConfiguration()
+
+        XCTAssertFalse(didSave)
+        XCTAssertEqual(
+            viewModel.poolConfigurationError,
+            "Enter the fallback pool host, port and user before selecting it as the active pool."
+        )
+        XCTAssertFalse(viewModel.isUpdatingPoolConfiguration)
+        // Nothing may be written: the flag alone would make the miner boot onto an empty slot.
+        XCTAssertEqual(
+            MultiPoolURLProtocolStub.capturedRequests.map { $0.httpMethod },
+            ["GET"]
+        )
+    }
+
+    func testEspMiner215SaveReportsSavedActivePoolWhenRestartRequestFails() async throws {
+        let appGroupDefaults = try XCTUnwrap(
+            UserDefaults(suiteName: SettingsViewModel.sharedUserDefaultsSuiteName)
+        )
+        appGroupDefaults.set("192.0.2.10", forKey: "bitaxeIPAddress")
+        let fixtureURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures")
+            .appendingPathComponent("Firmware")
+            .appendingPathComponent("esp-miner-2-15-0-system-info.json")
+        let currentPayload = try Data(contentsOf: fixtureURL)
+
+        MultiPoolURLProtocolStub.requestHandler = { request in
+            let isRestart = request.url?.path == "/api/system/restart"
+            let response = try XCTUnwrap(
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: isRestart ? 500 : 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )
+            )
+            return (response, request.httpMethod == "GET" ? currentPayload : Data())
+        }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MultiPoolURLProtocolStub.self]
+        let schema = Schema([HistoricalDataPoint.self])
+        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
+        let viewModel = SettingsViewModel(
+            sharedUserDefaults: appGroupDefaults,
+            networkService: NetworkService(session: URLSession(configuration: configuration)),
+            modelContext: container.mainContext,
+            shouldFetchDeviceSettingsOnLoad: false
+        )
+
+        await viewModel.fetchDeviceSettings()
+        XCTAssertTrue(viewModel.useFallbackStratum)
+        MultiPoolURLProtocolStub.capturedRequests = []
+        viewModel.useFallbackStratum = false
+
+        let didSave = await viewModel.savePoolConfiguration()
+
+        XCTAssertFalse(didSave)
+        XCTAssertEqual(
+            viewModel.poolConfigurationError,
+            "The active pool was saved but the miner could not be restarted. Restart the miner to apply the change."
+        )
+        XCTAssertFalse(viewModel.isUpdatingPoolConfiguration)
+        // The flag PATCH went through, so the failure is reported as a restart problem and
+        // there is no readback poll.
+        XCTAssertEqual(
+            MultiPoolURLProtocolStub.capturedRequests.map { $0.httpMethod },
+            ["GET", "PATCH", "GET", "PATCH", "POST"]
+        )
+        // The miner still reports its boot-time value, and so does the screen; picking
+        // Fallback again then differs from it and resends.
+        XCTAssertTrue(viewModel.useFallbackStratum)
     }
 
     func testEspMiner215SavePreservesMaskedPasswordAndUntouchedPoolProperties() async throws {
@@ -570,6 +892,391 @@ final class MultiPoolSettingsSaveTests: XCTestCase {
         XCTAssertEqual(pools.count, 1)
         XCTAssertEqual(pools[0]["id"] as? Int, 2)
         XCTAssertEqual(pools[0]["stratumURL"] as? String, "solo.ckpool.org")
+    }
+
+    func testPoolCatalogDraftMirrorsTheMinerSlotsAndAddsBlankSelectedSlots() throws {
+        let fixtureURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures")
+            .appendingPathComponent("Firmware")
+            .appendingPathComponent("esp-miner-2-15-0-system-info.json")
+        let payload = try Data(contentsOf: fixtureURL)
+        let systemInfo = try JSONDecoder().decode(SystemInfoDTO.self, from: payload)
+
+        let draft = PoolCatalogDraft(systemInfo: systemInfo)
+
+        XCTAssertEqual(draft.slots.map(\.id), [0, 2, 3])
+        XCTAssertEqual(draft.primaryPoolID, 2)
+        XCTAssertEqual(draft.secondaryPoolID, 3)
+        XCTAssertTrue(draft.useFallbackStratum)
+        XCTAssertEqual(draft.nextFreeSlotID, 1)
+        let backup = try XCTUnwrap(draft.slot(withID: 3))
+        XCTAssertEqual(backup.title, "Pool 4")
+        XCTAssertEqual(backup.menuLabel, "Pool 4 · backup.pool.example")
+        XCTAssertEqual(backup.stratumPortString, "4333")
+        XCTAssertEqual(backup.stratumProtocol, "SV2")
+        XCTAssertEqual(backup.stratumV2ChannelType, "standard")
+        XCTAssertEqual(
+            backup.stratumV2AuthorityPubkey,
+            "9c4zpyJ2ndm4e8sP2uNc1VNCGxYjqaxWS6wUCjk8zFj6njFquH6"
+        )
+        XCTAssertNil(PoolCatalogSavePlan.validationError(for: draft))
+
+        // A selected slot the miner has not configured shows up blank, the way AxeOS lists it.
+        let fallbackMissingJSON = String(decoding: payload, as: UTF8.self).replacing(
+            "\"secondaryPoolIndex\": 3",
+            with: "\"secondaryPoolIndex\": 5"
+        )
+        let fallbackMissingInfo = try JSONDecoder().decode(
+            SystemInfoDTO.self,
+            from: Data(fallbackMissingJSON.utf8)
+        )
+        let fallbackMissingDraft = PoolCatalogDraft(systemInfo: fallbackMissingInfo)
+        XCTAssertEqual(fallbackMissingDraft.slots.map(\.id), [0, 2, 3, 5])
+        let blankSlot = try XCTUnwrap(fallbackMissingDraft.slot(withID: 5))
+        XCTAssertTrue(blankSlot.isBlank)
+        XCTAssertEqual(blankSlot.menuLabel, "Pool 6 · New Pool")
+        // The miner is held on the fallback, so the blank fallback slot blocks saving.
+        XCTAssertEqual(
+            PoolCatalogSavePlan.validationError(for: fallbackMissingDraft),
+            "Fill in Pool 6 before selecting the fallback as the active pool."
+        )
+    }
+
+    func testPoolCatalogValidationRejectsIncompleteSlotsAndDuplicateSelection() throws {
+        var publicPool = PoolSlotDraft(id: 0)
+        publicPool.stratumURL = "public-pool.io"
+        publicPool.stratumPortString = "3333"
+        publicPool.stratumUser = "bc1qexample.primary"
+        var backup = PoolSlotDraft(id: 1)
+        backup.stratumURL = "solo.ckpool.org"
+        backup.stratumPortString = "3333"
+        backup.stratumUser = "bc1qexample.backup"
+        var draft = PoolCatalogDraft(
+            slots: [publicPool, backup],
+            primaryPoolID: 0,
+            secondaryPoolID: 1,
+            useFallbackStratum: false
+        )
+        XCTAssertNil(PoolCatalogSavePlan.validationError(for: draft))
+
+        let added = try XCTUnwrap(draft.addSlot())
+        XCTAssertEqual(added.id, 2)
+        draft.slots[2].stratumURL = "mine.ocean.xyz"
+        XCTAssertEqual(
+            PoolCatalogSavePlan.validationError(for: draft),
+            "Pool 3 needs a host, a port between 1 and 65535, and a user."
+        )
+        draft.slots[2].stratumPortString = "3334"
+        draft.slots[2].stratumUser = "bc1qexample.ocean"
+        XCTAssertNil(PoolCatalogSavePlan.validationError(for: draft))
+
+        draft.slots[2].stratumURL = "stratum+tcp://mine.ocean.xyz"
+        XCTAssertEqual(
+            PoolCatalogSavePlan.validationError(for: draft),
+            "Pool 3 host must not include 'stratum+tcp://' or a port."
+        )
+        draft.slots[2].stratumURL = "mine.ocean.xyz"
+
+        draft.secondaryPoolID = 0
+        XCTAssertEqual(
+            PoolCatalogSavePlan.validationError(for: draft),
+            "The primary and fallback must be different pools."
+        )
+        draft.secondaryPoolID = 1
+
+        // Selected slots cannot be removed; spare ones can, and come back on demand.
+        XCTAssertFalse(draft.deleteSlot(withID: 0))
+        XCTAssertFalse(draft.deleteSlot(withID: 1))
+        XCTAssertTrue(draft.deleteSlot(withID: 2))
+        XCTAssertEqual(draft.slots.map(\.id), [0, 1])
+        XCTAssertEqual(draft.deletedPoolIDs, [2])
+        XCTAssertEqual(draft.addSlot()?.id, 2)
+        XCTAssertEqual(draft.deletedPoolIDs, [])
+    }
+
+    func testPoolCatalogSaveWritesSlotsThenSelectionThenDeletesThenRestarts() async throws {
+        let appGroupDefaults = try XCTUnwrap(
+            UserDefaults(suiteName: SettingsViewModel.sharedUserDefaultsSuiteName)
+        )
+        appGroupDefaults.set("192.0.2.10", forKey: "bitaxeIPAddress")
+        let fixtureURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures")
+            .appendingPathComponent("Firmware")
+            .appendingPathComponent("esp-miner-2-15-0-system-info.json")
+        let currentPayload = try Data(contentsOf: fixtureURL)
+
+        // After the pools PATCH the miner reports the new slot 1; after the restart it also
+        // reports the moved primary and the cleared slot 0.
+        var json = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: currentPayload) as? [String: Any]
+        )
+        var pools = try XCTUnwrap(json["pools"] as? [[String: Any]])
+        pools.append([
+            "id": 1,
+            "stratumProtocol": "SV1",
+            "stratumURL": "solo.ckpool.org",
+            "stratumPort": 3333,
+            "stratumUser": "bc1qnew.primary",
+            "stratumPassword": "*****",
+            "stratumV2ChannelType": "standard",
+            "stratumV2AuthorityPubkey": "",
+        ])
+        json["pools"] = pools
+        let slotAddedPayload = try JSONSerialization.data(withJSONObject: json)
+        json["primaryPoolIndex"] = 1
+        json["pools"] = pools.filter { ($0["id"] as? Int) != 0 }
+        let restartedPayload = try JSONSerialization.data(withJSONObject: json)
+
+        MultiPoolURLProtocolStub.requestHandler = { request in
+            let response = try XCTUnwrap(
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )
+            )
+            guard request.httpMethod == "GET" else {
+                return (response, Data())
+            }
+            let captured = MultiPoolURLProtocolStub.capturedRequests
+            if captured.contains(where: { $0.url?.path == "/api/system/restart" }) {
+                return (response, restartedPayload)
+            }
+            if captured.contains(where: { $0.httpMethod == "PATCH" }) {
+                return (response, slotAddedPayload)
+            }
+            return (response, currentPayload)
+        }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MultiPoolURLProtocolStub.self]
+        let schema = Schema([HistoricalDataPoint.self])
+        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
+        let viewModel = SettingsViewModel(
+            sharedUserDefaults: appGroupDefaults,
+            networkService: NetworkService(session: URLSession(configuration: configuration)),
+            modelContext: container.mainContext,
+            shouldFetchDeviceSettingsOnLoad: false
+        )
+
+        await viewModel.fetchDeviceSettings()
+        XCTAssertTrue(viewModel.supportsMultiPoolSettings)
+        var draft = try XCTUnwrap(viewModel.poolCatalog)
+        MultiPoolURLProtocolStub.capturedRequests = []
+
+        let added = try XCTUnwrap(draft.addSlot())
+        XCTAssertEqual(added.id, 1)
+        let addedIndex = try XCTUnwrap(draft.slots.firstIndex { $0.id == 1 })
+        draft.slots[addedIndex].stratumURL = "solo.ckpool.org"
+        draft.slots[addedIndex].stratumPortString = "3333"
+        draft.slots[addedIndex].stratumUser = "bc1qnew.primary"
+        draft.primaryPoolID = 1
+        XCTAssertTrue(draft.deleteSlot(withID: 0))
+
+        let didSave = await viewModel.savePoolCatalog(draft)
+
+        XCTAssertTrue(didSave)
+        XCTAssertNil(viewModel.poolConfigurationError)
+        XCTAssertFalse(viewModel.isUpdatingPoolConfiguration)
+        XCTAssertEqual(
+            MultiPoolURLProtocolStub.capturedRequests.map { $0.httpMethod },
+            ["GET", "PATCH", "GET", "PATCH", "DELETE", "POST", "GET"]
+        )
+        XCTAssertEqual(
+            MultiPoolURLProtocolStub.capturedRequests.map { $0.url?.absoluteString },
+            [
+                "http://192.0.2.10/api/system/info",
+                "http://192.0.2.10/api/system",
+                "http://192.0.2.10/api/system/info",
+                "http://192.0.2.10/api/system",
+                "http://192.0.2.10/api/system/pools/0",
+                "http://192.0.2.10/api/system/restart",
+                "http://192.0.2.10/api/system/info",
+            ]
+        )
+
+        let patchRequests = MultiPoolURLProtocolStub.capturedRequests.filter {
+            $0.httpMethod == "PATCH"
+        }
+        // Only the new slot is written; untouched slots 2 and 3 stay out of the body.
+        let poolsBody = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: try XCTUnwrap(patchRequests[0].capturedBody))
+                as? [String: Any]
+        )
+        let sentPools = try XCTUnwrap(poolsBody["pools"] as? [[String: Any]])
+        XCTAssertEqual(sentPools.compactMap { $0["id"] as? Int }, [1])
+        XCTAssertEqual(sentPools[0]["stratumURL"] as? String, "solo.ckpool.org")
+        XCTAssertEqual(sentPools[0]["stratumPort"] as? Int, 3333)
+        XCTAssertEqual(sentPools[0]["stratumUser"] as? String, "bc1qnew.primary")
+        XCTAssertEqual(sentPools[0]["stratumProtocol"] as? String, "SV1")
+        XCTAssertNil(poolsBody["primaryPoolIndex"])
+        XCTAssertNil(poolsBody["secondaryPoolIndex"])
+        XCTAssertNil(poolsBody["useFallbackStratum"])
+        // The selection follows once the slot was read back; unchanged keys are left out.
+        let selectionBody = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: try XCTUnwrap(patchRequests[1].capturedBody))
+                as? [String: Any]
+        )
+        XCTAssertEqual(selectionBody as? [String: Int], ["primaryPoolIndex": 1])
+
+        let catalog = try XCTUnwrap(viewModel.poolCatalog)
+        XCTAssertEqual(catalog.slots.map(\.id), [1, 2, 3])
+        XCTAssertEqual(catalog.primaryPoolID, 1)
+        XCTAssertEqual(catalog.secondaryPoolID, 3)
+    }
+
+    func testPoolCatalogSaveOfASpareSlotDoesNotMoveTheSelectionOrRestart() async throws {
+        let appGroupDefaults = try XCTUnwrap(
+            UserDefaults(suiteName: SettingsViewModel.sharedUserDefaultsSuiteName)
+        )
+        appGroupDefaults.set("192.0.2.10", forKey: "bitaxeIPAddress")
+        let fixtureURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures")
+            .appendingPathComponent("Firmware")
+            .appendingPathComponent("esp-miner-2-15-0-system-info.json")
+        let currentPayload = try Data(contentsOf: fixtureURL)
+        let editedJSON = String(decoding: currentPayload, as: UTF8.self).replacing(
+            "\"stratumURL\": \"unused.pool.example\"",
+            with: "\"stratumURL\": \"spare.pool.example\""
+        )
+        XCTAssertNotEqual(editedJSON, String(decoding: currentPayload, as: UTF8.self))
+        let editedPayload = Data(editedJSON.utf8)
+
+        MultiPoolURLProtocolStub.requestHandler = { request in
+            let response = try XCTUnwrap(
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )
+            )
+            guard request.httpMethod == "GET" else {
+                return (response, Data())
+            }
+            let didPatch = MultiPoolURLProtocolStub.capturedRequests.contains {
+                $0.httpMethod == "PATCH"
+            }
+            return (response, didPatch ? editedPayload : currentPayload)
+        }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MultiPoolURLProtocolStub.self]
+        let schema = Schema([HistoricalDataPoint.self])
+        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
+        let viewModel = SettingsViewModel(
+            sharedUserDefaults: appGroupDefaults,
+            networkService: NetworkService(session: URLSession(configuration: configuration)),
+            modelContext: container.mainContext,
+            shouldFetchDeviceSettingsOnLoad: false
+        )
+
+        await viewModel.fetchDeviceSettings()
+        var draft = try XCTUnwrap(viewModel.poolCatalog)
+        MultiPoolURLProtocolStub.capturedRequests = []
+
+        // Saving an untouched draft writes nothing.
+        let didSaveUnchangedDraft = await viewModel.savePoolCatalog(draft)
+        XCTAssertTrue(didSaveUnchangedDraft)
+        XCTAssertEqual(
+            MultiPoolURLProtocolStub.capturedRequests.map { $0.httpMethod },
+            ["GET"]
+        )
+        MultiPoolURLProtocolStub.capturedRequests = []
+
+        // Slot 0 is neither primary nor fallback, so editing it needs no restart.
+        let spareIndex = try XCTUnwrap(draft.slots.firstIndex { $0.id == 0 })
+        draft.slots[spareIndex].stratumURL = "spare.pool.example"
+
+        let didSave = await viewModel.savePoolCatalog(draft)
+
+        XCTAssertTrue(didSave)
+        XCTAssertNil(viewModel.poolConfigurationError)
+        XCTAssertEqual(
+            MultiPoolURLProtocolStub.capturedRequests.map { $0.httpMethod },
+            ["GET", "PATCH", "GET"]
+        )
+        let patchRequest = try XCTUnwrap(
+            MultiPoolURLProtocolStub.capturedRequests.first { $0.httpMethod == "PATCH" }
+        )
+        let body = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: try XCTUnwrap(patchRequest.capturedBody))
+                as? [String: Any]
+        )
+        let sentPools = try XCTUnwrap(body["pools"] as? [[String: Any]])
+        XCTAssertEqual(sentPools.compactMap { $0["id"] as? Int }, [0])
+        XCTAssertEqual(sentPools[0]["stratumURL"] as? String, "spare.pool.example")
+        // The masked password and the properties Traxe does not edit are echoed back.
+        XCTAssertEqual(sentPools[0]["stratumPassword"] as? String, "*****")
+        XCTAssertEqual(sentPools[0]["stratumSuggestedDifficulty"] as? Int, 0)
+        XCTAssertEqual(viewModel.poolCatalog?.slot(withID: 0)?.stratumURL, "spare.pool.example")
+    }
+
+    func testPoolCatalogSaveReportsFailureWhenTheMinerIgnoresTheSlotChanges() async throws {
+        let appGroupDefaults = try XCTUnwrap(
+            UserDefaults(suiteName: SettingsViewModel.sharedUserDefaultsSuiteName)
+        )
+        appGroupDefaults.set("192.0.2.10", forKey: "bitaxeIPAddress")
+        let fixtureURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures")
+            .appendingPathComponent("Firmware")
+            .appendingPathComponent("esp-miner-2-15-0-system-info.json")
+        let unchangedPayload = try Data(contentsOf: fixtureURL)
+
+        MultiPoolURLProtocolStub.requestHandler = { request in
+            let response = try XCTUnwrap(
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )
+            )
+            return (response, request.httpMethod == "GET" ? unchangedPayload : Data())
+        }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MultiPoolURLProtocolStub.self]
+        let schema = Schema([HistoricalDataPoint.self])
+        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
+        let viewModel = SettingsViewModel(
+            sharedUserDefaults: appGroupDefaults,
+            networkService: NetworkService(session: URLSession(configuration: configuration)),
+            modelContext: container.mainContext,
+            shouldFetchDeviceSettingsOnLoad: false
+        )
+
+        await viewModel.fetchDeviceSettings()
+        var draft = try XCTUnwrap(viewModel.poolCatalog)
+        MultiPoolURLProtocolStub.capturedRequests = []
+
+        let primaryIndex = try XCTUnwrap(draft.slots.firstIndex { $0.id == 2 })
+        draft.slots[primaryIndex].stratumURL = "solo.ckpool.org"
+        draft.primaryPoolID = 0
+
+        let didSave = await viewModel.savePoolCatalog(draft)
+
+        XCTAssertFalse(didSave)
+        XCTAssertFalse(viewModel.isUpdatingPoolConfiguration)
+        XCTAssertEqual(
+            viewModel.poolConfigurationError,
+            "The miner accepted the request but did not apply the pool settings. Please try again, or change the pool from the miner web UI."
+        )
+        // The selection is never moved, and the miner never restarted, when the slot write
+        // did not stick.
+        XCTAssertEqual(
+            MultiPoolURLProtocolStub.capturedRequests.map { $0.httpMethod },
+            ["GET", "PATCH", "GET"]
+        )
+        XCTAssertEqual(viewModel.poolCatalog?.primaryPoolID, 2)
     }
 
     // A v2.15 `/api/system/info` response after the pool changes were applied.

@@ -122,6 +122,8 @@ struct DeviceSummaryView: View {
                     }
                 }
                 .animation(.easeInOut(duration: 0.4), value: summaryController.summary != nil)
+                .frame(maxWidth: 700)
+                .frame(maxWidth: .infinity)
             }
             .debugBlockFoundToast {
                 showBlockFoundToast = true
@@ -130,7 +132,7 @@ struct DeviceSummaryView: View {
         .navigationTitle(deviceIP)
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
+            ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     settingsViewModel = SettingsViewModel(
                         sharedUserDefaults: UserDefaults(
@@ -140,13 +142,18 @@ struct DeviceSummaryView: View {
                     )
                     showingSettings = true
                 } label: {
-                    Image(systemName: "gearshape")
+                    // The title is what the system shows when the item moves into an
+                    // overflow menu or a vertical bar cannot fit the symbol alone.
+                    Label("Settings", systemImage: "gearshape")
                 }
             }
         }
-        .sheet(isPresented: $showingSettings, onDismiss: {
-            settingsViewModel = nil
-        }) {
+        .sheet(
+            isPresented: $showingSettings,
+            onDismiss: {
+                settingsViewModel = nil
+            }
+        ) {
             if let settingsViewModel {
                 SettingsView(
                     viewModel: settingsViewModel,

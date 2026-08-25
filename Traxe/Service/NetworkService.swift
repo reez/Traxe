@@ -214,19 +214,80 @@ actor NetworkService {
 
     // ESP-Miner v2.15 accepts pool changes only through the `pools` array; the flat pool
     // properties sent by `updateSystemSettings` are ignored while still returning success.
+    // `primaryPoolIndex` and `secondaryPoolIndex` pick the slots to mine on, and
+    // `useFallbackStratum` selects the active pool and is sent as 0/1, the way AxeOS does.
+    // Callers send those on their own after the pool slots were verified, because the firmware
+    // stores scalar keys before it gets to the pools array.
     func updatePoolSettings(
         pools: [MinerPoolDTO],
+        primaryPoolIndex: Int? = nil,
+        secondaryPoolIndex: Int? = nil,
+        useFallbackStratum: Bool? = nil,
         ipAddressOverride: String? = nil
     ) async throws {
         struct PoolSettingsUpdate: Encodable {
-            let pools: [MinerPoolDTO]
+            let pools: [MinerPoolDTO]?
+            let primaryPoolIndex: Int?
+            let secondaryPoolIndex: Int?
+            let useFallbackStratum: Int?
         }
 
         try await performPATCH(
             endpoint: "/api/system",
-            body: PoolSettingsUpdate(pools: pools),
+            body: PoolSettingsUpdate(
+                pools: pools.isEmpty ? nil : pools,
+                primaryPoolIndex: primaryPoolIndex,
+                secondaryPoolIndex: secondaryPoolIndex,
+                useFallbackStratum: useFallbackStratum.map { $0 ? 1 : 0 }
+            ),
             ipAddressOverride: ipAddressOverride
         )
+    }
+
+    // Clears one ESP-Miner v2.15 pool slot. The firmware answers 400 for a slot that is
+    // selected as primary or fallback, so callers move the selection first.
+    func deletePool(id: Int, ipAddressOverride: String? = nil) async throws {
+        try await performDELETE(
+            endpoint: "/api/system/pools/\(id)",
+            ipAddressOverride: ipAddressOverride
+        )
+    }
+
+    private func performDELETE(endpoint: String, ipAddressOverride: String? = nil) async throws {
+        guard let baseURL = getBaseURL(for: ipAddressOverride) else {
+            throw NetworkError.configurationMissing
+        }
+        let url = baseURL.appendingPathComponent(endpoint)
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.timeoutInterval = 5.0
+
+        do {
+            let (_, response) = try await session.data(for: request)
+
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw NetworkError.invalidResponse
+            }
+
+            switch httpResponse.statusCode {
+            case 200, 202:
+                return
+            case 400:
+                throw NetworkError.apiError(message: "The miner rejected the pool change")
+            case 404:
+                throw NetworkError.apiError(message: "Endpoint not found")
+            case 500:
+                throw NetworkError.apiError(message: "Miner server error")
+            default:
+                throw NetworkError.apiError(
+                    message: "Unexpected response: \(httpResponse.statusCode)"
+                )
+            }
+        } catch let error as NetworkError {
+            throw error
+        } catch {
+            throw NetworkError.requestFailed(error)
+        }
     }
 
     func updateSystemSettings(

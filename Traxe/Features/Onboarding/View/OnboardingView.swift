@@ -28,42 +28,50 @@ struct OnboardingView: View {
             .ignoresSafeArea()
 
             NavigationStack {
-                VStack(spacing: 20) {
-                    Spacer()
-                    Spacer().frame(height: 20)
+                // Scrolls when the content is taller than the window (short landscape
+                // windows, large text) and stays vertically centered when it is not.
+                GeometryReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 20) {
+                            Spacer()
+                            Spacer().frame(height: 20)
 
-                    onboardingHeaderAndScanButton()
+                            onboardingHeaderAndScanButton()
 
-                    if !viewModel.discoveredDevices.isEmpty {
-                        List(viewModel.discoveredDevices) { device in
-                            deviceRow(device)
-                        }
-                        .listStyle(.plain)
-                        .frame(height: CGFloat(viewModel.discoveredDevices.count) * 80)
-                    }
+                            if !viewModel.discoveredDevices.isEmpty {
+                                VStack(spacing: 8) {
+                                    ForEach(viewModel.discoveredDevices) { device in
+                                        deviceRow(device)
+                                    }
+                                }
+                            }
 
-                    manualEntrySection()
+                            manualEntrySection()
 
-                    Spacer()
+                            Spacer()
 
-                    if let privacyPolicyURL, let termsOfUseURL {
-                        HStack(spacing: 4) {
-                            Link("Privacy Policy", destination: privacyPolicyURL)
-                            Text("•")
+                            if let privacyPolicyURL, let termsOfUseURL {
+                                HStack(spacing: 4) {
+                                    Link("Privacy Policy", destination: privacyPolicyURL)
+                                    Text("•")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    Link("Terms of Use", destination: termsOfUseURL)
+                                }
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                            Link("Terms of Use", destination: termsOfUseURL)
-                        }
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                    }
+                                .multilineTextAlignment(.center)
+                            }
 
+                        }
+                        .padding()
+                        .frame(maxWidth: 700)
+                        .frame(maxWidth: .infinity, minHeight: proxy.size.height)
+                    }
                 }
-                .padding()
                 .animation(.easeInOut, value: viewModel.isScanning)
                 .navigationTitle("Welcome")
-                .navigationBarHidden(true)
+                .toolbar(.hidden, for: .navigationBar)
                 .alert("Scan Error", isPresented: $viewModel.showErrorAlert) {
                     Button("OK") {}
                 } message: {
@@ -85,7 +93,7 @@ struct OnboardingView: View {
                     }
                 } message: {
                     Text(
-                        "Traxe needs access to your local network to find miners. Please enable it in Settings."
+                        "Traxe needs access to your local network to find miners. Enable Local Network access in Settings."
                     )
                 }
                 .alert("Connection Error", isPresented: $showConnectionError) {
@@ -144,10 +152,6 @@ struct OnboardingView: View {
             )
         }
         .buttonStyle(PressableButtonStyle())
-        .listRowInsets(EdgeInsets())
-        .listRowBackground(Color.clear)
-        .padding(.horizontal)
-        .padding(.vertical, 4)
     }
 
     @ViewBuilder
@@ -155,7 +159,7 @@ struct OnboardingView: View {
         ParticleSphereView(particleColor: .primary)
             .frame(width: 150, height: 150)
 
-        Text("Connect to miner")
+        Text("Add a Miner")
             .font(.largeTitle)
             .fontWeight(.bold)
             .fontDesign(.serif)
@@ -169,31 +173,17 @@ struct OnboardingView: View {
             ProgressView()
         } else {
 
-            if #available(iOS 26.0, *) {
-                Button("Scan Network") {
-                    Task {
-                        let result = await viewModel.startScan()
-                        if result == .permissionDenied {
-                            self.showSettingsAlert = true
-                        }
+            Button("Scan for Miners") {
+                Task {
+                    let result = await viewModel.startScan()
+                    if result == .permissionDenied {
+                        self.showSettingsAlert = true
                     }
                 }
-                .buttonStyle(.glassProminent)
-                .tint(Color.traxeGold)
-                .disabled(viewModel.isScanning)
-            } else {
-                Button("Scan Network") {
-                    Task {
-                        let result = await viewModel.startScan()
-                        if result == .permissionDenied {
-                            self.showSettingsAlert = true
-                        }
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(Color.traxeGold)
-                .disabled(viewModel.isScanning)
             }
+            .prominentActionButtonStyle()
+            .tint(Color.traxeGold)
+            .disabled(viewModel.isScanning)
 
         }
 
@@ -227,7 +217,7 @@ struct OnboardingView: View {
                         }
                     } label: {
                         HStack {
-                            Text("or enter manually".uppercased())
+                            Text("or enter an IP address".uppercased())
                                 .font(.caption)
                             Image(systemName: "chevron.down")
                                 .rotationEffect(
@@ -252,41 +242,22 @@ struct OnboardingView: View {
                             .clipShape(.rect(cornerRadius: 10))
                             .padding(.horizontal)
 
-                            if #available(iOS 26.0, *) {
-                                Button(action: {
-                                    guard !isConnecting else { return }
-                                    isConnecting = true
-                                    Task {
-                                        _ = await viewModel.connectManually()
-                                        isConnecting = false
-                                    }
-                                }) {
-                                    HStack {
-                                        Text("Connect Manually")
-                                        Image(systemName: "arrow.right")
-                                    }
+                            Button(action: {
+                                guard !isConnecting else { return }
+                                isConnecting = true
+                                Task {
+                                    _ = await viewModel.connectManually()
+                                    isConnecting = false
                                 }
-                                .buttonStyle(.glassProminent)
-                                .tint(Color.traxeGold)
-                                .disabled(viewModel.manualIPAddress.isEmpty)
-                            } else {
-                                Button(action: {
-                                    guard !isConnecting else { return }
-                                    isConnecting = true
-                                    Task {
-                                        _ = await viewModel.connectManually()
-                                        isConnecting = false
-                                    }
-                                }) {
-                                    HStack {
-                                        Text("Connect Manually")
-                                        Image(systemName: "arrow.right")
-                                    }
+                            }) {
+                                HStack {
+                                    Text("Add Miner")
+                                    Image(systemName: "arrow.right")
                                 }
-                                .buttonStyle(.borderedProminent)
-                                .tint(Color.traxeGold)
-                                .disabled(viewModel.manualIPAddress.isEmpty)
                             }
+                            .prominentActionButtonStyle()
+                            .tint(Color.traxeGold)
+                            .disabled(viewModel.manualIPAddress.isEmpty)
                         }
                         .transition(.opacity)
                     }

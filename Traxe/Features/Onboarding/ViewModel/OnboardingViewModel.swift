@@ -26,6 +26,7 @@ struct DiscoveredDevice: Identifiable {
     var isTemperatureKnown: Bool = true
     var isMiningPaused: Bool = false
     var isMiningPausedKnown: Bool = true
+    var macAddress: String? = nil
 }
 
 @Observable
@@ -128,7 +129,7 @@ final class OnboardingViewModel {
                 guard let self = self else { return }
 
                 if self.scanStatus
-                    == "Please allow local network access in Settings to scan for miners"
+                    == "Allow Local Network access in Settings to scan for miners"
                     && !self.isScanning
                 {
                     self.scanStatus = ""
@@ -144,7 +145,7 @@ final class OnboardingViewModel {
     private func checkAndUpdatePermission() async {
         hasLocalNetworkPermission = await checkLocalNetworkPermission()
         if !hasLocalNetworkPermission {
-            scanStatus = "Please allow local network access in Settings to scan for miners"
+            scanStatus = "Allow Local Network access in Settings to scan for miners"
         } else {
             if !isScanning {
                 scanStatus = ""
@@ -368,7 +369,7 @@ final class OnboardingViewModel {
         permissionErrorDetected = false
 
         guard hasLocalNetworkPermission else {
-            scanStatus = "Please allow local network access in Settings to scan for miners"
+            scanStatus = "Allow Local Network access in Settings to scan for miners"
             isScanning = false
             hasScanned = true
             return .permissionDenied
@@ -555,7 +556,11 @@ final class OnboardingViewModel {
 
     @discardableResult
     func selectDevice(_ device: DiscoveredDevice) -> Bool {
-        let savedDevice = SavedDevice(name: device.name, ipAddress: device.ip)
+        let savedDevice = SavedDevice(
+            name: device.name,
+            ipAddress: device.ip,
+            macAddress: device.macAddress
+        )
 
         do {
             try dependencies.deviceManagement.saveDevice(savedDevice)
@@ -569,7 +574,7 @@ final class OnboardingViewModel {
     @discardableResult
     func selectDevices(_ devices: [DiscoveredDevice]) -> Bool {
         let savedDevices = devices.map { device in
-            SavedDevice(name: device.name, ipAddress: device.ip)
+            SavedDevice(name: device.name, ipAddress: device.ip, macAddress: device.macAddress)
         }
 
         do {
@@ -596,7 +601,8 @@ final class OnboardingViewModel {
 
             let deviceToSave = SavedDevice(
                 name: discoveredDevice.name,
-                ipAddress: discoveredDevice.ip
+                ipAddress: discoveredDevice.ip,
+                macAddress: discoveredDevice.macAddress
             )
             try dependencies.deviceManagement.saveDevice(deviceToSave)
 
@@ -695,7 +701,7 @@ final class OnboardingViewModel {
             hasLocalNetworkPermission = false
             isScanning = false
             hasScanned = true
-            scanStatus = "Please allow local network access in Settings to scan for miners"
+            scanStatus = "Allow Local Network access in Settings to scan for miners"
             showErrorAlert = false
         }
         return true

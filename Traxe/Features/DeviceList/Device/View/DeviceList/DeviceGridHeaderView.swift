@@ -4,22 +4,35 @@ struct DeviceGridHeaderView: View {
     @Binding var sortOption: DeviceGridSortOption
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Text("Miners")
-                .font(.title2)
-                .fontWeight(.semibold)
-                .lineLimit(1)
+        let title = Text("Miners")
+            .font(.title2)
+            .fontWeight(.semibold)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+        let sortPicker = Picker("Sort miners", selection: $sortOption) {
+            ForEach(DeviceGridSortOption.allCases) { option in
+                Text(option.title).tag(option)
+            }
+        }
+        .pickerStyle(.automatic)
+        .controlSize(.small)
+        .tint(.primary)
+        .fixedSize(horizontal: true, vertical: false)
 
-            Spacer(minLength: 8)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 12) {
+                title
+                Spacer(minLength: 8)
+                sortPicker
+            }
 
-            Picker("Sort miners", selection: $sortOption) {
-                ForEach(DeviceGridSortOption.allCases) { option in
-                    Text(option.title).tag(option)
+            VStack(alignment: .leading, spacing: 8) {
+                title
+                HStack {
+                    Spacer(minLength: 0)
+                    sortPicker
                 }
             }
-            .pickerStyle(.automatic)
-            .controlSize(.small)
-            .tint(.primary)
         }
     }
 }
