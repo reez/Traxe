@@ -212,6 +212,23 @@ actor NetworkService {
         }
     }
 
+    // ESP-Miner v2.15 accepts pool changes only through the `pools` array; the flat pool
+    // properties sent by `updateSystemSettings` are ignored while still returning success.
+    func updatePoolSettings(
+        pools: [MinerPoolDTO],
+        ipAddressOverride: String? = nil
+    ) async throws {
+        struct PoolSettingsUpdate: Encodable {
+            let pools: [MinerPoolDTO]
+        }
+
+        try await performPATCH(
+            endpoint: "/api/system",
+            body: PoolSettingsUpdate(pools: pools),
+            ipAddressOverride: ipAddressOverride
+        )
+    }
+
     func updateSystemSettings(
         fanspeed: Int? = nil,
         manualFanSpeed: Int? = nil,

@@ -80,7 +80,8 @@ struct WatchHashrateProvider: TimelineProvider {
                 hashrate: displayHashrate.value,
                 unit: displayHashrate.unit,
                 lastUpdated: freshness,
-                isPlaceholder: false
+                isPlaceholder: false,
+                relevance: relevance(for: cache, referenceDate: referenceDate)
             )
         }
 
@@ -95,6 +96,27 @@ struct WatchHashrateProvider: TimelineProvider {
         }
 
         return nil
+    }
+
+    /// Smart Stack surfaces widgets with higher relevance scores sooner. A miner
+    /// that has gone quiet or hot outranks a healthy fleet; a healthy fleet still
+    /// reports a small baseline so the widget stays in rotation.
+    private func relevance(
+        for cache: [String: CachedDeviceMetrics],
+        referenceDate: Date
+    ) -> TimelineEntryRelevance {
+        let staleCutoff = referenceDate.addingTimeInterval(-60 * 30)
+        let needsAttention = cache.values.contains { metrics in
+            metrics.hashrate <= 0 || metrics.lastUpdated < staleCutoff
+        }
+        if needsAttention {
+            return TimelineEntryRelevance(score: 100)
+        }
+        let runningHot = cache.values.contains { ($0.temperature ?? 0) >= 70 }
+        if runningHot {
+            return TimelineEntryRelevance(score: 70)
+        }
+        return TimelineEntryRelevance(score: 10)
     }
 
     private func loadLegacyHashrate() -> (value: String, unit: String, lastUpdated: Date?)? {
@@ -120,6 +142,8 @@ struct WatchHashrateEntry: TimelineEntry {
     var unit: String = ""
     let lastUpdated: Date?
     var isPlaceholder: Bool
+    // Smart Stack prominence: high when a miner needs attention, low when nominal.
+    var relevance: TimelineEntryRelevance? = nil
 }
 
 struct TraxeWatchWidgetEntryView: View {
@@ -253,14 +277,8 @@ struct TraxeWatchWidget: Widget {
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: WatchHashrateProvider()) { entry in
-            if #available(watchOS 10.0, *) {
-                TraxeWatchWidgetEntryView(entry: entry)
-                    .containerBackground(.fill.tertiary, for: .widget)
-            } else {
-                TraxeWatchWidgetEntryView(entry: entry)
-                    .padding()
-                    .background()
-            }
+            TraxeWatchWidgetEntryView(entry: entry)
+                .containerBackground(.fill.tertiary, for: .widget)
         }
         .configurationDisplayName("Hashrate")
         .description("Latest hashrate from your miners.")

@@ -96,3 +96,15 @@ iOSInjectionProject/
 .DS_Store
 
 AGENTS.md
+
+# Generated visual QA and App Store output
+/visual-qa/
+/artifacts/
+/Artifacts/
+/tmp/
+/.codex-screenshots/
+/.codex-video-notes/
+/AppStore/Captures/
+/AppStore/Screenshots/
+/AppStore/screenshots/
+*.xcresult

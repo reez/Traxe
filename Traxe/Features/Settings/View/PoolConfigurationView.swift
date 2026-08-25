@@ -68,23 +68,25 @@ struct PoolConfigurationView: View {
     var body: some View {
         Form {
             Section("Pool Configuration") {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Pool Mode".uppercased())
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    Picker("Pool Mode", selection: $localPoolMode) {
-                        Text("Failover").tag(0)
-                        Text("Dual Pool").tag(1)
+                if viewModel.supportsPoolModeSettings {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("POOL MODE")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Picker("Pool Mode", selection: $localPoolMode) {
+                            Text("Failover").tag(0)
+                            Text("Dual Pool").tag(1)
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        Text("Changing pool mode may require a device restart.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    Text("Changing pool mode may require a device restart.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    .padding(.vertical, 4)
                 }
-                .padding(.vertical, 4)
 
-                if localIsDualPool {
+                if viewModel.supportsPoolModeSettings, localIsDualPool {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(poolBalanceTitle.uppercased())
                             .font(.subheadline)
@@ -297,6 +299,7 @@ struct PoolConfigurationView: View {
             previewViewModel.stratumV2ChannelType = "extended"
             previewViewModel.stratumV2AuthorityPubkey =
                 "9c4zpyJ2ndm4e8sP2uNc1VNCGxYjqaxWS6wUCjk8zFj6njFquH6"
+            previewViewModel.supportsPoolModeSettings = true
             previewViewModel.poolBalance = 60
             previewViewModel.poolMode = 1
             previewViewModel.isDualPool = true

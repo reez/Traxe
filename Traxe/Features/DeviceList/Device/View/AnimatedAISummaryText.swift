@@ -31,12 +31,18 @@ struct TypewriterRenderer: TextRenderer {
 
 @available(iOS 18.0, *)
 struct AnimatedAISummaryText: View {
+    private struct RevealTaskID: Equatable {
+        let content: String
+        let isDataLoaded: Bool
+    }
+
     let content: String
     let isDataLoaded: Bool
     @State private var progress: Double = 0.0
     @State private var hapticEngine: CHHapticEngine?
-    @State private var animationTask: Task<Void, Never>?
-    @State private var lastHapticProgress: Double = 0.0
+    /// The summary value this view has already typed out. `task(id:)` also runs again when
+    /// the view reappears, so without this the same summary would reset to zero and replay.
+    @State private var revealedContent: String?
 
     var body: some View {
         let highlighted = content.highlightingValues(color: .traxeGold)
@@ -46,86 +52,50 @@ struct AnimatedAISummaryText: View {
             .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
             .textRenderer(TypewriterRenderer(progress: progress))
-            .onAppear {
-                startAnimationIfReady()
+            .task {
+                await prepareHaptics()
             }
-            .onChange(of: content) { _, newContent in
-                animationTask?.cancel()
-                progress = 0.0
-                lastHapticProgress = 0.0
-                startAnimationIfReady()
-            }
-            .onChange(of: isDataLoaded) { _, loaded in
-                if loaded && !content.isEmpty && progress == 0.0 {
-                    startAnimationIfReady()
-                }
-            }
-            .onDisappear {
-                animationTask?.cancel()
+            // One reveal per summary value. SwiftUI cancels the previous reveal before it
+            // starts the next one and tears it down on disappear, so a stale reveal can no
+            // longer overlap the current one or restart it from zero.
+            .task(id: RevealTaskID(content: content, isDataLoaded: isDataLoaded)) {
+                await revealContent()
             }
     }
 
-    private func startAnimationIfReady() {
-        // Only start animation if data is loaded
-        guard isDataLoaded && !content.isEmpty else {
-            // Show content immediately if data isn't loaded yet
+    private func revealContent() async {
+        guard !content.isEmpty else { return }
+
+        // A summary can finish generating before the dashboard's first telemetry fetch.
+        // Keep it hidden until the data is ready so that the readiness change starts the
+        // original typewriter reveal instead of flashing the complete string on screen.
+        guard isDataLoaded else { return }
+
+        // This summary has already been typed out during this view's lifetime, so returning
+        // to the screen shows it finished instead of replaying the reveal and its haptics.
+        // A reveal that was interrupted counts as done and is completed rather than restarted.
+        guard revealedContent != content else {
             progress = 1.0
             return
         }
+        revealedContent = content
+        progress = 0.0
 
-        startAnimation()
-    }
-
-    private func startAnimation() {
-        animationTask?.cancel()
-
-        // Prepare haptics on background thread
-        Task.detached(priority: .background) {
-            await prepareHaptics()
-        }
-
-        // Start the character-by-character animation
-        animationTask = Task.detached(priority: .userInitiated) {
-            let totalCharacters = content.count
-            let animationDuration: TimeInterval = Double(totalCharacters) * 0.05  // 50ms per character
-            let steps = min(totalCharacters, 100)  // Max 100 steps for performance
-            let stepDuration = animationDuration / Double(steps)
-
-            for step in 0...steps {
-                let newProgress = Double(step) / Double(steps)
-
-                await MainActor.run {
-                    withAnimation(.linear(duration: stepDuration)) {
-                        progress = newProgress
-                    }
+        await TypewriterRevealDriver(characterCount: content.count).run(
+            showProgress: { revealProgress, stepDuration in
+                withAnimation(.linear(duration: stepDuration)) {
+                    progress = revealProgress
                 }
-
-                // Play haptic every 10% progress and only after data is loaded
-                let shouldTriggerHaptic = await MainActor.run { () -> Bool in
-                    guard isDataLoaded else { return false }
-                    let needsHaptic = newProgress - lastHapticProgress >= 0.1
-                    if needsHaptic {
-                        lastHapticProgress = newProgress
-                    }
-                    return needsHaptic
-                }
-
-                if shouldTriggerHaptic {
-                    Task.detached(priority: .background) {
-                        await playHaptic()
-                    }
-                }
-
-                try? await Task.sleep(for: .seconds(stepDuration))
-            }
-
-            // Final completion haptic
-            if isDataLoaded {
-                Task.detached(priority: .background) {
-                    await playCompletionHaptic()
+            },
+            playHaptic: { haptic in
+                switch haptic {
+                case .step:
+                    playTransientHaptic(intensity: 0.3, sharpness: 0.2)
+                case .completion:
+                    playTransientHaptic(intensity: 0.5, sharpness: 0.8)
                 }
             }
-        }
+        )
     }
 
     private func prepareHaptics() async {
@@ -134,44 +104,29 @@ struct AnimatedAISummaryText: View {
         do {
             let engine = try CHHapticEngine()
             try await engine.start()
-            await MainActor.run {
-                hapticEngine = engine
-            }
+            // Starting the engine suspends, so the view may already be gone by the time it
+            // finishes; dropping the engine here keeps canceled work out of view state.
+            guard !Task.isCancelled else { return }
+            hapticEngine = engine
         } catch {
         }
     }
 
-    private func playHaptic() async {
-        let engine = await MainActor.run { hapticEngine }
-        guard let hapticEngine = engine else { return }
+    private func playTransientHaptic(intensity: Float, sharpness: Float) {
+        guard let hapticEngine else { return }
 
-        let intensity = CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.3)
-        let sharpness = CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.2)
-
-        let event = CHHapticEvent(
-            eventType: .hapticTransient,
-            parameters: [intensity, sharpness],
-            relativeTime: 0
+        let intensityParameter = CHHapticEventParameter(
+            parameterID: .hapticIntensity,
+            value: intensity
+        )
+        let sharpnessParameter = CHHapticEventParameter(
+            parameterID: .hapticSharpness,
+            value: sharpness
         )
 
-        do {
-            let pattern = try CHHapticPattern(events: [event], parameters: [])
-            let player = try hapticEngine.makePlayer(with: pattern)
-            try player.start(atTime: 0)
-        } catch {
-        }
-    }
-
-    private func playCompletionHaptic() async {
-        let engine = await MainActor.run { hapticEngine }
-        guard let hapticEngine = engine else { return }
-
-        let intensity = CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.5)
-        let sharpness = CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.8)
-
         let event = CHHapticEvent(
             eventType: .hapticTransient,
-            parameters: [intensity, sharpness],
+            parameters: [intensityParameter, sharpnessParameter],
             relativeTime: 0
         )
 

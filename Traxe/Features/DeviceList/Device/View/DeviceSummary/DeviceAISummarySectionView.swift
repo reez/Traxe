@@ -29,15 +29,36 @@ struct DeviceAISummarySectionView: View {
                         )
                         .lineLimit(lineCount)
                         .truncationMode(.tail)
+                        .frame(
+                            minWidth: 0,
+                            maxWidth: .infinity,
+                            minHeight: fixedHeight,
+                            maxHeight: fixedHeight,
+                            alignment: .topLeading
+                        )
                         .transition(.opacity)
                     } else {
                         FallbackAISummaryText(content: summary.content)
                             .lineLimit(lineCount)
                             .truncationMode(.tail)
+                            .frame(
+                                minWidth: 0,
+                                maxWidth: .infinity,
+                                minHeight: fixedHeight,
+                                maxHeight: fixedHeight,
+                                alignment: .topLeading
+                            )
                             .transition(.opacity)
                     }
                 } else {
                     TypingDots()
+                        .frame(
+                            minWidth: 0,
+                            maxWidth: .infinity,
+                            minHeight: fixedHeight,
+                            maxHeight: fixedHeight,
+                            alignment: .topLeading
+                        )
                         .transition(.opacity)
                 }
             }

@@ -45,25 +45,34 @@ struct DeviceListView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @State private var viewModel: DeviceListViewModel
+    @State private var navigation: DeviceListNavigationState
     private let dashboardViewModel: DashboardViewModel
     @Binding var navigateToDeviceList: Bool
 
     init(
         dashboardViewModel: DashboardViewModel,
         navigateToDeviceList: Binding<Bool>,
-        mockUserDefaults: UserDefaults? = nil
+        mockUserDefaults: UserDefaults? = nil,
+        viewModelDependencies: DeviceListViewModel.Dependencies = .live,
+        initialNavigationState: DeviceListNavigationState = DeviceListNavigationState()
     ) {
         self.dashboardViewModel = dashboardViewModel
         self._navigateToDeviceList = navigateToDeviceList
+        self._navigation = State(initialValue: initialNavigationState)
         if let mockDefaults = mockUserDefaults {
-            self._viewModel = State(initialValue: DeviceListViewModel(defaults: mockDefaults))
+            self._viewModel = State(
+                initialValue: DeviceListViewModel(
+                    defaults: mockDefaults,
+                    dependencies: viewModelDependencies
+                )
+            )
         } else {
-            self._viewModel = State(initialValue: DeviceListViewModel())
+            self._viewModel = State(
+                initialValue: DeviceListViewModel(dependencies: viewModelDependencies)
+            )
         }
     }
-    @State private var navigateToSummary = false
-    @State private var showingFleetWeeklyRecap = false
-    @State private var selectedDevice: SavedDevice? = nil
+
     @State private var showingWhatsNew = false
     @State private var showConnectionErrorAlert = false
     @State private var connectionErrorMessage = ""
@@ -85,9 +94,17 @@ struct DeviceListView: View {
         )
     }
 
+    private var addDeviceLimit: Int {
+        if customerInfo == nil {
+            // Preserve previous UX for add flow while subscription is loading.
+            return 1
+        }
+
+        return subscriptionAccessPolicy.deviceLimit
+    }
+
     private func handleDeviceTap(device: SavedDevice, isAccessible: Bool) {
         if isAccessible {
-            selectedDevice = device
             Task {
                 await connectAndNavigate(to: device)
             }
@@ -118,6 +135,160 @@ struct DeviceListView: View {
     }
 
     var body: some View {
+        // One two-column split view for every width. `NavigationSplitView` decides when
+        // to collapse; the app only supplies the selection and the column a collapsed
+        // layout should show, so selection and nested navigation survive resizing.
+        NavigationSplitView(preferredCompactColumn: $navigation.preferredCompactColumn) {
+            sidebar
+        } detail: {
+            NavigationStack {
+                detail(for: navigation.detailFeature)
+                    // Switching to a different feature starts that feature fresh instead
+                    // of handing it the previous one's state. The identity only tracks
+                    // the selection, so collapsing and expanding leaves it untouched.
+                    .id(navigation.detailFeature)
+            }
+        }
+        // Keep the dashboard beside the detail whenever the system has room for both.
+        .navigationSplitViewStyle(.balanced)
+        .onChange(of: navigation.preferredCompactColumn) { previousColumn, currentColumn in
+            // Back in a collapsed layout reveals the dashboard while keeping the selected
+            // feature, so the fleet totals refresh on the column transition rather than
+            // when a selection is cleared.
+            guard
+                DeviceListNavigationState.revealsDashboard(
+                    from: previousColumn,
+                    to: currentColumn
+                )
+            else { return }
+
+            Task {
+                await viewModel.updateAggregatedStats()
+            }
+        }
+        .onChange(of: scenePhase) { oldPhase, newPhase in
+            if newPhase == .active {
+                Task {
+                    await viewModel.updateAggregatedStats()
+                }
+            }
+        }
+        .onChange(of: viewModel.savedDevices.map(\.ipAddress)) { _, ipAddresses in
+            // Any deletion path, including the edit-mode list, must drop a retained
+            // selection for the removed miner so no column shows stale detail.
+            navigation.reconcileSelection(withSavedMinerIPAddresses: Set(ipAddresses))
+
+            if ipAddresses.isEmpty {
+                self.navigateToDeviceList = false
+                dismiss()
+            }
+        }
+        .onAppear {
+            let didConfigureModelContext = viewModel.configureModelContextIfNeeded(modelContext)
+            if didConfigureModelContext {
+                Task {
+                    await viewModel.updateAggregatedStats()
+                }
+            }
+        }
+        // App-wide presentations stay on the split view rather than on a column, so
+        // collapsing or expanding never changes their presentation identity.
+        .sheet(
+            isPresented: $showingAddSheet,
+            onDismiss: {
+                viewModel.loadDevices()
+            }
+        ) {
+            AddDeviceView(
+                existingDeviceIPs: Set(viewModel.savedDevices.map(\.ipAddress)),
+                deviceLimit: addDeviceLimit
+            )
+        }
+        .sheet(isPresented: $showingWhatsNew) {
+            WhatsNewSheetView(
+                content: WhatsNewConfig.content,
+                accentColor: .traxeGold,
+                requestReview: {
+                    viewModel.requestReview()
+                },
+                sendSupportEmail: {
+                    viewModel.sendSupportEmail()
+                },
+                openSourceRepo: {
+                    viewModel.openSourceRepo()
+                }
+            )
+        }
+        .sheet(isPresented: $showingPaywallSheet) {
+            PaywallView()
+        }
+        .alert("Connection Failed", isPresented: $showConnectionErrorAlert) {
+            Button("OK") {}
+        } message: {
+            var message = connectionErrorMessage
+            if !connectionErrorDeviceInfo.isEmpty {
+                message += "\n\n\(connectionErrorDeviceInfo)"
+            }
+            return Text(message)
+        }
+        .alert("Monthly Subscription Expired", isPresented: $showingSubscriptionExpiredAlert) {
+            Button("OK") {}
+        } message: {
+            Text("Your monthly subscription has expired. Please renew to access this miner.")
+        }
+        .task {
+            for await info in Purchases.shared.customerInfoStream {
+                self.customerInfo = info
+            }
+        }
+        .task {
+            for await status in whatsNewTip.statusUpdates {
+                await MainActor.run {
+                    viewModel.handleWhatsNewTipStatus(status)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func detail(for feature: DeviceListFeature) -> some View {
+        switch feature {
+        case .miner(let ipAddress):
+            DeviceSummaryView(
+                dashboardViewModel: dashboardViewModel,
+                deviceName: minerName(for: ipAddress),
+                deviceIP: ipAddress,
+                poolName: viewModel.deviceMetrics[ipAddress]?.poolURL,
+                onMinerDeleted: { deletedIPAddress in
+                    viewModel.deleteDevices(withIPAddresses: Set([deletedIPAddress]))
+                }
+            )
+        case .fleetRecap:
+            WeeklyRecapView(
+                scope: .fleet(
+                    devices: viewModel.savedDevices.map { device in
+                        WeeklyRecapFleetDevice(
+                            id: device.ipAddress,
+                            name: minerName(for: device.ipAddress),
+                            poolName: viewModel.deviceMetrics[device.ipAddress]?.poolURL,
+                            currentHashrate: viewModel.deviceMetrics[device.ipAddress]?.hashrate
+                                ?? 0
+                        )
+                    }
+                )
+            )
+        }
+    }
+
+    /// Resolves the display name from current data, so navigating by IP address never
+    /// shows a name captured when the miner was selected.
+    private func minerName(for ipAddress: String) -> String {
+        viewModel.deviceMetrics[ipAddress]?.hostname
+            ?? viewModel.savedDevices.first { $0.ipAddress == ipAddress }?.name
+            ?? ipAddress
+    }
+
+    private var sidebar: some View {
         ZStack {
             LinearGradient(
                 colors: [
@@ -135,7 +306,7 @@ struct DeviceListView: View {
                         viewModel: viewModel,
                         subscriptionAccessPolicy: subscriptionAccessPolicy,
                         showFleetWeeklyRecap: {
-                            showingFleetWeeklyRecap = true
+                            navigation.select(.fleetRecap)
                         },
                         handleSelection: handleDeviceTap(device:isAccessible:)
                     )
@@ -172,15 +343,7 @@ struct DeviceListView: View {
 
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
-                    let deviceLimit: Int
-                    if customerInfo == nil {
-                        // Preserve previous UX for add flow while subscription is loading.
-                        deviceLimit = 1
-                    } else {
-                        deviceLimit = subscriptionAccessPolicy.deviceLimit
-                    }
-
-                    if viewModel.savedDevices.count < deviceLimit {
+                    if viewModel.savedDevices.count < addDeviceLimit {
                         showingAddSheet = true
                     } else {
                         // User is at or over their limit (or has 0 devices but somehow no free slot logic triggered, though current logic covers this), show paywall
@@ -189,120 +352,6 @@ struct DeviceListView: View {
                 } label: {
                     Image(systemName: "plus")
                         .foregroundStyle(Color.traxeGold)
-                }
-            }
-        }
-        .onAppear {
-            let didConfigureModelContext = viewModel.configureModelContextIfNeeded(modelContext)
-            if didConfigureModelContext {
-                Task {
-                    await viewModel.updateAggregatedStats()
-                }
-            }
-        }
-        .onChange(of: scenePhase) { oldPhase, newPhase in
-            if newPhase == .active {
-                Task {
-                    await viewModel.updateAggregatedStats()
-                }
-            }
-        }
-        .onChange(of: navigateToSummary) { wasNavigating, isNavigating in
-            if wasNavigating && !isNavigating {
-                Task {
-                    await viewModel.updateAggregatedStats()
-                }
-            }
-        }
-        .onChange(of: viewModel.savedDevices.isEmpty) { _, isEmptyNow in
-            if isEmptyNow {
-                self.navigateToDeviceList = false
-                dismiss()
-            }
-        }
-        .task {
-            for await info in Purchases.shared.customerInfoStream {
-                self.customerInfo = info
-            }
-        }
-        .sheet(
-            isPresented: $showingAddSheet,
-            onDismiss: {
-                viewModel.loadDevices()
-            }
-        ) {
-            AddDeviceView()
-        }
-        .sheet(isPresented: $showingWhatsNew) {
-            WhatsNewSheetView(
-                content: WhatsNewConfig.content,
-                accentColor: .traxeGold,
-                requestReview: {
-                    viewModel.requestReview()
-                },
-                sendSupportEmail: {
-                    viewModel.sendSupportEmail()
-                },
-                openSourceRepo: {
-                    viewModel.openSourceRepo()
-                }
-            )
-        }
-        .sheet(isPresented: $showingPaywallSheet) {
-            PaywallView()
-        }
-        .navigationDestination(isPresented: $navigateToSummary) {
-            if let device = selectedDevice {
-                DeviceSummaryView(
-                    dashboardViewModel: dashboardViewModel,
-                    deviceName: viewModel.deviceMetrics[device.ipAddress]?.hostname ?? device.name,
-                    deviceIP: device.ipAddress,
-                    poolName: viewModel.deviceMetrics[device.ipAddress]?.poolURL,
-                    onMinerDeleted: { deletedIPAddress in
-                        viewModel.deleteDevices(withIPAddresses: Set([deletedIPAddress]))
-                        if selectedDevice?.ipAddress == deletedIPAddress {
-                            selectedDevice = nil
-                        }
-                    }
-                )
-            } else {
-                Text("Error: No miner selected")
-            }
-        }
-        .navigationDestination(isPresented: $showingFleetWeeklyRecap) {
-            WeeklyRecapView(
-                scope: .fleet(
-                    devices: viewModel.savedDevices.map { device in
-                        WeeklyRecapFleetDevice(
-                            id: device.ipAddress,
-                            name: viewModel.deviceMetrics[device.ipAddress]?.hostname
-                                ?? device.name,
-                            poolName: viewModel.deviceMetrics[device.ipAddress]?.poolURL,
-                            currentHashrate: viewModel.deviceMetrics[device.ipAddress]?.hashrate
-                                ?? 0
-                        )
-                    }
-                )
-            )
-        }
-        .alert("Connection Failed", isPresented: $showConnectionErrorAlert) {
-            Button("OK") {}
-        } message: {
-            var message = connectionErrorMessage
-            if !connectionErrorDeviceInfo.isEmpty {
-                message += "\n\n\(connectionErrorDeviceInfo)"
-            }
-            return Text(message)
-        }
-        .alert("Monthly Subscription Expired", isPresented: $showingSubscriptionExpiredAlert) {
-            Button("OK") {}
-        } message: {
-            Text("Your monthly subscription has expired. Please renew to access this miner.")
-        }
-        .task {
-            for await status in whatsNewTip.statusUpdates {
-                await MainActor.run {
-                    viewModel.handleWhatsNewTipStatus(status)
                 }
             }
         }
@@ -327,7 +376,7 @@ struct DeviceListView: View {
         if dashboardViewModel.connectionState == .connected {
             // Preload a larger historical window so device summary has trend context immediately
             dashboardViewModel.preloadHistoricalData()
-            navigateToSummary = true
+            navigation.select(.miner(ipAddress: device.ipAddress))
         } else {
             // Always use the dashboard error message if available, even if empty
             connectionErrorMessage =
@@ -337,7 +386,7 @@ struct DeviceListView: View {
 
             connectionErrorDeviceInfo = dashboardViewModel.errorDeviceInfo
             showConnectionErrorAlert = true
-            navigateToSummary = false
+            navigation.clearSelection()
         }
     }
 }
@@ -430,13 +479,12 @@ struct DeviceListView: View {
         groupDefaults.set(encodedSummary, forKey: "cachedFleetAISummaryV1")
     }
 
-    return NavigationStack {
-        // Important: do not pass mockUserDefaults; use app group store
-        DeviceListView(
-            dashboardViewModel: previewDashboardVM,
-            navigateToDeviceList: .constant(true)
-        )
-    }
+    // DeviceListView owns its own NavigationSplitView, exactly as the app scene uses it.
+    // Important: do not pass mockUserDefaults; use app group store
+    return DeviceListView(
+        dashboardViewModel: previewDashboardVM,
+        navigateToDeviceList: .constant(true)
+    )
     .modelContainer(container)
 }
 
@@ -458,13 +506,39 @@ struct DeviceListView: View {
     let groupDefaults = previewGroupDefaults()
     groupDefaults.set("preview-previous-announcement", forKey: "lastSeenWhatsNewVersion")
 
-    return NavigationStack {
-        DeviceListView(
-            dashboardViewModel: previewDashboardVM,
-            navigateToDeviceList: .constant(true),
-            mockUserDefaults: groupDefaults
-        )
+    return DeviceListView(
+        dashboardViewModel: previewDashboardVM,
+        navigateToDeviceList: .constant(true),
+        mockUserDefaults: groupDefaults
+    )
+    .modelContainer(container)
+}
+
+#Preview("Fleet Recap Selected") {
+    let config = ModelConfiguration(isStoredInMemoryOnly: true)
+    let container = makeDeviceListPreviewContainer(config: config)
+    let previewDashboardVM = DashboardViewModel(modelContext: container.mainContext)
+
+    let groupDefaults = previewGroupDefaults()
+    let devices = [
+        SavedDevice(name: "nerdqaxe++", ipAddress: "192.168.1.101"),
+        SavedDevice(name: "bitaxe", ipAddress: "192.168.1.102"),
+    ]
+    if let encodedDevices = try? JSONEncoder().encode(devices) {
+        groupDefaults.set(encodedDevices, forKey: "savedDevices")
     }
+
+    // Seeding the navigation state shows the detail column the same way a selection
+    // does at runtime: beside the dashboard when wide, pushed when collapsed.
+    return DeviceListView(
+        dashboardViewModel: previewDashboardVM,
+        navigateToDeviceList: .constant(true),
+        mockUserDefaults: groupDefaults,
+        initialNavigationState: DeviceListNavigationState(
+            selectedFeature: .fleetRecap,
+            preferredCompactColumn: .detail
+        )
+    )
     .modelContainer(container)
 }
 

@@ -24,6 +24,111 @@ struct HashrateMonitorASICDTO: Codable {
     let domains: [Double]?
 }
 
+// ESP-Miner v2.15.0 stopped registering the flat `stratum*` write properties and takes a
+// `pools` array instead. Any pool property missing from a PATCH body is written back with a
+// firmware default, so untouched properties must be echoed exactly as the miner reported
+// them, including their JSON value type.
+// https://github.com/bitaxeorg/ESP-Miner/blob/v2.15.0/main/http_server/http_server.c#L730-L828
+enum FirmwareJSONValue: Codable, Equatable {
+    case string(String)
+    case bool(Bool)
+    case int(Int)
+    case double(Double)
+    case array([FirmwareJSONValue])
+    case object([String: FirmwareJSONValue])
+    case null
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            self = .null
+        } else if let value = try? container.decode(Bool.self) {
+            self = .bool(value)
+        } else if let value = try? container.decode(Int.self) {
+            self = .int(value)
+        } else if let value = try? container.decode(Double.self) {
+            self = .double(value)
+        } else if let value = try? container.decode(String.self) {
+            self = .string(value)
+        } else if let value = try? container.decode([FirmwareJSONValue].self) {
+            self = .array(value)
+        } else {
+            self = .object(try container.decode([String: FirmwareJSONValue].self))
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .string(let value): try container.encode(value)
+        case .bool(let value): try container.encode(value)
+        case .int(let value): try container.encode(value)
+        case .double(let value): try container.encode(value)
+        case .array(let value): try container.encode(value)
+        case .object(let value): try container.encode(value)
+        case .null: try container.encodeNil()
+        }
+    }
+
+    // Firmware may report the same whole number as an integer or as a double.
+    func isEquivalent(to other: FirmwareJSONValue) -> Bool {
+        switch (self, other) {
+        case (.int(let lhs), .double(let rhs)): return Double(lhs) == rhs
+        case (.double(let lhs), .int(let rhs)): return lhs == Double(rhs)
+        default: return self == other
+        }
+    }
+}
+
+// One entry of the ESP-Miner v2.15 `pools` array. The complete firmware object is kept so it
+// can be round-tripped without dropping properties Traxe does not edit.
+struct MinerPoolDTO: Codable, Equatable {
+    static let idKey = "id"
+    static let stratumURLKey = "stratumURL"
+    static let stratumPortKey = "stratumPort"
+    static let stratumUserKey = "stratumUser"
+    static let stratumPasswordKey = "stratumPassword"
+    static let stratumProtocolKey = "stratumProtocol"
+    static let stratumV2ChannelTypeKey = "stratumV2ChannelType"
+    static let stratumV2AuthorityPubkeyKey = "stratumV2AuthorityPubkey"
+
+    var properties: [String: FirmwareJSONValue]
+
+    // Pool slot IDs are assigned by the miner and are not guaranteed to be 0 and 1.
+    var id: Int? { int(forKey: Self.idKey) }
+    var stratumURL: String? { string(forKey: Self.stratumURLKey) }
+    var stratumPort: Int? { int(forKey: Self.stratumPortKey) }
+    var stratumUser: String? { string(forKey: Self.stratumUserKey) }
+    // ESP-Miner masks a stored password as "*****" in GET responses and keeps the stored
+    // password when that mask is submitted back.
+    var stratumPassword: String? { string(forKey: Self.stratumPasswordKey) }
+
+    init(properties: [String: FirmwareJSONValue]) {
+        self.properties = properties
+    }
+
+    init(from decoder: Decoder) throws {
+        properties = try [String: FirmwareJSONValue](from: decoder)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        try properties.encode(to: encoder)
+    }
+
+    private func string(forKey key: String) -> String? {
+        guard case .string(let value) = properties[key] else { return nil }
+        return value
+    }
+
+    private func int(forKey key: String) -> Int? {
+        switch properties[key] {
+        case .int(let value): return value
+        case .double(let value): return Int(value)
+        default: return nil
+        }
+    }
+}
+
 struct SystemInfoDTO: Codable {
     let power: Double?
     let voltage: Double?
@@ -74,6 +179,12 @@ struct SystemInfoDTO: Codable {
     let fallbackStratumV2ChannelType: String?
     let stratumV2AuthorityPubkey: String?
     let fallbackStratumV2AuthorityPubkey: String?
+
+    // ESP-Miner v2.15 pool API (additive; the flat properties above are still reported).
+    let pools: [MinerPoolDTO]?
+    let primaryPoolIndex: Int?
+    let secondaryPoolIndex: Int?
+    let useFallbackStratum: Bool?
 
     let _version: String?
     let idfVersion: String?
@@ -131,6 +242,7 @@ struct SystemInfoDTO: Codable {
         case stratumProtocol, fallbackStratumProtocol
         case stratumV2ChannelType, fallbackStratumV2ChannelType
         case stratumV2AuthorityPubkey, fallbackStratumV2AuthorityPubkey
+        case pools, primaryPoolIndex, secondaryPoolIndex, useFallbackStratum
         case _version = "version"
         case idfVersion, boardVersion
         case runningPartition
@@ -248,6 +360,10 @@ struct SystemInfoDTO: Codable {
                 String.self,
                 forKey: DynamicCodingKey(stringValue: "fallbackSv2AuthorityPubkey")
             )
+        pools = try container.decodeIfPresent([MinerPoolDTO].self, forKey: .pools)
+        primaryPoolIndex = try container.decodeIfPresent(Int.self, forKey: .primaryPoolIndex)
+        secondaryPoolIndex = try container.decodeIfPresent(Int.self, forKey: .secondaryPoolIndex)
+        useFallbackStratum = Self.decodeBoolFlexible(container: container, key: .useFallbackStratum)
         _version = try container.decodeIfPresent(String.self, forKey: ._version)
         idfVersion = try container.decodeIfPresent(String.self, forKey: .idfVersion)
         boardVersion = try container.decodeIfPresent(String.self, forKey: .boardVersion)
@@ -680,6 +796,19 @@ extension SystemInfoDTO {
     var stratumURL: String { _stratumURL ?? "" }
     var stratumUser: String { _stratumUser ?? "" }
     var stratumPort: Int { _stratumPort ?? 0 }
+    // ESP-Miner v2.15 serializes a `pools` array and ignores the flat pool write properties.
+    // Presence of the array is the capability signal; the reported version string is not.
+    var supportsMultiPoolSettings: Bool { pools != nil }
+    var supportsPoolModeSettings: Bool {
+        stratum?.poolMode != nil || stratum?.activePoolMode != nil
+    }
+    var primaryPoolID: Int { primaryPoolIndex ?? 0 }
+    var secondaryPoolID: Int { secondaryPoolIndex ?? 1 }
+
+    func pool(withID id: Int) -> MinerPoolDTO? {
+        pools?.first { $0.id == id }
+    }
+
     var supportsStratumProtocolSettings: Bool {
         stratumProtocol != nil ||
             fallbackStratumProtocol != nil ||

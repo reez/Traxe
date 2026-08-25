@@ -9,14 +9,14 @@ struct DeviceEditModeOverlayView: View {
         VStack {
             List {
                 if sortOption == .savedOrder {
-                    ForEach(gridItems.indices, id: \.self) { index in
-                        row(at: index)
+                    ForEach(Array(gridItems.enumerated()), id: \.element.id) { index, item in
+                        row(for: item, position: index + 1)
                     }
                     .onMove(perform: viewModel.reorderDevices)
                     .onDelete(perform: deleteItems)
                 } else {
-                    ForEach(gridItems.indices, id: \.self) { index in
-                        row(at: index)
+                    ForEach(Array(gridItems.enumerated()), id: \.element.id) { index, item in
+                        row(for: item, position: index + 1)
                     }
                     .onDelete(perform: deleteItems)
                 }
@@ -37,8 +37,7 @@ struct DeviceEditModeOverlayView: View {
         )
     }
 
-    private func row(at index: Int) -> DeviceEditModeRowView {
-        let item = gridItems[index]
+    private func row(for item: DeviceGridItem, position: Int) -> DeviceEditModeRowView {
         let device = item.device
         let viewData = DeviceListItemPresenter.makeViewData(
             device: device,
@@ -52,7 +51,7 @@ struct DeviceEditModeOverlayView: View {
         )
 
         return DeviceEditModeRowView(
-            position: index + 1,
+            position: position,
             viewData: viewData
         )
     }

@@ -45,6 +45,35 @@ final class DeviceManagementServiceTests: XCTestCase {
         XCTAssertTrue(onboardingDefaults.bool(forKey: "hasCompletedOnboarding"))
     }
 
+    func testSaveDevicesWritesUniqueDevicesAndUpdatesSelectedIPToFirstNewDevice() throws {
+        let existing = SavedDevice(name: "Miner A", ipAddress: "192.168.1.10")
+        let second = SavedDevice(name: "Miner B", ipAddress: "192.168.1.11")
+        let third = SavedDevice(name: "Miner C", ipAddress: "192.168.1.12")
+        try seedSavedDevices([existing], selectedIP: existing.ipAddress)
+
+        try DeviceManagementService.saveDevices([existing, second, third, second])
+
+        XCTAssertEqual(storedDevices(), [existing, second, third])
+        XCTAssertEqual(
+            sharedDefaults.array(forKey: "savedDeviceIPs") as? [String],
+            [existing.ipAddress, second.ipAddress, third.ipAddress]
+        )
+        XCTAssertEqual(sharedDefaults.string(forKey: "bitaxeIPAddress"), second.ipAddress)
+        XCTAssertTrue(onboardingDefaults.bool(forKey: "hasCompletedOnboarding"))
+    }
+
+    func testSaveDevicesPreservesSelectionWhenAllDevicesAlreadyExist() throws {
+        let first = SavedDevice(name: "Miner A", ipAddress: "192.168.1.10")
+        let second = SavedDevice(name: "Miner B", ipAddress: "192.168.1.11")
+        try seedSavedDevices([first, second], selectedIP: first.ipAddress)
+
+        try DeviceManagementService.saveDevices([second, first])
+
+        XCTAssertEqual(storedDevices(), [first, second])
+        XCTAssertEqual(sharedDefaults.string(forKey: "bitaxeIPAddress"), first.ipAddress)
+        XCTAssertFalse(onboardingDefaults.bool(forKey: "hasCompletedOnboarding"))
+    }
+
     func testDeleteDevicePreservesSelectedIPWhenDeletingDifferentDevice() throws {
         let first = SavedDevice(name: "Miner A", ipAddress: "192.168.1.10")
         let second = SavedDevice(name: "Miner B", ipAddress: "192.168.1.11")
@@ -75,6 +104,19 @@ final class DeviceManagementServiceTests: XCTestCase {
             [first.ipAddress]
         )
         XCTAssertNil(sharedDefaults.string(forKey: "bitaxeIPAddress"))
+    }
+
+    func testDeleteDeviceRemovesOnlyThatMinersAlertPreference() throws {
+        let first = SavedDevice(name: "Miner A", ipAddress: "192.168.1.10")
+        let second = SavedDevice(name: "Miner B", ipAddress: "192.168.1.11")
+        try seedSavedDevices([first, second], selectedIP: first.ipAddress)
+        let preferences = MinerAlertPreferences(defaults: sharedDefaults)
+        preferences.setEnabled(true, for: first.ipAddress)
+        preferences.setEnabled(true, for: second.ipAddress)
+
+        try DeviceManagementService.deleteDevice(ipAddressToDelete: second.ipAddress)
+
+        XCTAssertEqual(preferences.enabledIPAddresses, [first.ipAddress])
     }
 
     private func seedSavedDevices(_ devices: [SavedDevice], selectedIP: String?) throws {

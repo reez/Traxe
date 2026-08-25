@@ -30,6 +30,7 @@ final class SettingsViewModel {
     var fallbackStratumV2ChannelType: String = ""
     var stratumV2AuthorityPubkey: String = ""
     var fallbackStratumV2AuthorityPubkey: String = ""
+    var supportsPoolModeSettings: Bool = false
     var poolBalance: Int = 50
     var isDualPool: Bool = false
     var poolMode: Int = 0
@@ -128,6 +129,7 @@ final class SettingsViewModel {
             selectedMinerIPAddress = ""
             currentVersion = "Unknown"
             isConnected = false
+            supportsPoolModeSettings = false
             deleteMinerErrorMessage = nil
             resetStratumProtocolDetails()
             return ipAddressToDelete
@@ -148,32 +150,7 @@ final class SettingsViewModel {
     func fetchDeviceSettings() async {
         do {
             let systemInfo = try await networkService.fetchSystemInfo()
-            currentVersion = systemInfo.version
-            fanSpeed = systemInfo.fanspeed ?? 0
-            isAutoFan = systemInfo.autofanspeed != 0
-            minimumFanSpeed = systemInfo.minimumFanSpeed
-            stratumUser = systemInfo.stratumUser
-            stratumURL = systemInfo.stratumURL
-            stratumPortString = String(systemInfo.stratumPort)
-            fallbackStratumUser = systemInfo.fallbackStratumUser ?? ""
-            fallbackStratumURL = systemInfo.fallbackStratumURL ?? ""
-            fallbackStratumPortString = systemInfo.fallbackStratumPort.map { String($0) } ?? ""
-            supportsStratumProtocolSettings = systemInfo.supportsStratumProtocolSettings
-            stratumProtocol = systemInfo.stratumProtocol ?? ""
-            fallbackStratumProtocol = systemInfo.fallbackStratumProtocol ?? ""
-            stratumV2ChannelType = systemInfo.stratumV2ChannelType ?? ""
-            fallbackStratumV2ChannelType = systemInfo.fallbackStratumV2ChannelType ?? ""
-            stratumV2AuthorityPubkey = systemInfo.stratumV2AuthorityPubkey ?? ""
-            fallbackStratumV2AuthorityPubkey = systemInfo.fallbackStratumV2AuthorityPubkey ?? ""
-            poolBalance = max(0, min(100, systemInfo.stratum?.poolBalance ?? 50))
-            let detectedPoolMode =
-                systemInfo.stratum?.poolMode ?? systemInfo.stratum?.activePoolMode ?? 0
-            poolMode = detectedPoolMode == 1 ? 1 : 0
-            isDualPool = poolMode == 1
-            hostname = systemInfo.hostname
-            isConnected = true
-            isSettingsConfigurationEditable = true
-            settingsConfigurationMessage = nil
+            applySettings(from: systemInfo)
         } catch {
             if let telemetry = try? await networkService.fetchMinerTelemetry() {
                 currentVersion = telemetry.version
@@ -182,15 +159,47 @@ final class SettingsViewModel {
                 isConnected = true
                 isSettingsConfigurationEditable = false
                 settingsConfigurationMessage = Self.settingsConfigurationUnavailableMessage
+                supportsPoolModeSettings = false
                 resetStratumProtocolDetails()
             } else {
                 currentVersion = "Unknown"
                 isConnected = false
                 isSettingsConfigurationEditable = false
                 settingsConfigurationMessage = nil
+                supportsPoolModeSettings = false
                 resetStratumProtocolDetails()
             }
         }
+    }
+
+    private func applySettings(from systemInfo: SystemInfoDTO) {
+        currentVersion = systemInfo.version
+        fanSpeed = systemInfo.fanspeed ?? 0
+        isAutoFan = systemInfo.autofanspeed != 0
+        minimumFanSpeed = systemInfo.minimumFanSpeed
+        stratumUser = systemInfo.stratumUser
+        stratumURL = systemInfo.stratumURL
+        stratumPortString = String(systemInfo.stratumPort)
+        fallbackStratumUser = systemInfo.fallbackStratumUser ?? ""
+        fallbackStratumURL = systemInfo.fallbackStratumURL ?? ""
+        fallbackStratumPortString = systemInfo.fallbackStratumPort.map { String($0) } ?? ""
+        supportsStratumProtocolSettings = systemInfo.supportsStratumProtocolSettings
+        stratumProtocol = systemInfo.stratumProtocol ?? ""
+        fallbackStratumProtocol = systemInfo.fallbackStratumProtocol ?? ""
+        stratumV2ChannelType = systemInfo.stratumV2ChannelType ?? ""
+        fallbackStratumV2ChannelType = systemInfo.fallbackStratumV2ChannelType ?? ""
+        stratumV2AuthorityPubkey = systemInfo.stratumV2AuthorityPubkey ?? ""
+        fallbackStratumV2AuthorityPubkey = systemInfo.fallbackStratumV2AuthorityPubkey ?? ""
+        supportsPoolModeSettings = systemInfo.supportsPoolModeSettings
+        poolBalance = max(0, min(100, systemInfo.stratum?.poolBalance ?? 50))
+        let detectedPoolMode =
+            systemInfo.stratum?.poolMode ?? systemInfo.stratum?.activePoolMode ?? 0
+        poolMode = detectedPoolMode == 1 ? 1 : 0
+        isDualPool = poolMode == 1
+        hostname = systemInfo.hostname
+        isConnected = true
+        isSettingsConfigurationEditable = true
+        settingsConfigurationMessage = nil
     }
 
     func toggleAutoFan() async {
@@ -225,7 +234,8 @@ final class SettingsViewModel {
         isUpdatingPoolConfiguration = true
         poolConfigurationError = nil
         var success = false
-        let targetPoolBalance = poolMode == 1 ? max(1, min(99, poolBalance)) : nil
+        let targetPoolBalance =
+            supportsPoolModeSettings && poolMode == 1 ? max(1, min(99, poolBalance)) : nil
 
         var portToSave: Int? = nil
         if let port = Int(stratumPortString), !stratumPortString.isEmpty {
@@ -294,6 +304,56 @@ final class SettingsViewModel {
         }
 
         do {
+            let currentSystemInfo = try await networkService.fetchSystemInfo()
+
+            if currentSystemInfo.supportsMultiPoolSettings {
+                let poolEdits = [
+                    PoolSettingsEdit(
+                        id: currentSystemInfo.primaryPoolID,
+                        stratumURL: stratumURL.isEmpty ? nil : stratumURL,
+                        stratumPort: portToSave,
+                        stratumUser: stratumUser.isEmpty ? nil : stratumUser,
+                        stratumProtocol: stratumProtocolToSave,
+                        stratumV2ChannelType: stratumV2ChannelTypeToSave,
+                        stratumV2AuthorityPubkey: stratumV2AuthorityPubkeyToSave
+                    ),
+                    PoolSettingsEdit(
+                        id: currentSystemInfo.secondaryPoolID,
+                        stratumURL: fallbackStratumURL.isEmpty ? nil : fallbackStratumURL,
+                        stratumPort: fallbackPortToSave,
+                        stratumUser: fallbackStratumUser.isEmpty ? nil : fallbackStratumUser,
+                        stratumProtocol: fallbackStratumProtocolToSave,
+                        stratumV2ChannelType: fallbackStratumV2ChannelTypeToSave,
+                        stratumV2AuthorityPubkey: fallbackStratumV2AuthorityPubkeyToSave
+                    ),
+                ]
+                // Pool indices and `useFallbackStratum` are left out of the body so the miner
+                // keeps its current values; this screen does not edit them.
+                let poolsToSave = MultiPoolSettingsPlan.pools(
+                    for: poolEdits,
+                    from: currentSystemInfo
+                )
+                if !poolsToSave.isEmpty {
+                    try await networkService.updatePoolSettings(pools: poolsToSave)
+                }
+
+                // v2.15 answers with HTTP success even when it ignored the submitted values,
+                // so the saved values have to be read back before reporting success.
+                let savedSystemInfo = try await networkService.fetchSystemInfo()
+                let unsavedPoolIDs = MultiPoolSettingsPlan.unsavedPoolIDs(
+                    for: poolEdits,
+                    in: savedSystemInfo
+                )
+                applySettings(from: savedSystemInfo)
+                isUpdatingPoolConfiguration = false
+
+                guard unsavedPoolIDs.isEmpty else {
+                    poolConfigurationError = Self.poolSettingsNotAppliedMessage
+                    return false
+                }
+                return true
+            }
+
             try await networkService.updateSystemSettings(
                 stratumUser: stratumUser.isEmpty ? nil : stratumUser,
                 stratumURL: stratumURL.isEmpty ? nil : stratumURL,
@@ -308,36 +368,38 @@ final class SettingsViewModel {
                 stratumV2AuthorityPubkey: stratumV2AuthorityPubkeyToSave,
                 fallbackStratumV2AuthorityPubkey: fallbackStratumV2AuthorityPubkeyToSave,
                 poolBalance: targetPoolBalance,
-                poolMode: poolMode
+                poolMode: supportsPoolModeSettings ? poolMode : nil
             )
 
-            let systemInfo = try await networkService.fetchSystemInfo()
-            let activePoolMode = systemInfo.stratum?.activePoolMode ?? 0
-            if activePoolMode != poolMode {
-                try await networkService.restartDevice()
-                let deadline = Date().addingTimeInterval(30)
-                var didActivatePoolMode = false
-                while Date() < deadline {
-                    if let updatedInfo = try? await networkService.fetchSystemInfo(),
-                        (updatedInfo.stratum?.activePoolMode ?? 0) == poolMode
-                    {
-                        didActivatePoolMode = true
-                        break
+            if supportsPoolModeSettings {
+                let systemInfo = try await networkService.fetchSystemInfo()
+                let activePoolMode = systemInfo.stratum?.activePoolMode ?? 0
+                if activePoolMode != poolMode {
+                    try await networkService.restartDevice()
+                    let deadline = Date().addingTimeInterval(30)
+                    var didActivatePoolMode = false
+                    while Date() < deadline {
+                        if let updatedInfo = try? await networkService.fetchSystemInfo(),
+                            (updatedInfo.stratum?.activePoolMode ?? 0) == poolMode
+                        {
+                            didActivatePoolMode = true
+                            break
+                        }
+                        try? await Task.sleep(for: .seconds(2))
                     }
-                    try? await Task.sleep(for: .seconds(2))
-                }
 
-                if didActivatePoolMode {
-                    if poolMode == 1, let targetPoolBalance {
-                        try await networkService.updateSystemSettings(
-                            poolBalance: targetPoolBalance
-                        )
+                    if didActivatePoolMode {
+                        if poolMode == 1, let targetPoolBalance {
+                            try await networkService.updateSystemSettings(
+                                poolBalance: targetPoolBalance
+                            )
+                        }
+                    } else {
+                        poolConfigurationError =
+                            "Pool mode requires a restart before applying changes. Please try again."
+                        isUpdatingPoolConfiguration = false
+                        return false
                     }
-                } else {
-                    poolConfigurationError =
-                        "Pool mode requires a restart before applying changes. Please try again."
-                    isUpdatingPoolConfiguration = false
-                    return false
                 }
             }
 
@@ -398,6 +460,9 @@ final class SettingsViewModel {
         stratumV2AuthorityPubkey = ""
         fallbackStratumV2AuthorityPubkey = ""
     }
+
+    private static let poolSettingsNotAppliedMessage =
+        "The miner accepted the request but did not apply the pool settings. Please try again, or change the pool from the miner web UI."
 
     private static let settingsConfigurationUnavailableMessage =
         "Miner settings are unavailable because this firmware returned an unsupported settings format. Metrics are still available, but use the miner web UI to change settings."

@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var showingDeleteConfirmation = false
     @State private var showingDeleteFailure = false
     @State private var isAIEnabled = UserDefaults.standard.bool(forKey: "ai_enabled")
+    @State private var alertsViewModel: MinerAlertsSettingsViewModel
     @State private var showingPaywallSheet = false
     @State private var customerInfo: CustomerInfo? = nil
     private let onMinerDeleted: (String) -> Void
@@ -53,6 +54,11 @@ struct SettingsView: View {
     ) {
         self.viewModel = viewModel
         self.onMinerDeleted = onMinerDeleted
+        // Alerts belong to the miner this screen was opened for, so the selection is
+        // captured here instead of following later edits to the connection field.
+        _alertsViewModel = State(
+            initialValue: MinerAlertsSettingsViewModel(ipAddress: viewModel.bitaxeIPAddress)
+        )
     }
 
     var body: some View {
@@ -119,6 +125,10 @@ struct SettingsView: View {
                                 "Uses [Apple Intelligence](https://www.apple.com/apple-intelligence/)."
                             )
                         }
+                    }
+
+                    if !alertsViewModel.ipAddress.isEmpty {
+                        MinerAlertsSection(viewModel: alertsViewModel)
                     }
 
                     switch upgradeState {

@@ -195,7 +195,12 @@ struct SparklineView: View {
                     }
             )
         }
-        .frame(width: 150, height: 50)
+        // Cap rather than pin the width so the chart shrinks with its container on
+        // narrow/resized layouts instead of overflowing at a fixed 150pt. Height stays
+        // fixed — a flexible max height lets parents propose a smaller one and collapse
+        // the chart.
+        .frame(maxWidth: 150)
+        .frame(height: 50)
         .onChange(of: data) { _, _ in
             withAnimation(.easeInOut(duration: 0.3)) {
                 isPulsing = true

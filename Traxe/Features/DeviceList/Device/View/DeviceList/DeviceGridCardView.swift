@@ -55,6 +55,8 @@ struct DeviceGridCardView: View {
                             .font(.title)
                             .fontWeight(.bold)
                             .fontDesign(.rounded)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
                             .contentTransition(.numericText())
                             .animation(.spring, value: viewData.hashrateValue)
                             .redacted(reason: viewData.showsPlaceholderHashrate ? .placeholder : [])
