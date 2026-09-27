@@ -31,6 +31,22 @@ final class PoolHostPresenterTests: XCTestCase {
         )
     }
 
+    func testMetadataRecognizesBtcPowLabStratumHost() {
+        let metadata = PoolHostPresenter.metadata(
+            from: "stratum+tcp://stratum.btcpowlab-pool.com:3333"
+        )
+
+        XCTAssertEqual(
+            metadata,
+            PoolHostMetadata(
+                normalizedHost: "stratum.btcpowlab-pool.com",
+                displayName: "BTC PoW Lab",
+                logoName: "btcpowlab",
+                poolSlug: nil
+            )
+        )
+    }
+
     func testMetadataLeavesUnknownPoolLogoAndSlugNil() {
         let metadata = PoolHostPresenter.metadata(from: "www.unknownpool.example:4444/path")
 

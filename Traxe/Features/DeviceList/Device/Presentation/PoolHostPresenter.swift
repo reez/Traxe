@@ -41,6 +41,9 @@ enum PoolHostPresenter {
     }
 
     static func displayName(for host: String) -> String {
+        if host.contains("btcpowlab-pool.com") {
+            return "BTC PoW Lab"
+        }
         if host.contains("ocean") {
             return "Ocean"
         }
@@ -79,6 +82,9 @@ enum PoolHostPresenter {
     }
 
     static func logoName(for host: String) -> String? {
+        if host.contains("btcpowlab-pool.com") {
+            return "btcpowlab"
+        }
         if host.contains("ocean") {
             return "ocean"
         }
