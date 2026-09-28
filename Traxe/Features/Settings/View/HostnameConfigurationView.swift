@@ -11,7 +11,7 @@ struct HostnameConfigurationView: View {
 
     var body: some View {
         Form {
-            Section("Miner Configuration") {
+            Section("Miner") {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Hostname".uppercased())
                         .font(.subheadline)
@@ -50,12 +50,12 @@ struct HostnameConfigurationView: View {
                 }
             }
         }
-        .navigationTitle("Hostname Settings")
+        .navigationTitle("Hostname")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             localHostname = viewModel.hostname
         }
-        .alert("Save Error", isPresented: $showErrorAlert) {
+        .alert("Couldn’t Save Hostname", isPresented: $showErrorAlert) {
             Button("OK") {}
         } message: {
             Text(

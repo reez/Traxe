@@ -20,6 +20,7 @@ struct DeviceMetrics {
     var sharesRejected: Int = 0
     var poolURL: String? = nil
     var hostname: String? = nil
+    var macAddress: String? = nil
     var blockHeight: Int? = nil
     var networkDifficulty: Double? = nil
     var blockFound: Int? = nil
@@ -79,7 +80,8 @@ struct DeviceMetrics {
         isHashrateKnown: Bool = true,
         isTemperatureKnown: Bool = true,
         isMiningPaused: Bool = false,
-        isMiningPausedKnown: Bool = true
+        isMiningPausedKnown: Bool = true,
+        macAddress: String? = nil
     ) {
         self.hashrate = hashrate
         self.expectedHashrate = expectedHashrate
@@ -108,6 +110,7 @@ struct DeviceMetrics {
         self.isTemperatureKnown = isTemperatureKnown
         self.isMiningPaused = isMiningPaused
         self.isMiningPausedKnown = isMiningPausedKnown
+        self.macAddress = SavedDevice.normalizedMACAddress(macAddress)
     }
 
     init(from systemInfo: SystemInfoDTO) {
@@ -168,7 +171,8 @@ struct DeviceMetrics {
             isHashrateKnown: hashrate != nil,
             isTemperatureKnown: temperature != nil,
             isMiningPaused: miningPaused ?? false,
-            isMiningPausedKnown: miningPaused != nil
+            isMiningPausedKnown: miningPaused != nil,
+            macAddress: systemInfo.mac
         )
     }
 
@@ -230,7 +234,8 @@ struct DeviceMetrics {
             isHashrateKnown: hashrate != nil,
             isTemperatureKnown: temperature != nil,
             isMiningPaused: miningPaused ?? false,
-            isMiningPausedKnown: miningPaused != nil
+            isMiningPausedKnown: miningPaused != nil,
+            macAddress: telemetry.mac
         )
     }
 

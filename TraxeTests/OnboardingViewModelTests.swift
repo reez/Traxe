@@ -6,7 +6,7 @@ import XCTest
 @MainActor
 final class OnboardingViewModelTests: XCTestCase {
     private let permissionDeniedMessage =
-        "Please allow local network access in Settings to scan for miners"
+        "Allow Local Network access in Settings to scan for miners"
 
     func testStartScanReturnsPermissionDeniedWhenProbeReportsOffline() async {
         let checkedIPs = LockedBox<[String]>([])

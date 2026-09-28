@@ -52,10 +52,14 @@ RC_MINERS_ENTITLEMENT_DISPLAY="${RC_MINERS_ENTITLEMENT_DISPLAY:-5 Miners Unlock}
 
 RC_OFFERING_LOOKUP="${RC_OFFERING_LOOKUP:-miners_5}"
 RC_OFFERING_DISPLAY="${RC_OFFERING_DISPLAY:-Traxe Plans}"
-RC_MONTHLY_PACKAGE_LOOKUP="${RC_MONTHLY_PACKAGE_LOOKUP:-monthly}"
+RC_MONTHLY_PACKAGE_LOOKUP="${RC_MONTHLY_PACKAGE_LOOKUP:-\$rc_monthly}"
 RC_MONTHLY_PACKAGE_DISPLAY="${RC_MONTHLY_PACKAGE_DISPLAY:-Monthly}"
 RC_ONE_TIME_PACKAGE_LOOKUP="${RC_ONE_TIME_PACKAGE_LOOKUP:-miners_5}"
-RC_ONE_TIME_PACKAGE_DISPLAY="${RC_ONE_TIME_PACKAGE_DISPLAY:-One-Time}"
+
+if [[ "${RC_MONTHLY_PACKAGE_LOOKUP}" == "${RC_ONE_TIME_PACKAGE_LOOKUP}" ]]; then
+  echo "Monthly and one-time package lookup keys must differ." >&2
+  exit 1
+fi
 
 api() {
   local method="$1"
@@ -397,13 +401,20 @@ api POST "/projects/${RC_PROJECT_ID}/offerings/${RC_OFFERING_ID}" '{"is_current"
 
 echo "==> Ensuring packages"
 RC_MONTHLY_PACKAGE_ID="$(ensure_package "${RC_OFFERING_ID}" "${RC_MONTHLY_PACKAGE_LOOKUP}" "${RC_MONTHLY_PACKAGE_DISPLAY}" 1)"
-RC_ONE_TIME_PACKAGE_ID="$(ensure_package "${RC_OFFERING_ID}" "${RC_ONE_TIME_PACKAGE_LOOKUP}" "${RC_ONE_TIME_PACKAGE_DISPLAY}" 2)"
 echo "Resolved RC_MONTHLY_PACKAGE_ID=${RC_MONTHLY_PACKAGE_ID}"
-echo "Resolved RC_ONE_TIME_PACKAGE_ID=${RC_ONE_TIME_PACKAGE_ID}"
 
-echo "==> Attaching products to packages"
+echo "==> Attaching monthly product to package"
 ensure_package_attached_product "${RC_MONTHLY_PACKAGE_ID}" "${RC_MONTHLY_PRODUCT_INTERNAL_ID}"
-ensure_package_attached_product "${RC_ONE_TIME_PACKAGE_ID}" "${RC_MINERS_PRODUCT_INTERNAL_ID}"
+
+echo "==> Removing one-time package from offering"
+RC_PACKAGES_JSON="$(api GET "/projects/${RC_PROJECT_ID}/offerings/${RC_OFFERING_ID}/packages")"
+RC_ONE_TIME_PACKAGE_ID="$(find_package_id_by_lookup "${RC_ONE_TIME_PACKAGE_LOOKUP}" "${RC_PACKAGES_JSON}")"
+if [[ -n "${RC_ONE_TIME_PACKAGE_ID}" ]]; then
+  api DELETE "/projects/${RC_PROJECT_ID}/packages/${RC_ONE_TIME_PACKAGE_ID}" >/dev/null
+  echo "Removed RC_ONE_TIME_PACKAGE_ID=${RC_ONE_TIME_PACKAGE_ID}"
+else
+  echo "One-time package already absent"
+fi
 
 echo "==> Fetching iOS public API key"
 PUBLIC_KEYS_JSON="$(api GET "/projects/${RC_PROJECT_ID}/apps/${RC_APP_ID}/public_api_keys")"
@@ -432,4 +443,3 @@ echo "RC_MINERS_PRODUCT_INTERNAL_ID=${RC_MINERS_PRODUCT_INTERNAL_ID}"
 echo "RC_PRO_ENTITLEMENT_ID=${RC_PRO_ENTITLEMENT_ID}"
 echo "RC_MINERS_ENTITLEMENT_ID=${RC_MINERS_ENTITLEMENT_ID}"
 echo "RC_MONTHLY_PACKAGE_ID=${RC_MONTHLY_PACKAGE_ID}"
-echo "RC_ONE_TIME_PACKAGE_ID=${RC_ONE_TIME_PACKAGE_ID}"

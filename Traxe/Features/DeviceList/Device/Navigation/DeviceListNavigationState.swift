@@ -57,6 +57,22 @@ struct DeviceListNavigationState: Equatable {
         clearSelection()
     }
 
+    /// Follows a selected miner to its new address when DHCP moved it, then applies the
+    /// deletion fallback above. Both happen in one step, from the same change handler,
+    /// so a moved miner is never mistaken for a deleted one.
+    mutating func reconcileSelection(
+        withSavedMinerIPAddresses ipAddresses: Set<String>,
+        relocatedIPAddresses: [String: String]
+    ) {
+        if case .miner(let ipAddress) = selectedFeature,
+            let currentIPAddress = relocatedIPAddresses[ipAddress]
+        {
+            selectedFeature = .miner(ipAddress: currentIPAddress)
+        }
+
+        reconcileSelection(withSavedMinerIPAddresses: ipAddresses)
+    }
+
     /// Whether a collapsed layout just moved back to the dashboard, which is when the
     /// aggregated fleet statistics need refreshing.
     ///

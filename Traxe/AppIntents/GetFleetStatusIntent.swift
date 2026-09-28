@@ -55,7 +55,7 @@ struct GetFleetStatusIntent: AppIntent {
         guard onlineCount > 0 else {
             return .result(
                 dialog:
-                    "I could not reach any of your \(totalCheckedCount) checked miners right now."
+                    "I couldn’t get a status from any of the \(totalCheckedCount) miners I checked right now."
             )
         }
 

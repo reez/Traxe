@@ -18,7 +18,7 @@ struct DeviceBestDifficultyRankBadgeView: View {
                     : Color(uiColor: .tertiarySystemFill),
                 in: Capsule()
             )
-            .accessibilityLabel("Best diff rank \(rankText)")
+            .accessibilityLabel("Best difficulty rank \(rankText)")
     }
 }
 

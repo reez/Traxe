@@ -29,7 +29,7 @@ struct WeeklyRecapFleetContentView: View {
                 .padding(.horizontal)
             }
 
-            LazyVStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 18) {
                 ForEach(fleetRecaps) { deviceRecap in
                     let isExpanded = expandedFleetDeviceIDs.contains(deviceRecap.id)
                     let poolAllocations = WeeklyRecapPoolAllocationBuilder.build(

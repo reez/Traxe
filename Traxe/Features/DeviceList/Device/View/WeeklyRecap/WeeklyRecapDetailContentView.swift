@@ -19,7 +19,7 @@ struct WeeklyRecapDetailContentView: View {
                 .padding(.horizontal)
         }
 
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
             WeeklyRecapStatCard(
                 title: "Average Hash Rate",
                 value: WeeklyRecapChartPresenter.formattedHashrate(recap.averageHashrate),

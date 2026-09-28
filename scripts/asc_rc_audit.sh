@@ -58,7 +58,7 @@ RC_PROJECT_NAME="${RC_PROJECT_NAME:-Traxe}"
 RC_PROJECT_ID="${RC_PROJECT_ID:-}"
 RC_APP_ID="${RC_APP_ID:-}"
 RC_OFFERING_LOOKUP="${RC_OFFERING_LOOKUP:-miners_5}"
-RC_MONTHLY_PACKAGE_LOOKUP="${RC_MONTHLY_PACKAGE_LOOKUP:-monthly}"
+RC_MONTHLY_PACKAGE_LOOKUP="${RC_MONTHLY_PACKAGE_LOOKUP:-\$rc_monthly}"
 RC_ONE_TIME_PACKAGE_LOOKUP="${RC_ONE_TIME_PACKAGE_LOOKUP:-miners_5}"
 RC_PRO_ENTITLEMENT_LOOKUP="${RC_PRO_ENTITLEMENT_LOOKUP:-Pro}"
 RC_MINERS_ENTITLEMENT_LOOKUP="${RC_MINERS_ENTITLEMENT_LOOKUP:-Miners_5}"
@@ -360,7 +360,6 @@ RC_PACKAGES_JSON='{}'
 RC_MONTHLY_PACKAGE_ID=""
 RC_ONE_TIME_PACKAGE_ID=""
 RC_MONTHLY_PACKAGE_PRODUCTS_JSON='{}'
-RC_ONE_TIME_PACKAGE_PRODUCTS_JSON='{}'
 
 if [[ -n "${RESOLVED_RC_PROJECT_ID}" ]]; then
   RC_APPS_JSON="$(api GET "/projects/${RESOLVED_RC_PROJECT_ID}/apps")"
@@ -391,9 +390,6 @@ if [[ -n "${RESOLVED_RC_PROJECT_ID}" ]]; then
     RC_ONE_TIME_PACKAGE_ID="$(resolve_rc_package_id "${RC_PACKAGES_JSON}" "${RC_ONE_TIME_PACKAGE_LOOKUP}")"
     if [[ -n "${RC_MONTHLY_PACKAGE_ID}" ]]; then
       RC_MONTHLY_PACKAGE_PRODUCTS_JSON="$(api GET "/projects/${RESOLVED_RC_PROJECT_ID}/packages/${RC_MONTHLY_PACKAGE_ID}/products")"
-    fi
-    if [[ -n "${RC_ONE_TIME_PACKAGE_ID}" ]]; then
-      RC_ONE_TIME_PACKAGE_PRODUCTS_JSON="$(api GET "/projects/${RESOLVED_RC_PROJECT_ID}/packages/${RC_ONE_TIME_PACKAGE_ID}/products")"
     fi
   fi
 fi
@@ -439,12 +435,26 @@ fi
 [[ -n "${RC_MINERS_ENTITLEMENT_ID}" ]] || FAILURES+=("RevenueCat entitlement missing (${RC_MINERS_ENTITLEMENT_LOOKUP})")
 [[ -n "${RC_OFFERING_ID}" ]] || FAILURES+=("RevenueCat offering missing (${RC_OFFERING_LOOKUP})")
 [[ -n "${RC_MONTHLY_PACKAGE_ID}" ]] || FAILURES+=("RevenueCat monthly package missing (${RC_MONTHLY_PACKAGE_LOOKUP})")
-[[ -n "${RC_ONE_TIME_PACKAGE_ID}" ]] || FAILURES+=("RevenueCat one-time package missing (${RC_ONE_TIME_PACKAGE_LOOKUP})")
+if [[ -n "${RC_ONE_TIME_PACKAGE_ID}" ]]; then
+  FAILURES+=("RevenueCat one-time package still in offering (${RC_ONE_TIME_PACKAGE_LOOKUP})")
+fi
+
+if [[ -n "${RC_OFFERING_ID}" ]]; then
+  RC_OTHER_PACKAGE_IDS="$(printf '%s' "${RC_PACKAGES_JSON}" | jq -r \
+    --arg monthly "${RC_MONTHLY_PACKAGE_ID}" \
+    --arg one_time "${RC_ONE_TIME_PACKAGE_ID}" '
+[
+  .. | objects
+  | select((.id? | type == "string") and (.id | startswith("pkg")))
+  | .id
+] | unique | map(select(. != $monthly and . != $one_time)) | join(", ")
+')"
+  [[ -z "${RC_OTHER_PACKAGE_IDS}" ]] || FAILURES+=("RevenueCat offering contains unexpected packages (${RC_OTHER_PACKAGE_IDS})")
+fi
 
 [[ "$(json_contains_product_id "${RC_PRO_ENTITLEMENT_PRODUCTS_JSON}" "${RC_MONTHLY_PRODUCT_INTERNAL_ID}")" == "true" ]] || FAILURES+=("Monthly product not attached to Pro entitlement")
 [[ "$(json_contains_product_id "${RC_MINERS_ENTITLEMENT_PRODUCTS_JSON}" "${RC_MINERS_PRODUCT_INTERNAL_ID}")" == "true" ]] || FAILURES+=("One-time product not attached to Miners_5 entitlement")
 [[ "$(json_contains_product_id "${RC_MONTHLY_PACKAGE_PRODUCTS_JSON}" "${RC_MONTHLY_PRODUCT_INTERNAL_ID}")" == "true" ]] || FAILURES+=("Monthly product not attached to monthly package")
-[[ "$(json_contains_product_id "${RC_ONE_TIME_PACKAGE_PRODUCTS_JSON}" "${RC_MINERS_PRODUCT_INTERNAL_ID}")" == "true" ]] || FAILURES+=("One-time product not attached to one-time package")
 
 if [[ "$(printf '%s' "${SUBSCRIPTION_VALIDATION_JSON}" | jq -r '.summary.errors // 0')" -gt 0 || "$(printf '%s' "${SUBSCRIPTION_VALIDATION_JSON}" | jq -r '.summary.blocking // 0')" -gt 0 ]]; then
   while IFS= read -r item; do

@@ -29,6 +29,23 @@ final class DeviceListNavigationStateTests: XCTestCase {
         XCTAssertEqual(navigation.detailFeature, .miner(ipAddress: "192.168.1.10"))
     }
 
+    func testReconcilingFollowsRelocatedMinerInsteadOfClearingSelection() {
+        var navigation = DeviceListNavigationState()
+        navigation.select(.miner(ipAddress: "192.168.1.10"))
+
+        navigation.reconcileSelection(
+            withSavedMinerIPAddresses: ["192.168.1.42"],
+            relocatedIPAddresses: ["192.168.1.10": "192.168.1.42"]
+        )
+
+        XCTAssertEqual(navigation.selectedFeature, .miner(ipAddress: "192.168.1.42"))
+        XCTAssertEqual(navigation.preferredCompactColumn, .detail)
+
+        navigation.reconcileSelection(withSavedMinerIPAddresses: [], relocatedIPAddresses: [:])
+
+        XCTAssertNil(navigation.selectedFeature)
+    }
+
     func testWideningAfterCompactBackStillShowsRetainedMinerBesideDashboard() {
         var navigation = DeviceListNavigationState()
         navigation.select(.miner(ipAddress: "192.168.1.11"))

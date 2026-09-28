@@ -58,6 +58,66 @@ final class NetworkServiceTests: XCTestCase {
         )
     }
 
+    func testUpdatePoolSettingsSendsUseFallbackStratumAsANumberOnlyWhenGiven() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [URLProtocolStub.self]
+        let session = URLSession(configuration: configuration)
+        let service = NetworkService(session: session)
+
+        URLProtocolStub.requestHandler = { request in
+            URLProtocolStub.capturedRequest = request
+            URLProtocolStub.capturedBodyData = Self.bodyData(from: request)
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )
+            return (try XCTUnwrap(response), Data())
+        }
+        let pool = MinerPoolDTO(
+            properties: ["id": .int(2), "stratumURL": .string("public-pool.io")]
+        )
+
+        try await service.updatePoolSettings(
+            pools: [pool],
+            useFallbackStratum: true,
+            ipAddressOverride: "192.0.2.10"
+        )
+
+        let capturedRequest = try XCTUnwrap(URLProtocolStub.capturedRequest)
+        XCTAssertEqual(capturedRequest.httpMethod, "PATCH")
+        XCTAssertEqual(capturedRequest.url?.absoluteString, "http://192.0.2.10/api/system")
+        var body = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: try XCTUnwrap(URLProtocolStub.capturedBodyData))
+                as? [String: Any]
+        )
+        XCTAssertEqual((body["pools"] as? [[String: Any]])?.count, 1)
+        XCTAssertEqual(body["useFallbackStratum"] as? Int, 1)
+
+        try await service.updatePoolSettings(pools: [pool], ipAddressOverride: "192.0.2.10")
+
+        body = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: try XCTUnwrap(URLProtocolStub.capturedBodyData))
+                as? [String: Any]
+        )
+        XCTAssertEqual((body["pools"] as? [[String: Any]])?.count, 1)
+        XCTAssertNil(body["useFallbackStratum"], "An unchanged active pool must not be sent")
+
+        try await service.updatePoolSettings(
+            pools: [],
+            useFallbackStratum: false,
+            ipAddressOverride: "192.0.2.10"
+        )
+
+        body = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: try XCTUnwrap(URLProtocolStub.capturedBodyData))
+                as? [String: Any]
+        )
+        XCTAssertNil(body["pools"], "No pool edits means no pools array")
+        XCTAssertEqual(body["useFallbackStratum"] as? Int, 0)
+    }
+
     func testFetchMinerTelemetryDecodesPayloadThatFullSystemInfoRejects() async throws {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [URLProtocolStub.self]

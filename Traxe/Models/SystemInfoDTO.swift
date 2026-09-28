@@ -102,6 +102,9 @@ struct MinerPoolDTO: Codable, Equatable {
     // ESP-Miner masks a stored password as "*****" in GET responses and keeps the stored
     // password when that mask is submitted back.
     var stratumPassword: String? { string(forKey: Self.stratumPasswordKey) }
+    var stratumProtocol: String? { string(forKey: Self.stratumProtocolKey) }
+    var stratumV2ChannelType: String? { string(forKey: Self.stratumV2ChannelTypeKey) }
+    var stratumV2AuthorityPubkey: String? { string(forKey: Self.stratumV2AuthorityPubkeyKey) }
 
     init(properties: [String: FirmwareJSONValue]) {
         self.properties = properties
@@ -801,6 +804,12 @@ extension SystemInfoDTO {
     var supportsMultiPoolSettings: Bool { pools != nil }
     var supportsPoolModeSettings: Bool {
         stratum?.poolMode != nil || stratum?.activePoolMode != nil
+    }
+    // ESP-Miner v2.15 reports the persisted `useFallbackStratum` selector in system info.
+    // Earlier firmware accepts the key on PATCH but never reports it, so the selection could
+    // neither be shown nor verified there.
+    var supportsActivePoolSelection: Bool {
+        supportsMultiPoolSettings && useFallbackStratum != nil
     }
     var primaryPoolID: Int { primaryPoolIndex ?? 0 }
     var secondaryPoolID: Int { secondaryPoolIndex ?? 1 }

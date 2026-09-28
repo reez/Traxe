@@ -4,31 +4,46 @@ import Foundation
 struct MinerEntityQuery: EntityStringQuery {
     private let savedDevicesLoader: @Sendable () -> [SavedDevice]
     private let subscriptionAccessPolicyResolver: @Sendable () async -> SubscriptionAccessPolicy
+    private let currentIPAddressResolver: @Sendable (_ identifier: String) -> String
 
     init() {
-        self.savedDevicesLoader = { TraxeIntentSupport.loadSavedDevices() }
-        self.subscriptionAccessPolicyResolver = {
-            await TraxeIntentSupport.resolveSubscriptionAccessPolicy()
-        }
+        self.init(
+            loadSavedDevices: { TraxeIntentSupport.loadSavedDevices() },
+            resolveSubscriptionAccessPolicy: {
+                await TraxeIntentSupport.resolveSubscriptionAccessPolicy()
+            }
+        )
     }
 
     init(
         loadSavedDevices: @escaping @Sendable () -> [SavedDevice],
-        resolveSubscriptionAccessPolicy: @escaping @Sendable () async -> SubscriptionAccessPolicy
+        resolveSubscriptionAccessPolicy: @escaping @Sendable () async -> SubscriptionAccessPolicy,
+        resolveCurrentIPAddress: @escaping @Sendable (_ identifier: String) -> String = {
+            identifier in
+            SavedDeviceAddressAliases.appGroup()?.currentAddress(for: identifier) ?? identifier
+        }
     ) {
         self.savedDevicesLoader = loadSavedDevices
         self.subscriptionAccessPolicyResolver = resolveSubscriptionAccessPolicy
+        self.currentIPAddressResolver = resolveCurrentIPAddress
     }
 
+    /// Resolves the identifier a Shortcut stored: a MAC address for miners saved with
+    /// one, otherwise an IP address that may since have moved. The stored identifier is
+    /// kept on the entity so the Shortcut keeps working without being edited.
     func entities(for identifiers: [MinerEntity.ID]) async throws -> [MinerEntity] {
         let devices = savedDevicesLoader()
-        let deviceByIPAddress = Dictionary(uniqueKeysWithValues: devices.map { ($0.ipAddress, $0) })
 
         return identifiers.compactMap { identifier in
-            guard let device = deviceByIPAddress[identifier] else {
+            if let device = devices.first(where: { $0.macAddress == identifier }) {
+                return MinerEntity(id: identifier, savedDevice: device)
+            }
+
+            let currentIPAddress = currentIPAddressResolver(identifier)
+            guard let device = devices.first(where: { $0.ipAddress == currentIPAddress }) else {
                 return nil
             }
-            return MinerEntity(savedDevice: device)
+            return MinerEntity(id: identifier, savedDevice: device)
         }
     }
 

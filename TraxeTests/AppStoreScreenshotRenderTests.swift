@@ -255,6 +255,138 @@ final class AppStoreScreenshotRenderTests: XCTestCase {
                 modelContainer: dashboardContext.container
             )
         }
+
+        // Width continuum: a narrow multitasking-style window and a mid width between
+        // today's iPhones and a regular-width split. Generic sizes on purpose; the
+        // foldable's real dimensions are not guessed here.
+        let narrow = CGSize(width: 320, height: 693)
+        let medium = CGSize(width: 640, height: 900)
+
+        try await render(
+            fileName: "N1_fleet-dashboard-narrow.png",
+            colorScheme: .dark,
+            settleDuration: .milliseconds(800),
+            size: narrow
+        ) {
+            FleetDashboardScreenshotView(
+                dashboardViewModel: dashboardContext.viewModel,
+                defaults: defaults,
+                viewModelDependencies: viewModelDependencies,
+                modelContainer: dashboardContext.container
+            )
+        }
+
+        try await render(
+            fileName: "N2_device-summary-narrow.png",
+            colorScheme: .dark,
+            settleDuration: .seconds(6),
+            size: narrow
+        ) {
+            DeviceSummaryScreenshotView(
+                deviceID: PreviewFixtures.sampleSecondaryDeviceID,
+                deviceName: "bitaxe",
+                metrics: makeSummaryMetrics(
+                    deviceID: PreviewFixtures.sampleSecondaryDeviceID,
+                    profile: .bitaxeRecovery
+                ),
+                historicalData: makeSummaryHistoricalData(
+                    deviceID: PreviewFixtures.sampleSecondaryDeviceID,
+                    profile: .bitaxeRecovery
+                )
+            )
+        }
+
+        try await render(
+            fileName: "M1_fleet-dashboard-medium.png",
+            colorScheme: .dark,
+            settleDuration: .milliseconds(800),
+            size: medium
+        ) {
+            FleetDashboardScreenshotView(
+                dashboardViewModel: dashboardContext.viewModel,
+                defaults: defaults,
+                viewModelDependencies: viewModelDependencies,
+                modelContainer: dashboardContext.container
+            )
+        }
+
+        try await render(
+            fileName: "M2_device-summary-medium.png",
+            colorScheme: .dark,
+            settleDuration: .seconds(6),
+            size: medium
+        ) {
+            DeviceSummaryScreenshotView(
+                deviceID: PreviewFixtures.sampleSecondaryDeviceID,
+                deviceName: "bitaxe",
+                metrics: makeSummaryMetrics(
+                    deviceID: PreviewFixtures.sampleSecondaryDeviceID,
+                    profile: .bitaxeRecovery
+                ),
+                historicalData: makeSummaryHistoricalData(
+                    deviceID: PreviewFixtures.sampleSecondaryDeviceID,
+                    profile: .bitaxeRecovery
+                )
+            )
+        }
+
+        // Onboarding is the one screen that centers with Spacers, so it needs the
+        // short-window and narrow-window passes most.
+        try await render(
+            fileName: "O1_onboarding-landscape.png",
+            colorScheme: .dark,
+            settleDuration: .milliseconds(800),
+            size: landscape
+        ) {
+            OnboardingScreenshotView(
+                dashboardViewModel: dashboardContext.viewModel,
+                modelContainer: dashboardContext.container
+            )
+        }
+
+        try await render(
+            fileName: "O2_onboarding-narrow.png",
+            colorScheme: .dark,
+            settleDuration: .milliseconds(800),
+            size: narrow
+        ) {
+            OnboardingScreenshotView(
+                dashboardViewModel: dashboardContext.viewModel,
+                modelContainer: dashboardContext.container
+            )
+        }
+
+        try await render(
+            fileName: "O3_onboarding-portrait.png",
+            colorScheme: .dark,
+            settleDuration: .milliseconds(800),
+            size: portrait
+        ) {
+            OnboardingScreenshotView(
+                dashboardViewModel: dashboardContext.viewModel,
+                modelContainer: dashboardContext.container
+            )
+        }
+
+        // The What's New footer is bottom chrome now (glass bar on iOS 26), so render
+        // it at both a tall and a short window.
+        try await render(
+            fileName: "W1_whats-new-portrait.png",
+            colorScheme: .dark,
+            settleDuration: .milliseconds(800),
+            size: portrait
+        ) {
+            WhatsNewSheetScreenshotView()
+        }
+
+        try await render(
+            fileName: "W2_whats-new-landscape.png",
+            colorScheme: .dark,
+            settleDuration: .milliseconds(800),
+            size: landscape
+        ) {
+            WhatsNewSheetScreenshotView()
+        }
     }
 
     private func render<Content: View>(
@@ -474,7 +606,8 @@ private struct StoreFleetDashboardScreenshotView: View {
                     Button("Edit") {}
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {} label: {
+                    Button {
+                    } label: {
                         Image(systemName: "plus")
                             .foregroundStyle(Color.traxeGold)
                     }
@@ -525,6 +658,27 @@ private struct DeviceSummaryScreenshotView: View {
             )
         }
         .modelContainer(context.container)
+    }
+}
+
+private struct OnboardingScreenshotView: View {
+    let dashboardViewModel: DashboardViewModel
+    let modelContainer: ModelContainer
+
+    var body: some View {
+        OnboardingView(dashboardViewModel: dashboardViewModel)
+            .modelContainer(modelContainer)
+    }
+}
+
+private struct WhatsNewSheetScreenshotView: View {
+    var body: some View {
+        WhatsNewSheetView(
+            content: WhatsNewConfig.content,
+            accentColor: .traxeGold,
+            sendSupportEmail: {},
+            openSourceRepo: {}
+        )
     }
 }
 
@@ -767,7 +921,8 @@ private func seedWeeklyRecapScreenshotData(in modelContext: ModelContext) {
                 modelContext.insert(
                     HistoricalDataPoint(
                         timestamp: timestamp,
-                        hashrate: device.baseHashrate + (hashrateDrift * device.baseHashrate * 0.02),
+                        hashrate: device.baseHashrate
+                            + (hashrateDrift * device.baseHashrate * 0.02),
                         temperature: device.baseTemperature + temperatureDrift,
                         deviceId: device.id
                     )

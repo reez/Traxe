@@ -133,17 +133,22 @@ struct AddDeviceView: View {
                         }
                     }
                     .padding()
+                    .frame(maxWidth: 700)
+                    .frame(maxWidth: .infinity)
                 }
                 .scrollDismissesKeyboard(.immediately)
                 .navigationTitle("Add Miner")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .navigationBarLeading) {
+                    // Semantic placements let the system move Cancel and Add into a
+                    // vertical navigation bar when one is present, instead of pinning them
+                    // to the horizontal leading and trailing edges.
+                    ToolbarItem(placement: .cancellationAction) {
                         Button("Cancel") {
                             dismiss()
                         }
                     }
-                    ToolbarItem(placement: .navigationBarTrailing) {
+                    ToolbarItem(placement: .confirmationAction) {
                         if isSaving {
                             ProgressView()
                         } else {
@@ -152,7 +157,7 @@ struct AddDeviceView: View {
                         }
                     }
                 }
-                .alert("Error Adding Miner", isPresented: $showingErrorAlert) {
+                .alert("Couldn’t Add Miner", isPresented: $showingErrorAlert) {
                     Button("OK") {}
                 } message: {
                     Text(errorMessage)
@@ -171,7 +176,7 @@ struct AddDeviceView: View {
                     }
                 } message: {
                     Text(
-                        "Traxe needs access to your local network to find miners. Please enable it in Settings."
+                        "Traxe needs access to your local network to find miners. Enable Local Network access in Settings."
                     )
                 }
             }
@@ -193,19 +198,10 @@ struct AddDeviceView: View {
                 ProgressView()
             } else {
 
-                if #available(iOS 26.0, *) {
-                    Button("Scan Network", action: startScan)
-                        .buttonStyle(.glassProminent)
-                        .tint(Color.traxeGold)
-                        .disabled(viewModel.isScanning)
-
-                } else {
-                    Button("Scan Network", action: startScan)
-                        .buttonStyle(.borderedProminent)
-                        .tint(Color.traxeGold)
-                        .disabled(viewModel.isScanning)
-
-                }
+                Button("Scan for Miners", action: startScan)
+                    .prominentActionButtonStyle()
+                    .tint(Color.traxeGold)
+                    .disabled(viewModel.isScanning)
 
             }
         }
@@ -363,7 +359,8 @@ struct AddDeviceView: View {
                 let discoveredDevice = try await DeviceManagementService.checkDevice(ip: trimmedIP)
                 let deviceToSave = SavedDevice(
                     name: discoveredDevice.name,
-                    ipAddress: discoveredDevice.ip
+                    ipAddress: discoveredDevice.ip,
+                    macAddress: discoveredDevice.macAddress
                 )
                 try DeviceManagementService.saveDevice(deviceToSave)
 

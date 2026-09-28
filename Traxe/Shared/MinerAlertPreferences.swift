@@ -45,6 +45,16 @@ struct MinerAlertPreferences {
         store(ipAddresses)
     }
 
+    /// Carries opt-ins along when DHCP moves miners, so alerts neither stop nor start
+    /// just because an address changed. Moves are applied together so miners that
+    /// swapped addresses each keep their own setting.
+    func relocateOptIns(_ currentIPAddressByPrevious: [String: String]) {
+        let ipAddresses = enabledIPAddresses
+        let relocated = Set(ipAddresses.map { currentIPAddressByPrevious[$0] ?? $0 })
+        guard relocated != ipAddresses else { return }
+        store(relocated)
+    }
+
     /// Removes a deleted miner's opt-in so an IP that is added again starts alerts off.
     func removePreference(for ipAddress: String) {
         var ipAddresses = enabledIPAddresses

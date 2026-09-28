@@ -77,7 +77,7 @@ struct SettingsView: View {
                 Form {
 
                     Section {
-                        NavigationLink("Miner Configuration") {
+                        NavigationLink("Advanced Settings") {
                             AdvancedSettingsView(viewModel: viewModel)
                         }
                     } header: {
@@ -240,12 +240,13 @@ struct SettingsView: View {
                 .navigationTitle("Settings")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .navigationBarTrailing) {
+                    // Done confirms the sheet, so the semantic placement lets the system
+                    // position it for the current bar layout rather than a fixed edge.
+                    ToolbarItem(placement: .confirmationAction) {
                         Button("Done") {
                             viewModel.saveSettings()
                             dismiss()
                         }
-                        //                    .foregroundColor(.traxeGold)
                     }
                 }
                 .alert("Restart Miner", isPresented: $showingRestartConfirmation) {
@@ -255,7 +256,7 @@ struct SettingsView: View {
                     }
                 } message: {
                     Text(
-                        "Are you sure you want to restart the miner? This will temporarily stop mining operations."
+                        "Mining pauses while the miner restarts."
                     )
                 }
                 .alert("Delete Miner", isPresented: $showingDeleteConfirmation) {
@@ -273,7 +274,7 @@ struct SettingsView: View {
                         "This removes the miner from Traxe. The miner hardware and pool settings are not changed."
                     )
                 }
-                .alert("Delete Miner Failed", isPresented: $showingDeleteFailure) {
+                .alert("Couldn’t Delete Miner", isPresented: $showingDeleteFailure) {
                     Button("OK") {}
                 } message: {
                     Text(viewModel.deleteMinerErrorMessage ?? "Traxe could not delete this miner.")

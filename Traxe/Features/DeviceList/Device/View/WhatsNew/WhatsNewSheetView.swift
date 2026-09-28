@@ -5,16 +5,19 @@
 //  Created by Matthew Ramsden on 11/17/24.
 //
 
+import StoreKit
 import SwiftUI
 
 struct WhatsNewSheetView: View {
     let content: WhatsNewContent
     let accentColor: Color
-    let requestReview: () -> Void
     let sendSupportEmail: () -> Void
     let openSourceRepo: () -> Void
 
     @Environment(\.dismiss) private var dismiss
+    // The review prompt is requested from the presenting view's own scene, so it
+    // never has to pick a window scene out of the application's connected scenes.
+    @Environment(\.requestReview) private var requestReview
 
     var body: some View {
         ScrollView {
@@ -43,14 +46,17 @@ struct WhatsNewSheetView: View {
                     }
                 }
 
-                footer
-
             }
             .padding(.horizontal, 28)
             .padding(.top, 48)
             .padding(.bottom, 40)
+            .frame(maxWidth: 700)
+            .frame(maxWidth: .infinity)
         }
         .background(Color(.systemBackground))
+        .bottomActionBar {
+            footer
+        }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
     }
@@ -136,20 +142,20 @@ struct WhatsNewSheetView: View {
     }
 
     private var footer: some View {
-        VStack(spacing: 16) {
-            Button {
-                dismiss()
-            } label: {
-                Text("Done")
-                    .font(.system(.headline))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-            }
-            .foregroundStyle(Color.white)
-            .background(Color.traxeGold, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        Button {
+            dismiss()
+        } label: {
+            Text("Done")
+                .font(.headline)
+                .frame(maxWidth: .infinity)
         }
-        .padding(.top, 16)
-        .padding(.bottom, 24)
+        .prominentActionButtonStyle()
+        .tint(Color.traxeGold)
+        .buttonBorderShape(.roundedRectangle(radius: 14))
+        .controlSize(.large)
+        .frame(maxWidth: 700)
+        .padding(.horizontal, 28)
+        .padding(.vertical, 12)
     }
 
     private func badgeColor(for _: WhatsNewHighlight.BadgeTint) -> Color {
@@ -189,13 +195,13 @@ extension WhatsNewSheetView {
                 tint: .traxeGold,
                 title: "Loving the app?",
                 detail: "A nice review would be great!",
-                handler: requestReview
+                handler: { requestReview() }
             ),
             SecondaryAction(
                 id: .emailFeedback,
                 iconSystemName: "envelope.fill",
                 tint: .traxeGold,
-                title: "Having Issues?",
+                title: "Having issues?",
                 detail: "Reach out and I'll make it right.",
                 handler: sendSupportEmail
             ),
@@ -216,7 +222,6 @@ extension WhatsNewSheetView {
     return WhatsNewSheetView(
         content: WhatsNewConfig.content,
         accentColor: .orange,
-        requestReview: {},
         sendSupportEmail: {},
         openSourceRepo: {}
     )

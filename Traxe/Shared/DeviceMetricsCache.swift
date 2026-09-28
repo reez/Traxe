@@ -14,6 +14,7 @@ struct CachedDeviceMetrics: Codable {
     var isMiningPausedKnown: Bool?
     // Added: cache temperature (optional for backward compatibility)
     var temperature: Double?
+    var macAddress: String?
     var lastUpdated: Date
 
     init(from metrics: DeviceMetrics) {
@@ -29,6 +30,7 @@ struct CachedDeviceMetrics: Codable {
         self.isTemperatureKnown = metrics.isTemperatureKnown
         self.isMiningPausedKnown = metrics.isMiningPausedKnown
         self.temperature = metrics.temperature
+        self.macAddress = SavedDevice.normalizedMACAddress(metrics.macAddress)
         self.lastUpdated = Date()
     }
 }
@@ -54,13 +56,13 @@ extension DeviceMetrics {
 
 @MainActor
 class DeviceMetricsCache {
-    private let appGroupID = "group.matthewramsden.traxe"
     // Bump key to drop previously cached (pre-normalization) hashrate values.
     private let cacheKey = "cachedDeviceMetricsV2"
     private let schemaVersion = 1
+    private let defaults: UserDefaults?
 
-    private var defaults: UserDefaults? {
-        UserDefaults(suiteName: appGroupID)
+    init(defaults: UserDefaults? = UserDefaults(suiteName: "group.matthewramsden.traxe")) {
+        self.defaults = defaults
     }
 
     func loadAll() -> [String: CachedDeviceMetrics] {

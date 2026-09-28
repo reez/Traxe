@@ -30,7 +30,8 @@ struct GetMinerStatusIntent: AppIntent {
             return .result(dialog: "You do not have any miners saved in Traxe yet.")
         }
 
-        guard let targetDevice = allDevices.first(where: { $0.ipAddress == miner.id }) else {
+        guard let targetDevice = allDevices.first(where: { $0.ipAddress == miner.ipAddress })
+        else {
             return .result(dialog: "I could not find that miner in Traxe.")
         }
 
@@ -62,7 +63,7 @@ struct GetMinerStatusIntent: AppIntent {
         } catch {
             return .result(
                 dialog:
-                    "I could not reach \(targetDevice.name) at \(targetDevice.ipAddress) right now."
+                    "I couldn’t get a status from \(targetDevice.name) at \(targetDevice.ipAddress) right now."
             )
         }
     }

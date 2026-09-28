@@ -21,6 +21,7 @@ struct PoolConfigurationView: View {
     @State private var localSecondaryStratumV2AuthorityPubkey: String = ""
     @State private var localPoolBalance: Double = 50
     @State private var localPoolMode: Int = 0
+    @State private var localUseFallbackStratum: Bool = false
     @State private var showErrorAlert: Bool = false
 
     private var localIsDualPool: Bool {
@@ -79,7 +80,7 @@ struct PoolConfigurationView: View {
                         }
                         .labelsHidden()
                         .pickerStyle(.menu)
-                        Text("Changing pool mode may require a device restart.")
+                        Text("Changing pool mode may require restarting the miner.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -93,7 +94,7 @@ struct PoolConfigurationView: View {
                             .foregroundStyle(.secondary)
                         Slider(value: $localPoolBalance, in: 1...99, step: 1)
                         Text(
-                            "Distributes jobs between the primary and secondary pool, e.g., 70/30."
+                            "Splits jobs between the primary and secondary pools, for example 70/30."
                         )
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -108,6 +109,14 @@ struct PoolConfigurationView: View {
                             .foregroundStyle(.secondary)
                         }
                     }
+                    .padding(.vertical, 4)
+                }
+
+                if viewModel.supportsActivePoolSelection {
+                    ActivePoolPickerView(
+                        useFallbackStratum: $localUseFallbackStratum,
+                        hasFallbackPool: !localSecondaryStratumURL.isEmpty
+                    )
                     .padding(.vertical, 4)
                 }
 
@@ -177,6 +186,7 @@ struct PoolConfigurationView: View {
                     viewModel.poolBalance = Int(localPoolBalance.rounded())
                     viewModel.poolMode = localPoolMode
                     viewModel.isDualPool = localPoolMode == 1
+                    viewModel.useFallbackStratum = localUseFallbackStratum
 
                     Task {
                         let success = await viewModel.savePoolConfiguration()
@@ -221,6 +231,7 @@ struct PoolConfigurationView: View {
             localSecondaryStratumV2AuthorityPubkey = viewModel.fallbackStratumV2AuthorityPubkey
             localPoolBalance = Double(viewModel.poolBalance)
             localPoolMode = viewModel.poolMode
+            localUseFallbackStratum = viewModel.useFallbackStratum
             selectedPoolIndex = 0
         }
         .alert("Save Error", isPresented: $showErrorAlert) {
@@ -252,6 +263,11 @@ struct PoolConfigurationView: View {
                     PoolConfigurationView(viewModel: dualPoolPreviewViewModel())
                 }
                 .previewDisplayName("Dual Pool")
+
+                NavigationStack {
+                    PoolConfigurationView(viewModel: espMinerActivePoolPreviewViewModel())
+                }
+                .previewDisplayName("ESP-Miner Active Pool")
             }
         }
 
@@ -303,6 +319,26 @@ struct PoolConfigurationView: View {
             previewViewModel.poolBalance = 60
             previewViewModel.poolMode = 1
             previewViewModel.isDualPool = true
+            return previewViewModel
+        }
+
+        private static func espMinerActivePoolPreviewViewModel() -> SettingsViewModel {
+            let previewViewModel = SettingsViewModel(
+                sharedUserDefaults: previewSharedDefaults(named: "EspMinerActivePool"),
+                modelContext: previewContainer().mainContext,
+                shouldFetchDeviceSettingsOnLoad: false
+            )
+            previewViewModel.stratumURL = "public-pool.io"
+            previewViewModel.stratumPortString = "21496"
+            previewViewModel.stratumUser = "bc1qexample.primary"
+            previewViewModel.fallbackStratumURL = "eu.backup.example"
+            previewViewModel.fallbackStratumPortString = "4444"
+            previewViewModel.fallbackStratumUser = "bc1qexample.backup"
+            previewViewModel.supportsStratumProtocolSettings = true
+            previewViewModel.stratumProtocol = "SV1"
+            previewViewModel.fallbackStratumProtocol = "SV1"
+            previewViewModel.supportsActivePoolSelection = true
+            previewViewModel.useFallbackStratum = true
             return previewViewModel
         }
 

@@ -19,26 +19,34 @@ struct FleetStatusSummaryView: View {
             }
 
             VStack(alignment: .leading, spacing: 7) {
-                FleetStatusRow(
-                    count: status.online,
-                    title: "Online",
-                    color: FleetStatusPalette.online
-                )
-                FleetStatusRow(
-                    count: status.paused,
-                    title: "Paused",
-                    color: FleetStatusPalette.paused
-                )
-                FleetStatusRow(
-                    count: status.offline,
-                    title: "Offline",
-                    color: FleetStatusPalette.offline
-                )
-                FleetStatusRow(
-                    count: status.unknown,
-                    title: "Unknown",
-                    color: FleetStatusPalette.unknown
-                )
+                if status.online > 0 {
+                    FleetStatusRow(
+                        count: status.online,
+                        title: "Online",
+                        color: FleetStatusPalette.online
+                    )
+                }
+                if status.paused > 0 {
+                    FleetStatusRow(
+                        count: status.paused,
+                        title: "Paused",
+                        color: FleetStatusPalette.paused
+                    )
+                }
+                if status.offline > 0 {
+                    FleetStatusRow(
+                        count: status.offline,
+                        title: "Offline",
+                        color: FleetStatusPalette.offline
+                    )
+                }
+                if status.unknown > 0 {
+                    FleetStatusRow(
+                        count: status.unknown,
+                        title: "Unknown",
+                        color: FleetStatusPalette.unknown
+                    )
+                }
             }
 
             FleetStatusBar(status: status)
