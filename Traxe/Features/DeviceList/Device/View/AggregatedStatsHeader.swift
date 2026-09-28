@@ -14,18 +14,27 @@ struct AggregatedStatsHeader: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     // Keep the UI calm during refresh: no inline spinner here.
-                    StatItem(
-                        label: "Hash Rate",
-                        value: viewModel.totalHashRate,
-                        unit: "TH/s",
-                        isLoading: false,
-                        name: "bolt.fill"
-                    )
-
-                    //                Text("Updated: \(viewModel.lastDataUpdate, style: .time)")
-                    //                    .font(.caption2)
-                    //                    .foregroundStyle(.tertiary)
-                    //                    .padding(.leading, 16)
+                    if viewModel.fleetMetricSnapshot.totalHashrate != nil {
+                        StatItem(
+                            label: "Hash Rate",
+                            value: viewModel.fleetMetricSnapshot.totalHashrate ?? 0,
+                            unit: "TH/s",
+                            isLoading: false,
+                            name: "bolt.fill"
+                        )
+                    } else {
+                        Text("Hash rate unavailable")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(viewModel.fleetMetricSnapshot.statusText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if let measuredAt = viewModel.fleetMetricSnapshot.measuredAt {
+                        Text("Last reading \(measuredAt, style: .relative) ago")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -44,24 +53,15 @@ struct AggregatedStatsHeader: View {
                         .font(.title2)
                         .fontWeight(.semibold)
 
-                    // Generate from cached metrics if not yet present
-                    if let fleetSummary = viewModel.fleetAISummary {
-                        // Highlight value tokens (hash rate, temps, watts, percents)
-                        let highlighted = fleetSummary.content.highlightingValues(color: .traxeGold)
-                        Text(highlighted)
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.leading)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .contentTransition(.interpolate)
-                            .animation(.easeInOut(duration: 0.4), value: fleetSummary.content)
-                    } else {
-                        // Placeholder text to avoid layout jump on first load
-                        Text("Generating insights for your miners…")
-                            .font(.body)
-                            .multilineTextAlignment(.leading)
-                            .foregroundStyle(.secondary)
-                    }
+                    let fleetSummary = viewModel.currentFleetSummary
+                    let highlighted = fleetSummary.content.highlightingValues(color: .traxeGold)
+                    Text(highlighted)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(.interpolate)
+                        .animation(.easeInOut(duration: 0.4), value: fleetSummary.content)
                 }
 
                 FleetHealthCardView(

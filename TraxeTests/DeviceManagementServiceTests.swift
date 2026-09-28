@@ -28,6 +28,159 @@ final class DeviceManagementServiceTests: XCTestCase {
         super.tearDown()
     }
 
+    func testCheckDeviceMapsTransportErrorsToActionableRequestFailures() async {
+        let codes: [URLError.Code] = [
+            .timedOut, .cannotConnectToHost, .notConnectedToInternet, .networkConnectionLost,
+        ]
+
+        for code in codes {
+            var attempts = 0
+            do {
+                _ = try await DeviceManagementService.checkDevice(
+                    ip: "192.168.1.10",
+                    retryOnTimeout: false,
+                    fetchData: { _ in
+                        attempts += 1
+                        throw URLError(code)
+                    }
+                )
+                XCTFail("Expected request failure for \(code)")
+            } catch DeviceCheckError.requestFailed(let actualCode) {
+                XCTAssertEqual(actualCode, code)
+            } catch {
+                XCTFail("Expected requestFailed, received \(error)")
+            }
+            XCTAssertEqual(attempts, 1)
+        }
+    }
+
+    func testCheckDeviceMapsFailureAfterTimeoutRetry() async {
+        for finalCode in [URLError.Code.timedOut, .cannotConnectToHost] {
+            var attempts = 0
+            do {
+                _ = try await DeviceManagementService.checkDevice(
+                    ip: "192.168.1.10",
+                    fetchData: { _ in
+                        attempts += 1
+                        throw URLError(attempts == 1 ? .timedOut : finalCode)
+                    }
+                )
+                XCTFail("Expected request failure after retry")
+            } catch DeviceCheckError.requestFailed(let actualCode) {
+                XCTAssertEqual(actualCode, finalCode)
+            } catch {
+                XCTFail("Expected requestFailed, received \(error)")
+            }
+            XCTAssertEqual(attempts, 2)
+        }
+    }
+
+    func testCheckDeviceCanRecoverOnTimeoutRetry() async throws {
+        var attempts = 0
+        let payload = Data(#"{"hostname":"bitaxe","hashRate":500}"#.utf8)
+        let device = try await DeviceManagementService.checkDevice(
+            ip: "192.168.1.10",
+            timeout: 2,
+            fetchData: { request in
+                attempts += 1
+                XCTAssertEqual(request.url?.absoluteString, "http://192.168.1.10/api/system/info")
+                XCTAssertEqual(request.timeoutInterval, 2)
+                if attempts == 1 {
+                    throw URLError(.timedOut)
+                }
+                let response = try XCTUnwrap(
+                    HTTPURLResponse(
+                        url: try XCTUnwrap(request.url),
+                        statusCode: 200,
+                        httpVersion: nil,
+                        headerFields: nil
+                    )
+                )
+                return (payload, response)
+            }
+        )
+
+        XCTAssertEqual(attempts, 2)
+        XCTAssertEqual(device.name, "bitaxe")
+        XCTAssertEqual(device.hashrate, 500)
+    }
+
+    func testCheckDevicePreservesCancellationWithoutRetry() async {
+        let cancellationErrors: [Error] = [CancellationError(), URLError(.cancelled)]
+
+        for cancellationError in cancellationErrors {
+            var attempts = 0
+            do {
+                _ = try await DeviceManagementService.checkDevice(
+                    ip: "192.168.1.10",
+                    fetchData: { _ in
+                        attempts += 1
+                        throw cancellationError
+                    }
+                )
+                XCTFail("Expected cancellation")
+            } catch is CancellationError {
+                XCTAssertTrue(cancellationError is CancellationError)
+            } catch let error as URLError {
+                XCTAssertEqual(error.code, .cancelled)
+                XCTAssertTrue(cancellationError is URLError)
+            } catch {
+                XCTFail("Expected original cancellation, received \(error)")
+            }
+            XCTAssertEqual(attempts, 1)
+        }
+    }
+
+    func testCheckDevicePreservesMalformedResponseDiagnostics() async {
+        let payload = Data("{malformed".utf8)
+        do {
+            _ = try await DeviceManagementService.checkDevice(
+                ip: "192.168.1.10",
+                fetchData: { request in
+                    let response = try XCTUnwrap(
+                        HTTPURLResponse(
+                            url: try XCTUnwrap(request.url),
+                            statusCode: 200,
+                            httpVersion: nil,
+                            headerFields: nil
+                        )
+                    )
+                    return (payload, response)
+                }
+            )
+            XCTFail("Expected decoding error")
+        } catch DeviceCheckError.decodingError(_, let swiftError, let jsonData) {
+            XCTAssertNotNil(swiftError)
+            XCTAssertEqual(jsonData, payload)
+        } catch {
+            XCTFail("Expected decoding diagnostics, received \(error)")
+        }
+    }
+
+    func testCheckDeviceReportsIncompatibleIdentityWithoutCallingItMalformed() async {
+        do {
+            _ = try await DeviceManagementService.checkDevice(
+                ip: "192.168.1.10",
+                fetchData: { request in
+                    let response = try XCTUnwrap(
+                        HTTPURLResponse(
+                            url: try XCTUnwrap(request.url),
+                            statusCode: 200,
+                            httpVersion: nil,
+                            headerFields: nil
+                        )
+                    )
+                    return (Data("{}".utf8), response)
+                }
+            )
+            XCTFail("Expected incompatible device")
+        } catch DeviceCheckError.notBitaxeDevice {
+            // A valid response without miner identity is incompatible, not malformed JSON.
+        } catch {
+            XCTFail("Expected notBitaxeDevice, received \(error)")
+        }
+    }
+
     func testSaveDeviceWritesSavedDevicesAndSavedDeviceIPsAndUpdatesSelectedIP() throws {
         let device = SavedDevice(name: "Miner A", ipAddress: "192.168.1.10")
 
@@ -62,7 +215,8 @@ final class DeviceManagementServiceTests: XCTestCase {
         XCTAssertTrue(onboardingDefaults.bool(forKey: "hasCompletedOnboarding"))
     }
 
-    func testSaveDevicesPreservesSelectionWhenAllDevicesAlreadyExist() throws {
+    func testSaveDevicesCompletesOnboardingAndPreservesSelectionWhenAllDevicesAlreadyExist() throws
+    {
         let first = SavedDevice(name: "Miner A", ipAddress: "192.168.1.10")
         let second = SavedDevice(name: "Miner B", ipAddress: "192.168.1.11")
         try seedSavedDevices([first, second], selectedIP: first.ipAddress)
@@ -71,7 +225,41 @@ final class DeviceManagementServiceTests: XCTestCase {
 
         XCTAssertEqual(storedDevices(), [first, second])
         XCTAssertEqual(sharedDefaults.string(forKey: "bitaxeIPAddress"), first.ipAddress)
+        XCTAssertTrue(onboardingDefaults.bool(forKey: "hasCompletedOnboarding"))
+    }
+
+    func testSavingAnEmptyBatchDoesNotCompleteOnboarding() throws {
+        let existing = SavedDevice(name: "Miner A", ipAddress: "192.168.1.10")
+        let originalData = try JSONEncoder().encode([existing])
+        sharedDefaults.set(originalData, forKey: "savedDevices")
+
+        try DeviceManagementService.saveDevices([])
+
         XCTAssertFalse(onboardingDefaults.bool(forKey: "hasCompletedOnboarding"))
+        XCTAssertEqual(sharedDefaults.data(forKey: "savedDevices"), originalData)
+    }
+
+    func testFailedPersistenceDoesNotCompleteOnboardingOrReplaceSavedDevices() throws {
+        let existing = SavedDevice(name: "Miner A", ipAddress: "192.168.1.10")
+        let originalData = try JSONEncoder().encode([existing])
+        sharedDefaults.set(originalData, forKey: "savedDevices")
+        sharedDefaults.set(existing.ipAddress, forKey: "bitaxeIPAddress")
+        var newDevice = SavedDevice(name: "Miner B", ipAddress: "192.168.1.11")
+        newDevice.relocationRecords = [
+            SavedDevice.RelocationRecord(
+                operationID: "invalid-date",
+                sequence: 1,
+                previousIPAddress: "192.168.1.12",
+                currentIPAddress: newDevice.ipAddress,
+                cutoff: Date(timeIntervalSinceReferenceDate: .infinity)
+            )
+        ]
+
+        XCTAssertThrowsError(try DeviceManagementService.saveDevice(newDevice))
+
+        XCTAssertFalse(onboardingDefaults.bool(forKey: "hasCompletedOnboarding"))
+        XCTAssertEqual(sharedDefaults.data(forKey: "savedDevices"), originalData)
+        XCTAssertEqual(sharedDefaults.string(forKey: "bitaxeIPAddress"), existing.ipAddress)
     }
 
     func testRecordMACAddressStoresNormalizedIdentityAndPublishesItForTheWidget() throws {
@@ -357,7 +545,7 @@ final class DeviceManagementServiceTests: XCTestCase {
             ["192.168.1.77"]
         )
         XCTAssertEqual(sharedDefaults.string(forKey: "bitaxeIPAddress"), "192.168.1.77")
-        XCTAssertFalse(onboardingDefaults.bool(forKey: "hasCompletedOnboarding"))
+        XCTAssertTrue(onboardingDefaults.bool(forKey: "hasCompletedOnboarding"))
         XCTAssertEqual(
             SavedDeviceAddressAliases(defaults: sharedDefaults).currentAddress(for: "192.168.1.10"),
             "192.168.1.77"

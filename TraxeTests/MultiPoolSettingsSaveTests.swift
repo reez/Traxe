@@ -894,6 +894,254 @@ final class MultiPoolSettingsSaveTests: XCTestCase {
         XCTAssertEqual(pools[0]["stratumURL"] as? String, "solo.ckpool.org")
     }
 
+    func testAdjustFanSpeedSendsTheManualSpeedUnderBothFirmwareKeys() async throws {
+        let appGroupDefaults = try XCTUnwrap(
+            UserDefaults(suiteName: SettingsViewModel.sharedUserDefaultsSuiteName)
+        )
+        appGroupDefaults.set("192.0.2.10", forKey: "bitaxeIPAddress")
+        let fixtureURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures")
+            .appendingPathComponent("Firmware")
+            .appendingPathComponent("esp-miner-string-system-info.json")
+        let payload = try Data(contentsOf: fixtureURL)
+
+        MultiPoolURLProtocolStub.requestHandler = { request in
+            let response = try XCTUnwrap(
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )
+            )
+            return (response, request.httpMethod == "GET" ? payload : Data())
+        }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MultiPoolURLProtocolStub.self]
+        let schema = Schema([HistoricalDataPoint.self])
+        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
+        let viewModel = SettingsViewModel(
+            sharedUserDefaults: appGroupDefaults,
+            networkService: NetworkService(session: URLSession(configuration: configuration)),
+            modelContext: container.mainContext,
+            shouldFetchDeviceSettingsOnLoad: false
+        )
+
+        await viewModel.fetchDeviceSettings()
+        XCTAssertEqual(viewModel.fanSpeed, 75)
+        viewModel.isAutoFan = false
+        MultiPoolURLProtocolStub.capturedRequests = []
+
+        await viewModel.adjustFanSpeed(by: 5)
+
+        XCTAssertEqual(viewModel.fanSpeed, 80)
+        XCTAssertEqual(MultiPoolURLProtocolStub.capturedRequests.map { $0.httpMethod }, ["PATCH"])
+        let body = try XCTUnwrap(
+            JSONSerialization.jsonObject(
+                with: try XCTUnwrap(MultiPoolURLProtocolStub.capturedRequests[0].capturedBody)
+            ) as? [String: Any]
+        )
+        // ESP-Miner 2.10 and earlier read `fanspeed`; 2.11 and later read `manualFanSpeed`.
+        XCTAssertEqual(body as? [String: Int], ["fanspeed": 80, "manualFanSpeed": 80])
+    }
+
+    func testLegacyEspMinerPoolSaveAsksForARestartOnlyWhenThePoolChanged() async throws {
+        let appGroupDefaults = try XCTUnwrap(
+            UserDefaults(suiteName: SettingsViewModel.sharedUserDefaultsSuiteName)
+        )
+        appGroupDefaults.set("192.0.2.10", forKey: "bitaxeIPAddress")
+        let fixtureURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures")
+            .appendingPathComponent("Firmware")
+            .appendingPathComponent("esp-miner-string-system-info.json")
+        // The fixture's placeholder SV2 pubkeys fail validation on save. A miner that reports
+        // valid ones lets the first save resend exactly what it reported.
+        let validAuthorityPubkey = "9c4zpyJ2ndm4e8sP2uNc1VNCGxYjqaxWS6wUCjk8zFj6njFquH6"
+        let payload = Data(
+            try String(contentsOf: fixtureURL, encoding: .utf8)
+                .replacing("primaryAuthorityPubkey", with: validAuthorityPubkey)
+                .replacing("fallbackAuthorityPubkey", with: validAuthorityPubkey)
+                .utf8
+        )
+
+        MultiPoolURLProtocolStub.requestHandler = { request in
+            let response = try XCTUnwrap(
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )
+            )
+            return (response, request.httpMethod == "GET" ? payload : Data())
+        }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MultiPoolURLProtocolStub.self]
+        let schema = Schema([HistoricalDataPoint.self])
+        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
+        let viewModel = SettingsViewModel(
+            sharedUserDefaults: appGroupDefaults,
+            networkService: NetworkService(session: URLSession(configuration: configuration)),
+            modelContext: container.mainContext,
+            shouldFetchDeviceSettingsOnLoad: false
+        )
+
+        await viewModel.fetchDeviceSettings()
+        XCTAssertFalse(viewModel.supportsPoolModeSettings)
+        XCTAssertFalse(viewModel.needsRestartToApplySettings)
+
+        // Saving exactly what the miner reports changes nothing, so no restart is needed.
+        var didSave = await viewModel.savePoolConfiguration()
+
+        XCTAssertTrue(didSave)
+        XCTAssertFalse(viewModel.needsRestartToApplySettings)
+
+        MultiPoolURLProtocolStub.capturedRequests = []
+        viewModel.stratumURL = "solo.ckpool.org"
+        didSave = await viewModel.savePoolConfiguration()
+
+        XCTAssertTrue(didSave)
+        XCTAssertTrue(
+            viewModel.needsRestartToApplySettings,
+            "ESP-Miner before 2.15 applies a changed pool only after a restart"
+        )
+        XCTAssertFalse(
+            MultiPoolURLProtocolStub.capturedRequests.contains {
+                $0.url?.absoluteString == "http://192.0.2.10/api/system/restart"
+            },
+            "The restart is offered to the user, not forced"
+        )
+    }
+
+    func testNerdQaxePoolSaveDoesNotAskForARestartButAHostnameChangeDoes() async throws {
+        let appGroupDefaults = try XCTUnwrap(
+            UserDefaults(suiteName: SettingsViewModel.sharedUserDefaultsSuiteName)
+        )
+        appGroupDefaults.set("192.0.2.10", forKey: "bitaxeIPAddress")
+        let fixtureURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures")
+            .appendingPathComponent("Firmware")
+            .appendingPathComponent("nerdqaxe-v1-0-37-2-lts-system-info.json")
+        let payload = try Data(contentsOf: fixtureURL)
+
+        MultiPoolURLProtocolStub.requestHandler = { request in
+            let response = try XCTUnwrap(
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )
+            )
+            return (response, request.httpMethod == "GET" ? payload : Data())
+        }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MultiPoolURLProtocolStub.self]
+        let schema = Schema([HistoricalDataPoint.self])
+        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
+        let viewModel = SettingsViewModel(
+            sharedUserDefaults: appGroupDefaults,
+            networkService: NetworkService(session: URLSession(configuration: configuration)),
+            modelContext: container.mainContext,
+            shouldFetchDeviceSettingsOnLoad: false
+        )
+
+        await viewModel.fetchDeviceSettings()
+        XCTAssertTrue(viewModel.supportsPoolModeSettings)
+        viewModel.stratumURL = "solo.ckpool.org"
+        viewModel.stratumV2AuthorityPubkey = ""
+        viewModel.fallbackStratumV2AuthorityPubkey = ""
+
+        let didSavePool = await viewModel.savePoolConfiguration()
+
+        XCTAssertTrue(didSavePool)
+        XCTAssertFalse(
+            viewModel.needsRestartToApplySettings,
+            "NerdQAxe reconnects to a changed pool on its own"
+        )
+
+        viewModel.hostname = "nerdqaxe-renamed"
+        let didSaveHostname = await viewModel.saveHostnameConfiguration()
+
+        XCTAssertTrue(didSaveHostname)
+        XCTAssertTrue(
+            viewModel.needsRestartToApplySettings,
+            "NerdQAxe reads a saved hostname only while booting"
+        )
+
+        // The reload after the save put the miner's reported hostname back in the field.
+        let didSaveSameHostname = await viewModel.saveHostnameConfiguration()
+
+        XCTAssertTrue(didSaveSameHostname)
+        XCTAssertFalse(
+            viewModel.needsRestartToApplySettings,
+            "An unchanged hostname needs no restart"
+        )
+    }
+
+    func testEspMinerHostnameSaveAsksForARestartOnlyWhenTheHostnameChanged() async throws {
+        let appGroupDefaults = try XCTUnwrap(
+            UserDefaults(suiteName: SettingsViewModel.sharedUserDefaultsSuiteName)
+        )
+        appGroupDefaults.set("192.0.2.10", forKey: "bitaxeIPAddress")
+        let fixtureURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures")
+            .appendingPathComponent("Firmware")
+            .appendingPathComponent("esp-miner-2-15-0-system-info.json")
+        let payload = try Data(contentsOf: fixtureURL)
+
+        MultiPoolURLProtocolStub.requestHandler = { request in
+            let response = try XCTUnwrap(
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )
+            )
+            return (response, request.httpMethod == "GET" ? payload : Data())
+        }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MultiPoolURLProtocolStub.self]
+        let schema = Schema([HistoricalDataPoint.self])
+        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
+        let viewModel = SettingsViewModel(
+            sharedUserDefaults: appGroupDefaults,
+            networkService: NetworkService(session: URLSession(configuration: configuration)),
+            modelContext: container.mainContext,
+            shouldFetchDeviceSettingsOnLoad: false
+        )
+
+        await viewModel.fetchDeviceSettings()
+        XCTAssertEqual(viewModel.hostname, "bitaxe-215")
+
+        var didSave = await viewModel.saveHostnameConfiguration()
+
+        XCTAssertTrue(didSave)
+        XCTAssertFalse(viewModel.needsRestartToApplySettings)
+
+        viewModel.hostname = "bitaxe-renamed"
+        didSave = await viewModel.saveHostnameConfiguration()
+
+        XCTAssertTrue(didSave)
+        XCTAssertTrue(
+            viewModel.needsRestartToApplySettings,
+            "ESP-Miner applies a hostname while booting"
+        )
+    }
+
     func testPoolCatalogDraftMirrorsTheMinerSlotsAndAddsBlankSelectedSlots() throws {
         let fixtureURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

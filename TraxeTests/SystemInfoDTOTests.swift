@@ -3,6 +3,36 @@ import XCTest
 @testable import Traxe
 
 final class SystemInfoDTOTests: XCTestCase {
+    func testPoolIntegersRejectOutOfRangeAndNonfiniteValues() throws {
+        let values = [
+            "1e100", "-1e100", "9223372036854775808", "-9223372036854777856",
+            "\"NaN\"", "\"Infinity\"", "\"-Infinity\"",
+        ]
+        let decoder = JSONDecoder()
+        decoder.nonConformingFloatDecodingStrategy = .convertFromString(
+            positiveInfinity: "Infinity", negativeInfinity: "-Infinity", nan: "NaN"
+        )
+        for value in values {
+            let data = Data("{\"pools\":[{\"id\":\(value),\"stratumPort\":\(value)}]}".utf8)
+            let info = try decoder.decode(SystemInfoDTO.self, from: data)
+            let pool = try XCTUnwrap(info.pools?.first)
+            XCTAssertNil(pool.id, value)
+            XCTAssertNil(pool.stratumPort, value)
+        }
+    }
+
+    func testPoolIntegersPreserveIntegerBoundsAndFractionalTruncation() throws {
+        let data = Data("{\"id\":\(Int.max),\"stratumPort\":\(Int.min)}".utf8)
+        let bounded = try JSONDecoder().decode(MinerPoolDTO.self, from: data)
+        XCTAssertEqual(bounded.id, Int.max)
+        XCTAssertEqual(bounded.stratumPort, Int.min)
+        let fractional = try JSONDecoder().decode(
+            MinerPoolDTO.self, from: Data(#"{"id":2.9,"stratumPort":-3.9}"#.utf8)
+        )
+        XCTAssertEqual(fractional.id, 2)
+        XCTAssertEqual(fractional.stratumPort, -3)
+    }
+
     func testDecodesStratumV2Settings() throws {
         let payload = """
             {
@@ -170,5 +200,47 @@ final class SystemInfoDTOTests: XCTestCase {
         XCTAssertFalse(systemInfo.supportsActivePoolSelection)
         XCTAssertEqual(systemInfo.primaryPoolID, 0)
         XCTAssertEqual(systemInfo.secondaryPoolID, 1)
+    }
+
+    func testFlexibleFanSpeedRejectsUnrepresentableNumbers() throws {
+        let values = [
+            "1e100", "-1e100", "9223372036854775808", "-9223372036854777856",
+            "\"NaN\"", "\"Infinity\"", "\"-Infinity\"",
+        ]
+        let decoder = JSONDecoder()
+        decoder.nonConformingFloatDecodingStrategy = .convertFromString(
+            positiveInfinity: "Infinity",
+            negativeInfinity: "-Infinity",
+            nan: "NaN"
+        )
+
+        for value in values {
+            let payload = """
+                {"fanspeed": \(value), "minimumFanSpeed": \(value)}
+                """
+            let systemInfo = try decoder.decode(SystemInfoDTO.self, from: Data(payload.utf8))
+
+            XCTAssertNil(systemInfo.fanspeed, value)
+            XCTAssertNil(systemInfo.minimumFanSpeed, value)
+        }
+    }
+
+    func testFlexibleFanSpeedPreservesBoundsAndTruncatesFractionsTowardZero() throws {
+        let boundsPayload = """
+            {"fanspeed": \(Int.max), "minimumFanSpeed": \(Int.min)}
+            """
+        let bounds = try JSONDecoder().decode(SystemInfoDTO.self, from: Data(boundsPayload.utf8))
+        XCTAssertEqual(bounds.fanspeed, Int.max)
+        XCTAssertEqual(bounds.minimumFanSpeed, Int.min)
+
+        let fractionsPayload = """
+            {"fanspeed": 64.9, "minimumFanSpeed": -42.9}
+            """
+        let fractions = try JSONDecoder().decode(
+            SystemInfoDTO.self,
+            from: Data(fractionsPayload.utf8)
+        )
+        XCTAssertEqual(fractions.fanspeed, 64)
+        XCTAssertEqual(fractions.minimumFanSpeed, -42)
     }
 }

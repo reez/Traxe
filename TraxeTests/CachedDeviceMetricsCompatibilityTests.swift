@@ -85,6 +85,34 @@ final class CachedDeviceMetricsCompatibilityTests: XCTestCase {
         XCTAssertNil(decoded["192.168.1.11"]?.networkDifficulty)
     }
 
+    func testCacheRoundTripPreservesMeasurementTimeAndReachability() throws {
+        let measurementTime = Date(timeIntervalSince1970: 1_700_000_000)
+        let metrics = DeviceMetrics(hashrate: 1250, timestamp: measurementTime)
+        let cached = CachedDeviceMetrics(from: metrics, isReachable: false)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(CachedDeviceMetrics.self, from: encoder.encode(cached))
+        XCTAssertEqual(decoded.lastUpdated, measurementTime)
+        XCTAssertEqual(decoded.isReachable, false)
+        let restored = DeviceMetrics(from: decoded)
+        XCTAssertEqual(restored.timestamp, measurementTime)
+        XCTAssertEqual(CachedDeviceMetrics(from: restored).lastUpdated, measurementTime)
+    }
+
+    func testLegacyCacheWithoutReachabilityStillDecodesAsUnknown() throws {
+        let data = Data(
+            #"{"hashrate":700,"lastUpdated":"2023-11-14T22:13:20Z"}"#.utf8
+        )
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let cached = try decoder.decode(CachedDeviceMetrics.self, from: data)
+        XCTAssertNil(cached.isReachable)
+        XCTAssertEqual(cached.hashrate, 700)
+        XCTAssertEqual(cached.lastUpdated, Date(timeIntervalSince1970: 1_700_000_000))
+    }
+
     private func makeEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601

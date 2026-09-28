@@ -9,7 +9,36 @@ private struct CachedDeviceMetrics: Codable {
     var hostname: String?
     var poolURL: String?
     var temperature: Double?
-    var lastUpdated: Date
+    var lastUpdated: Date {
+        didSet { lastUpdatedReferenceTime = lastUpdated.timeIntervalSinceReferenceDate }
+    }
+    // Keep the legacy ISO8601 date for older readers. Its whole-second encoding
+    // cannot order samples from separate refreshes within the same second.
+    var lastUpdatedReferenceTime: TimeInterval?
+    var measurementDate: Date {
+        guard let lastUpdatedReferenceTime, lastUpdatedReferenceTime.isFinite else {
+            return lastUpdated
+        }
+        return Date(timeIntervalSinceReferenceDate: lastUpdatedReferenceTime)
+    }
+    var isReachable: Bool?
+    var isHashrateKnown: Bool?
+    var isHashrateReporting: Bool?
+    var observedAt: Date?
+    var isIncludedInLastKnownTotal: Bool?
+
+    func reading(id: String) -> FleetMetricSnapshot.Reading {
+        .init(
+            id: id,
+            hashrate: isHashrateKnown == false ? nil : hashrate,
+            power: power,
+            measuredAt: measurementDate,
+            isReachable: isReachable,
+            isHashrateReporting: isHashrateReporting,
+            observedAt: observedAt,
+            isIncludedInLastKnownTotal: isIncludedInLastKnownTotal
+        )
+    }
 }
 
 struct WatchHashrateProvider: TimelineProvider {
@@ -72,16 +101,23 @@ struct WatchHashrateProvider: TimelineProvider {
         -> WatchHashrateEntry?
     {
         if !cache.isEmpty {
-            let totalHashrate = cache.values.reduce(0.0) { $0 + $1.hashrate }
-            let displayHashrate = totalHashrate.formattedHashRateWithUnit()
-            let freshness = cache.values.compactMap(\.lastUpdated).max()
+            let deviceCount =
+                UserDefaults(suiteName: appGroupID)?.integer(forKey: "fleetDeviceCount")
+                ?? cache.count
+            let snapshot = FleetMetricSnapshot.make(
+                readings: cache.map { $0.value.reading(id: $0.key) },
+                totalDevices: deviceCount,
+                referenceDate: referenceDate
+            )
+            let displayHashrate = snapshot.totalHashrate?.formattedHashRateWithUnit()
             return WatchHashrateEntry(
                 date: referenceDate,
-                hashrate: displayHashrate.value,
-                unit: displayHashrate.unit,
-                lastUpdated: freshness,
+                hashrate: displayHashrate?.value ?? "--",
+                unit: displayHashrate?.unit ?? "",
+                lastUpdated: snapshot.measuredAt,
                 isPlaceholder: false,
-                relevance: relevance(for: cache, referenceDate: referenceDate)
+                relevance: relevance(for: cache, referenceDate: referenceDate),
+                metricStatus: snapshot.compactStatusText
             )
         }
 
@@ -91,7 +127,8 @@ struct WatchHashrateProvider: TimelineProvider {
                 hashrate: legacy.value,
                 unit: legacy.unit,
                 lastUpdated: legacy.lastUpdated,
-                isPlaceholder: false
+                isPlaceholder: false,
+                metricStatus: "Stale"
             )
         }
 
@@ -107,7 +144,8 @@ struct WatchHashrateProvider: TimelineProvider {
     ) -> TimelineEntryRelevance {
         let staleCutoff = referenceDate.addingTimeInterval(-60 * 30)
         let needsAttention = cache.values.contains { metrics in
-            metrics.hashrate <= 0 || metrics.lastUpdated < staleCutoff
+            metrics.isReachable == false || metrics.hashrate <= 0
+                || metrics.measurementDate < staleCutoff
         }
         if needsAttention {
             return TimelineEntryRelevance(score: 100)
@@ -144,6 +182,7 @@ struct WatchHashrateEntry: TimelineEntry {
     var isPlaceholder: Bool
     // Smart Stack prominence: high when a miner needs attention, low when nominal.
     var relevance: TimelineEntryRelevance? = nil
+    var metricStatus: String = ""
 }
 
 struct TraxeWatchWidgetEntryView: View {
@@ -156,7 +195,7 @@ struct TraxeWatchWidgetEntryView: View {
 
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("TOTAL HASH RATE")
+                    Text(entry.metricStatus.isEmpty ? "TOTAL HASH RATE" : entry.metricStatus)
                         .font(.caption2)
                         .fontDesign(.rounded)
                         .foregroundStyle(.secondary)
@@ -173,10 +212,10 @@ struct TraxeWatchWidgetEntryView: View {
 
                         if !entry.unit.isEmpty {
                             Text(entry.unit)
-                                .font(.caption2)
-                                .fontDesign(.rounded)
-                                .foregroundStyle(.secondary)
-                                .minimumScaleFactor(0.25)
+                            .font(.caption2)
+                            .fontDesign(.rounded)
+                            .foregroundStyle(.secondary)
+                            .minimumScaleFactor(0.25)
                         }
                     }
 
@@ -201,11 +240,14 @@ struct TraxeWatchWidgetEntryView: View {
                     .redacted(reason: entry.isPlaceholder ? .placeholder : [])
 
                 if !entry.unit.isEmpty {
-                    Text(entry.unit)
-                        .font(.caption2)
-                        .fontDesign(.rounded)
-                        .minimumScaleFactor(0.25)
-                        .foregroundStyle(.secondary)
+                    Text(
+                        entry.metricStatus.isEmpty
+                            ? entry.unit : "\(entry.unit) · \(entry.metricStatus)"
+                    )
+                    .font(.caption2)
+                    .fontDesign(.rounded)
+                    .minimumScaleFactor(0.25)
+                    .foregroundStyle(.secondary)
                 }
             }
 
@@ -221,11 +263,14 @@ struct TraxeWatchWidgetEntryView: View {
                     .redacted(reason: entry.isPlaceholder ? .placeholder : [])
 
                 if !entry.unit.isEmpty {
-                    Text(entry.unit)
-                        .font(.caption2)
-                        .fontDesign(.rounded)
-                        .foregroundStyle(.secondary)
-                        .minimumScaleFactor(0.25)
+                    Text(
+                        entry.metricStatus.isEmpty
+                            ? entry.unit : "\(entry.unit) · \(entry.metricStatus)"
+                    )
+                    .font(.caption2)
+                    .fontDesign(.rounded)
+                    .foregroundStyle(.secondary)
+                    .minimumScaleFactor(0.25)
                 }
             }
 
@@ -241,11 +286,14 @@ struct TraxeWatchWidgetEntryView: View {
                     .redacted(reason: entry.isPlaceholder ? .placeholder : [])
 
                 if !entry.unit.isEmpty {
-                    Text(entry.unit)
-                        .font(.caption2)
-                        .fontDesign(.rounded)
-                        .foregroundStyle(.secondary)
-                        .minimumScaleFactor(0.25)
+                    Text(
+                        entry.metricStatus.isEmpty
+                            ? entry.unit : "\(entry.unit) · \(entry.metricStatus)"
+                    )
+                    .font(.caption2)
+                    .fontDesign(.rounded)
+                    .foregroundStyle(.secondary)
+                    .minimumScaleFactor(0.25)
 
                 }
             }
@@ -262,10 +310,13 @@ struct TraxeWatchWidgetEntryView: View {
                     .minimumScaleFactor(0.6)
                     .redacted(reason: entry.isPlaceholder ? .placeholder : [])
                 if !entry.unit.isEmpty {
-                    Text(entry.unit)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fontDesign(.rounded)
+                    Text(
+                        entry.metricStatus.isEmpty
+                            ? entry.unit : "\(entry.unit) · \(entry.metricStatus)"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fontDesign(.rounded)
                 }
             }
         }

@@ -38,6 +38,40 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertTrue(checkedIPs.value.isEmpty)
     }
 
+    func testStartScanKeepsManualEntryAvailableWhenNoNetworkInterfaceIsFound() async {
+        let checkedIPs = LockedBox<[String]>([])
+        var dependencies = makeBaseDependencies()
+        dependencies.urlSession = .init(data: { _ in
+            throw URLError(.timedOut)
+        })
+        dependencies.networkInterfaces = { [] }
+        dependencies.deviceManagement = .init(
+            checkDevice: { ip in
+                checkedIPs.withValue { $0.append(ip) }
+                throw DeviceCheckError.notBitaxeDevice
+            },
+            saveDevice: { _ in },
+            saveDevices: { _ in }
+        )
+
+        let viewModel = OnboardingViewModel(dependencies: dependencies)
+        let result = await viewModel.startScan()
+
+        guard case .networkUnavailable = result else {
+            XCTFail("Expected an unavailable network instead of a permission denial")
+            return
+        }
+        XCTAssertTrue(viewModel.hasScanned)
+        XCTAssertFalse(viewModel.isScanning)
+        XCTAssertTrue(viewModel.hasLocalNetworkPermission)
+        XCTAssertTrue(viewModel.showErrorAlert)
+        XCTAssertEqual(
+            viewModel.errorMessage,
+            "Could not determine a local network interface to scan."
+        )
+        XCTAssertTrue(checkedIPs.value.isEmpty)
+    }
+
     func testTimedOutHostsDoNotTriggerPermissionDeniedDuringSubnetScan() async {
         let checkedIPs = LockedBox<[String]>([])
         var dependencies = makeBaseDependencies()
@@ -103,6 +137,45 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertEqual(checkedIPs.value, ["192.168.1.44"])
         XCTAssertEqual(savedDevices.value.map(\.ipAddress), ["192.168.1.44"])
         XCTAssertEqual(viewModel.discoveredDevices.map(\.ip), ["192.168.1.44"])
+    }
+
+    func testCancelledManualAddDoesNotSaveAResponseThatArrivesAfterCancellation() async throws {
+        let checkStarted = expectation(description: "Manual device check started")
+        let pendingResponse = LockedBox<CheckedContinuation<DiscoveredDevice, Never>?>(nil)
+        let savedDevices = LockedBox<[SavedDevice]>([])
+        var dependencies = makeBaseDependencies()
+        dependencies.urlSession = .init(data: { _ in
+            throw URLError(.timedOut)
+        })
+        dependencies.deviceManagement = .init(
+            checkDevice: { _ in
+                await withCheckedContinuation { continuation in
+                    pendingResponse.withValue { $0 = continuation }
+                    checkStarted.fulfill()
+                }
+            },
+            saveDevice: { device in
+                savedDevices.withValue { $0.append(device) }
+            },
+            saveDevices: { _ in }
+        )
+        let viewModel = OnboardingViewModel(dependencies: dependencies)
+        let request = Task {
+            try await viewModel.checkAndSaveDevice(ip: "192.168.1.44")
+        }
+        await fulfillment(of: [checkStarted], timeout: 1)
+
+        request.cancel()
+        let response = try XCTUnwrap(pendingResponse.value)
+        response.resume(returning: Self.makeDiscoveredDevice(ip: "192.168.1.44"))
+        do {
+            _ = try await request.value
+            XCTFail("A cancelled manual add must not save its late response")
+        } catch is CancellationError {
+        }
+
+        XCTAssertTrue(savedDevices.value.isEmpty)
+        XCTAssertFalse(viewModel.showErrorAlert)
     }
 
     func testSelectDeviceReturnsFalseWhenSaveFails() {

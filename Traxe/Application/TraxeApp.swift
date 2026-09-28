@@ -9,6 +9,7 @@ import RevenueCat
 import SwiftData
 import SwiftUI
 import TipKit
+import UserNotifications
 import WidgetKit
 
 @main
@@ -25,11 +26,12 @@ struct TraxeApp: App {
         do {
             return try ModelContainer(for: schema, configurations: [modelConfiguration])
         } catch {
-            fatalError("Could not create ModelContainer: \\(error)")
+            fatalError("Could not create ModelContainer: \(error)")
         }
     }()
 
     @State private var dashboardViewModel: DashboardViewModel
+    private let notificationDelegate = MinerAlertNotificationDelegate()
 
     init() {
         // Register default settings
@@ -59,6 +61,8 @@ struct TraxeApp: App {
         _dashboardViewModel = State(
             initialValue: DashboardViewModel(modelContext: modelContext)
         )
+
+        UNUserNotificationCenter.current().delegate = notificationDelegate
     }
 
     var body: some Scene {

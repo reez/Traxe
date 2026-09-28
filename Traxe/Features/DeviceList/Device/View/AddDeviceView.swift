@@ -6,6 +6,7 @@ struct AddDeviceView: View {
 
     @State private var ipAddress: String = ""
     @State private var isSaving: Bool = false
+    @State private var manualAddTask: Task<Void, Never>?
     @State private var showingErrorAlert = false
     @State private var errorMessage: String = ""
     @State private var showSettingsAlert = false
@@ -136,6 +137,7 @@ struct AddDeviceView: View {
                     .frame(maxWidth: 700)
                     .frame(maxWidth: .infinity)
                 }
+                .onDisappear(perform: cancelManualAdd)
                 .scrollDismissesKeyboard(.immediately)
                 .navigationTitle("Add Miner")
                 .navigationBarTitleDisplayMode(.inline)
@@ -145,6 +147,7 @@ struct AddDeviceView: View {
                     // to the horizontal leading and trailing edges.
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Cancel") {
+                            cancelManualAdd()
                             dismiss()
                         }
                     }
@@ -276,7 +279,7 @@ struct AddDeviceView: View {
                     .foregroundStyle(.secondary)
                 TextField("IP Address", text: $ipAddress)
                     .textFieldStyle(.plain)
-                    .keyboardType(.decimalPad)
+                    .keyboardType(.numbersAndPunctuation)
                     .textInputAutocapitalization(.never)
                     .focused($isIPAddressFocused)
                     .onChange(of: ipAddress) {
@@ -351,39 +354,45 @@ struct AddDeviceView: View {
             return
         }
 
-        isSaving = true
         let trimmedIP = ipAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !existingDeviceIPs.contains(trimmedIP) else {
+            errorMessage = DeviceSaveError.addressAlreadySaved.localizedDescription
+            showingErrorAlert = true
+            return
+        }
+        isSaving = true
 
-        Task {
-            do {
-                let discoveredDevice = try await DeviceManagementService.checkDevice(ip: trimmedIP)
-                let deviceToSave = SavedDevice(
-                    name: discoveredDevice.name,
-                    ipAddress: discoveredDevice.ip,
-                    macAddress: discoveredDevice.macAddress
-                )
-                try DeviceManagementService.saveDevice(deviceToSave)
-
-                await MainActor.run {
+        manualAddTask = Task {
+            defer {
+                if !Task.isCancelled {
                     isSaving = false
-                    dismiss()
-                }
-
-            } catch let error as DeviceCheckError {
-                await MainActor.run {
-                    errorMessage = error.localizedDescription
-                    showingErrorAlert = true
-                    isSaving = false
-                }
-            } catch {
-                await MainActor.run {
-                    errorMessage =
-                        "An unexpected error occurred while saving: \(error.localizedDescription)"
-                    showingErrorAlert = true
-                    isSaving = false
+                    manualAddTask = nil
                 }
             }
+            do {
+                _ = try await viewModel.checkAndSaveDevice(ip: trimmedIP, requireNewDevice: true)
+                dismiss()
+            } catch let error as DeviceSaveError {
+                guard !Task.isCancelled else { return }
+                errorMessage = error.localizedDescription
+                showingErrorAlert = true
+            } catch let error as DeviceCheckError {
+                guard !Task.isCancelled else { return }
+                errorMessage = error.localizedDescription
+                showingErrorAlert = true
+            } catch {
+                guard !Task.isCancelled else { return }
+                errorMessage =
+                    "An unexpected error occurred while saving: \(error.localizedDescription)"
+                showingErrorAlert = true
+            }
         }
+    }
+
+    private func cancelManualAdd() {
+        manualAddTask?.cancel()
+        manualAddTask = nil
+        isSaving = false
     }
 
     private func addDevice() {

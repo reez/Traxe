@@ -76,6 +76,50 @@ final class MinerTelemetryDTOTests: XCTestCase {
         )
     }
 
+    func testIntegerTelemetryRejectsUnrepresentableNumbers() throws {
+        let values = [
+            "1e100", "-1e100", "9223372036854775808", "-9223372036854777856",
+            "\"NaN\"", "\"Infinity\"", "\"-Infinity\"",
+        ]
+        let decoder = JSONDecoder()
+        decoder.nonConformingFloatDecodingStrategy = .convertFromString(
+            positiveInfinity: "Infinity",
+            negativeInfinity: "-Infinity",
+            nan: "NaN"
+        )
+
+        for value in values {
+            let payload = """
+                {"hostname": "bitaxe", "frequency": \(value), "fanspeed": \(value), "uptimeSeconds": \(value)}
+                """
+            let telemetry = try decoder.decode(MinerTelemetryDTO.self, from: Data(payload.utf8))
+
+            XCTAssertNil(telemetry.frequency, value)
+            XCTAssertNil(telemetry.fanspeed, value)
+            XCTAssertNil(telemetry.uptimeSeconds, value)
+            XCTAssertTrue(telemetry.isCompatibleMiner)
+        }
+    }
+
+    func testIntegerTelemetryPreservesBoundsAndTruncatesFractionsTowardZero() throws {
+        let payload = """
+            {
+                "sharesAccepted": \(Int.max),
+                "sharesRejected": \(Int.min),
+                "fanspeed": 64.9,
+                "wifiRSSI": -42.9,
+                "frequency": " 600 "
+            }
+            """
+        let telemetry = try JSONDecoder().decode(MinerTelemetryDTO.self, from: Data(payload.utf8))
+
+        XCTAssertEqual(telemetry.sharesAccepted, Int.max)
+        XCTAssertEqual(telemetry.sharesRejected, Int.min)
+        XCTAssertEqual(telemetry.fanspeed, 64)
+        XCTAssertEqual(telemetry.wifiRSSI, -42)
+        XCTAssertEqual(telemetry.frequency, 600)
+    }
+
     private func decodeTelemetryFixture(named filename: String) throws -> MinerTelemetryDTO {
         let data = try fixtureData(named: filename)
         return try JSONDecoder().decode(MinerTelemetryDTO.self, from: data)

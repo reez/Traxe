@@ -50,7 +50,7 @@ enum MinerAlertStateMachine {
                 device.consecutiveFailures = 0
                 device.wasReachable = true
 
-                if let temperature = fetchedTemperatures[ipAddress] {
+                if let temperature = fetchedTemperatures[ipAddress], temperature.isFinite {
                     let isHot = temperature >= hotTemperatureThreshold
                     if isHot {
                         if alertsEnabled,

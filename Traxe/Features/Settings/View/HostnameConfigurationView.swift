@@ -32,10 +32,11 @@ struct HostnameConfigurationView: View {
 
                     Task {
                         let success = await viewModel.saveHostnameConfiguration()
-                        if success {
-                            dismiss()
-                        } else {
+                        if !success {
                             showErrorAlert = true
+                        } else if !viewModel.needsRestartToApplySettings {
+                            // Otherwise the restart alert below is showing; it dismisses.
+                            dismiss()
                         }
                     }
                 }
@@ -63,6 +64,13 @@ struct HostnameConfigurationView: View {
                     ?? "An unknown error occurred. Please try again."
             )
         }
+        .restartToApplySettingsAlert(
+            isPresented: $viewModel.needsRestartToApplySettings,
+            message:
+                "The hostname is saved, but this miner only applies it when it restarts. Mining pauses while the miner restarts.",
+            restart: { await viewModel.restartDevice() },
+            dismiss: { dismiss() }
+        )
     }
 }
 

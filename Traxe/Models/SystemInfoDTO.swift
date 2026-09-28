@@ -126,7 +126,7 @@ struct MinerPoolDTO: Codable, Equatable {
     private func int(forKey key: String) -> Int? {
         switch properties[key] {
         case .int(let value): return value
-        case .double(let value): return Int(value)
+        case .double(let value): return Int(exactly: value.rounded(.towardZero))
         default: return nil
         }
     }
@@ -268,19 +268,21 @@ struct SystemInfoDTO: Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
         // Decode all known fields as optional
-        power = try container.decodeIfPresent(Double.self, forKey: .power)
-        voltage = try container.decodeIfPresent(Double.self, forKey: .voltage)
-        current = try container.decodeIfPresent(Double.self, forKey: .current)
-        temp = try container.decodeIfPresent(Double.self, forKey: .temp)
+        power = try Self.decodeFiniteDouble(container: container, key: .power)
+        voltage = try Self.decodeFiniteDouble(container: container, key: .voltage)
+        current = try Self.decodeFiniteDouble(container: container, key: .current)
+        temp = try Self.decodeFiniteDouble(container: container, key: .temp)
         // Handle vrTemp - support both Int (Bitaxe) and Double (NerdQAxe)
-        if let doubleValue = try? container.decode(Double.self, forKey: .vrTemp) {
+        if let doubleValue = try? container.decode(Double.self, forKey: .vrTemp),
+            doubleValue.isFinite
+        {
             vrTemp = doubleValue
         } else if let intValue = try? container.decode(Int.self, forKey: .vrTemp) {
             vrTemp = Double(intValue)
         } else {
             vrTemp = nil
         }
-        expectedHashrate = try container.decodeIfPresent(Double.self, forKey: .expectedHashrate)
+        expectedHashrate = try Self.decodeFiniteDouble(container: container, key: .expectedHashrate)
         errorPercentage = Self.decodeDoubleFlexible(container: container, key: .errorPercentage)
         _bestDiff = Self.decodeDiffAsString(container: container, key: ._bestDiff)
         bestSessionDiff = Self.decodeDiffAsString(container: container, key: .bestSessionDiff)
@@ -383,35 +385,36 @@ struct SystemInfoDTO: Codable {
         // Decode NerdQAxe-specific fields (optional, won't affect Bitaxe)
         deviceModel = try container.decodeIfPresent(String.self, forKey: .deviceModel)
         hostip = try container.decodeIfPresent(String.self, forKey: .hostip)
-        maxPower = try container.decodeIfPresent(Double.self, forKey: .maxPower)
-        minPower = try container.decodeIfPresent(Double.self, forKey: .minPower)
-        maxVoltage = try container.decodeIfPresent(Double.self, forKey: .maxVoltage)
-        minVoltage = try container.decodeIfPresent(Double.self, forKey: .minVoltage)
+        maxPower = try Self.decodeFiniteDouble(container: container, key: .maxPower)
+        minPower = try Self.decodeFiniteDouble(container: container, key: .minPower)
+        maxVoltage = try Self.decodeFiniteDouble(container: container, key: .maxVoltage)
+        minVoltage = try Self.decodeFiniteDouble(container: container, key: .minVoltage)
         hashRateTimestamp = try container.decodeIfPresent(Int.self, forKey: .hashRateTimestamp)
-        hashRate_10m = try container.decodeIfPresent(Double.self, forKey: .hashRate_10m)
-        hashRate_1h = try container.decodeIfPresent(Double.self, forKey: .hashRate_1h)
-        hashRate_1d = try container.decodeIfPresent(Double.self, forKey: .hashRate_1d)
+        hashRate_10m = try Self.decodeFiniteDouble(container: container, key: .hashRate_10m)
+        hashRate_1h = try Self.decodeFiniteDouble(container: container, key: .hashRate_1h)
+        hashRate_1d = try Self.decodeFiniteDouble(container: container, key: .hashRate_1d)
         jobInterval = try container.decodeIfPresent(Int.self, forKey: .jobInterval)
-        overheat_temp = try container.decodeIfPresent(Double.self, forKey: .overheat_temp)
+        overheat_temp = try Self.decodeFiniteDouble(container: container, key: .overheat_temp)
         autoscreenoff = try container.decodeIfPresent(Int.self, forKey: .autoscreenoff)
         lastResetReason = try container.decodeIfPresent(String.self, forKey: .lastResetReason)
         stratum = try container.decodeIfPresent(StratumInfoDTO.self, forKey: .stratum)
 
         // Handle hashRate variants - try the main key first, then NerdQAxe/Bitaxe fallbacks
-        if let hr = try? container.decode(Double.self, forKey: .hashRate) {
+        if let hr = try? container.decode(Double.self, forKey: .hashRate), hr.isFinite {
             hashRate = hr
         } else {
             // Try NerdQAxe hashrate variants first (most recent data)
-            if let hr = try? container.decode(Double.self, forKey: .hashRate_10m) {
+            if let hr = try? container.decode(Double.self, forKey: .hashRate_10m), hr.isFinite {
                 hashRate = hr
-            } else if let hr = try? container.decode(Double.self, forKey: .hashRate_1h) {
+            } else if let hr = try? container.decode(Double.self, forKey: .hashRate_1h), hr.isFinite
+            {
                 hashRate = hr
             } else {
                 // Fall back to original Bitaxe logic for backward compatibility
                 if let hr = try? dynamicContainer.decode(
                     Double.self,
                     forKey: DynamicCodingKey(stringValue: "hashrate")
-                ) {
+                ), hr.isFinite {
                     hashRate = hr
                 } else {
                     hashRate = nil
@@ -665,7 +668,7 @@ extension MinerTelemetryDTO {
             return intValue
         }
         if let doubleValue = try? container.decodeIfPresent(Double.self, forKey: Self.key(key)) {
-            return Int(doubleValue)
+            return Int(exactly: doubleValue.rounded(.towardZero))
         }
         if let stringValue = try? container.decodeIfPresent(String.self, forKey: Self.key(key)) {
             return Int(stringValue.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -678,13 +681,16 @@ extension MinerTelemetryDTO {
         key: String
     ) -> Double? {
         if let doubleValue = try? container.decodeIfPresent(Double.self, forKey: Self.key(key)) {
-            return doubleValue
+            return doubleValue.isFinite ? doubleValue : nil
         }
         if let intValue = try? container.decodeIfPresent(Int.self, forKey: Self.key(key)) {
             return Double(intValue)
         }
         if let stringValue = try? container.decodeIfPresent(String.self, forKey: Self.key(key)) {
-            return Double(stringValue.trimmingCharacters(in: .whitespacesAndNewlines))
+            guard let value = Double(stringValue.trimmingCharacters(in: .whitespacesAndNewlines)),
+                value.isFinite
+            else { return nil }
+            return value
         }
         return nil
     }
@@ -859,6 +865,17 @@ struct ErrorDTO: Codable {
 // Decode both string and numeric payloads and normalize everything to a string.
 // Prefer integers first to avoid appending ".0" and to preserve precision.
 extension SystemInfoDTO {
+    fileprivate static func decodeFiniteDouble<Key: CodingKey>(
+        container: KeyedDecodingContainer<Key>,
+        key: Key
+    ) throws -> Double? {
+        guard let value = try container.decodeIfPresent(Double.self, forKey: key), value.isFinite
+        else {
+            return nil
+        }
+        return value
+    }
+
     fileprivate static func decodeDiffAsString(
         container: KeyedDecodingContainer<CodingKeys>,
         key: CodingKeys
@@ -884,7 +901,7 @@ extension SystemInfoDTO {
             return intValue
         }
         if let doubleValue = try? container.decodeIfPresent(Double.self, forKey: key) {
-            return Int(doubleValue)
+            return Int(exactly: doubleValue.rounded(.towardZero))
         }
         return nil
     }
@@ -955,13 +972,14 @@ extension SystemInfoDTO {
         key: CodingKeys
     ) -> Double? {
         if let doubleValue = try? container.decodeIfPresent(Double.self, forKey: key) {
-            return doubleValue
+            return doubleValue.isFinite ? doubleValue : nil
         }
         if let intValue = try? container.decodeIfPresent(Int.self, forKey: key) {
             return Double(intValue)
         }
         if let stringValue = try? container.decodeIfPresent(String.self, forKey: key) {
-            return Double(stringValue)
+            guard let value = Double(stringValue), value.isFinite else { return nil }
+            return value
         }
         return nil
     }

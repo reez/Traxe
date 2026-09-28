@@ -47,6 +47,7 @@ struct DeviceListView: View {
     @State private var viewModel: DeviceListViewModel
     @State private var navigation: DeviceListNavigationState
     private let dashboardViewModel: DashboardViewModel
+    @State private var pendingConnection: (id: UUID, ipAddress: String)?
     @Binding var navigateToDeviceList: Bool
 
     init(
@@ -77,30 +78,17 @@ struct DeviceListView: View {
     @State private var showConnectionErrorAlert = false
     @State private var connectionErrorMessage = ""
     @State private var connectionErrorDeviceInfo = ""
-    @State private var showingAddSheet = false
-    @State private var showingPaywallSheet = false
+    @State private var planVerification = PlanVerificationPresentation()
     @State private var showingSubscriptionExpiredAlert = false
-    @State private var customerInfo: CustomerInfo? = nil
+    @State private var subscriptionStatus = SubscriptionStatusViewModel()
     private var whatsNewTip = WhatsNewTip()
 
     private var subscriptionAccessPolicy: SubscriptionAccessPolicy {
-        let proIsActive = customerInfo?.entitlements["Pro"]?.isActive == true
-        let miners5IsActive = customerInfo?.entitlements["Miners_5"]?.isActive == true
-
-        return SubscriptionAccessPolicy(
-            proIsActive: proIsActive,
-            miners5IsActive: miners5IsActive,
-            hasLoadedSubscription: customerInfo != nil
-        )
+        subscriptionStatus.accessPolicy
     }
 
     private var addDeviceLimit: Int {
-        if customerInfo == nil {
-            // Preserve previous UX for add flow while subscription is loading.
-            return 1
-        }
-
-        return subscriptionAccessPolicy.deviceLimit
+        subscriptionStatus.addDeviceLimit
     }
 
     private func handleDeviceTap(device: SavedDevice, isAccessible: Bool) {
@@ -109,9 +97,7 @@ struct DeviceListView: View {
                 await connectAndNavigate(to: device)
             }
         } else {
-            if subscriptionAccessPolicy.shouldShowSubscriptionExpiredAlert {
-                showingSubscriptionExpiredAlert = true
-            }
+            showingSubscriptionExpiredAlert = true
         }
     }
 
@@ -166,12 +152,13 @@ struct DeviceListView: View {
                 await viewModel.updateAggregatedStats()
             }
         }
-        .onChange(of: scenePhase) { oldPhase, newPhase in
-            if newPhase == .active {
-                Task {
-                    await viewModel.updateAggregatedStats()
-                }
-            }
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            _ = viewModel.configureModelContextIfNeeded(modelContext)
+            await viewModel.updateAggregatedStats()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
+            viewModel.synchronizeSavedDevices()
         }
         .onChange(of: viewModel.savedDevices.map(\.ipAddress)) { _, ipAddresses in
             // Any deletion path, including the edit-mode list, must drop a retained
@@ -186,18 +173,10 @@ struct DeviceListView: View {
                 dismiss()
             }
         }
-        .onAppear {
-            let didConfigureModelContext = viewModel.configureModelContextIfNeeded(modelContext)
-            if didConfigureModelContext {
-                Task {
-                    await viewModel.updateAggregatedStats()
-                }
-            }
-        }
         // App-wide presentations stay on the split view rather than on a column, so
         // collapsing or expanding never changes their presentation identity.
         .sheet(
-            isPresented: $showingAddSheet,
+            isPresented: $planVerification.showingAddMiner,
             onDismiss: {
                 viewModel.loadDevices()
             }
@@ -219,8 +198,29 @@ struct DeviceListView: View {
                 }
             )
         }
-        .sheet(isPresented: $showingPaywallSheet) {
-            PaywallView()
+        .sheet(isPresented: $planVerification.showingPlans) {
+            PaywallView(subscriptionStatus: subscriptionStatus)
+        }
+        .sheet(
+            isPresented: $planVerification.isPresented,
+            onDismiss: {
+                planVerification.routeAfterDismissal(
+                    destination: subscriptionStatus.addMinerDestination(
+                        savedDeviceCount: viewModel.savedDevices.count
+                    )
+                )
+            }
+        ) {
+            PlanVerificationView(
+                subscriptionStatus: subscriptionStatus,
+                savedDeviceCount: viewModel.savedDevices.count,
+                onVerified: {
+                    planVerification.complete(.verified)
+                },
+                onViewPlans: {
+                    planVerification.complete(.viewPlans)
+                }
+            )
         }
         .alert("Connection Failed", isPresented: $showConnectionErrorAlert) {
             Button("OK") {}
@@ -232,14 +232,18 @@ struct DeviceListView: View {
             return Text(message)
         }
         .alert("Plan Limit Reached", isPresented: $showingSubscriptionExpiredAlert) {
-            Button("OK") {}
+            Button("View Plans") { planVerification.showingPlans = true }
+            Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Your current plan includes one miner; this miner is outside that limit.")
+            Text(
+                "This miner is outside your current plan’s limit of \(subscriptionAccessPolicy.deviceLimit)."
+            )
         }
-        .task {
-            for await info in Purchases.shared.customerInfoStream {
-                self.customerInfo = info
+        .task(id: scenePhase) {
+            guard scenePhase == .active, Purchases.isConfigured, !ProcessInfo.isPreview else {
+                return
             }
+            await subscriptionStatus.observe()
         }
         .task {
             for await status in whatsNewTip.statusUpdates {
@@ -343,12 +347,7 @@ struct DeviceListView: View {
 
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    if viewModel.savedDevices.count < addDeviceLimit {
-                        showingAddSheet = true
-                    } else {
-                        // User is at or over their limit (or has 0 devices but somehow no free slot logic triggered, though current logic covers this), show paywall
-                        showingPaywallSheet = true
-                    }
+                    presentAddMiner()
                 } label: {
                     Label("Add Miner", systemImage: "plus")
                 }
@@ -357,7 +356,23 @@ struct DeviceListView: View {
         }
     }
 
+    private func presentAddMiner() {
+        planVerification.presentAddMiner(
+            destination: subscriptionStatus.addMinerDestination(
+                savedDeviceCount: viewModel.savedDevices.count
+            )
+        )
+    }
+
     private func connectAndNavigate(to device: SavedDevice) async {
+        guard pendingConnection?.ipAddress != device.ipAddress else { return }
+        let requestID = UUID()
+        pendingConnection = (requestID, device.ipAddress)
+        defer {
+            if pendingConnection?.id == requestID {
+                pendingConnection = nil
+            }
+        }
         showConnectionErrorAlert = false
         connectionErrorMessage = ""
         connectionErrorDeviceInfo = ""
@@ -372,6 +387,11 @@ struct DeviceListView: View {
         }
 
         await dashboardViewModel.connect()
+
+        guard !Task.isCancelled, pendingConnection?.id == requestID,
+            UserDefaults(suiteName: "group.matthewramsden.traxe")?
+                .string(forKey: "bitaxeIPAddress") == device.ipAddress
+        else { return }
 
         if dashboardViewModel.connectionState == .connected {
             // Preload a larger historical window so device summary has trend context immediately

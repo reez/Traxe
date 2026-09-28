@@ -31,7 +31,7 @@ struct FleetHealthCardView: View {
             ),
             FleetHealthSignalSegment(
                 id: "offline",
-                title: "Offline",
+                title: "Unreachable",
                 count: snapshot.offline,
                 color: Color(uiColor: .tertiaryLabel)
             ),
@@ -74,7 +74,7 @@ struct FleetHealthCardView: View {
         let statusSignals = [
             accessibilitySignal(count: snapshot.online, label: "online"),
             accessibilitySignal(count: snapshot.paused, label: "paused"),
-            accessibilitySignal(count: snapshot.offline, label: "offline"),
+            accessibilitySignal(count: snapshot.offline, label: "unreachable"),
             accessibilitySignal(count: snapshot.unknown, label: "unknown"),
         ].compactMap(\.self)
         let alertSignals = [

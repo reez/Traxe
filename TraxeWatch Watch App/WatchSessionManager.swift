@@ -86,6 +86,10 @@ final class WatchSessionManager: NSObject, WCSessionDelegate {
 
         if let data = payload["cacheData"] as? Data {
             defaults.set(data, forKey: deviceCacheKey)
+            if payload["totalHashrate"] == nil { defaults.removeObject(forKey: legacyDataKey) }
+        }
+        if let count = payload["deviceCount"] as? Int {
+            defaults.set(count, forKey: "fleetDeviceCount")
         }
 
         if let totalNumber = payload["totalHashrate"] as? NSNumber {

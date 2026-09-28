@@ -190,10 +190,11 @@ struct PoolConfigurationView: View {
 
                     Task {
                         let success = await viewModel.savePoolConfiguration()
-                        if success {
-                            dismiss()
-                        } else {
+                        if !success {
                             showErrorAlert = true
+                        } else if !viewModel.needsRestartToApplySettings {
+                            // Otherwise the restart alert below is showing; it dismisses.
+                            dismiss()
                         }
                     }
                 }
@@ -239,6 +240,13 @@ struct PoolConfigurationView: View {
         } message: {
             Text(viewModel.poolConfigurationError ?? "An unknown error occurred. Please try again.")
         }
+        .restartToApplySettingsAlert(
+            isPresented: $viewModel.needsRestartToApplySettings,
+            message:
+                "The pool settings are saved, but this miner only applies them when it restarts. It keeps mining on its current pool until then. Mining pauses while the miner restarts.",
+            restart: { await viewModel.restartDevice() },
+            dismiss: { dismiss() }
+        )
     }
 
     private static func protocolValueForControl(_ value: String) -> String {

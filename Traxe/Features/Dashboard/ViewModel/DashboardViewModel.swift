@@ -106,7 +106,11 @@ final class DashboardViewModel {
     private var cancellables = Set<AnyCancellable>()
     private(set) var initialFetchComplete = false
     private var isConnecting = false
+    private var isConnectionRequested = false
     private var currentDeviceId: String?
+    private var connectionGeneration = UUID()
+    /// Failed polls in a row before a connected miner is shown as disconnected.
+    private static let failedPollsBeforeDisconnected = 2
 
     init(
         networkService: NetworkService? = nil,
@@ -127,17 +131,14 @@ final class DashboardViewModel {
         guard let monitor = dependencies.makeNetworkMonitor?() else { return }
         networkMonitor = monitor
         networkMonitor?.pathUpdateHandler = { [weak self] path in
-            Task {
+            Task { @MainActor in
                 guard let self else { return }
                 if path.status == .satisfied {
-                    let currentState = await MainActor.run { self.connectionState }
-                    if currentState == .disconnected {
+                    if self.connectionState == .disconnected, self.isConnectionRequested {
                         await self.connect()
                     }
                 } else {
-                    await MainActor.run {
-                        self.connectionState = .disconnected
-                    }
+                    self.connectionState = .disconnected
                 }
             }
         }
@@ -158,51 +159,57 @@ final class DashboardViewModel {
         let newDeviceId = dependencies.selectedDeviceID()
 
         if newDeviceId != currentDeviceId {
-            currentDeviceId = newDeviceId
             await connect()
         }
     }
 
     func connect() async {
-        guard !isConnecting else { return }
+        let selectedDeviceId = dependencies.selectedDeviceID()
+        guard !isConnecting || selectedDeviceId != currentDeviceId else { return }
+        let generation = UUID()
+        connectionGeneration = generation
+        isConnectionRequested = true
+        pollingTask?.cancel()
+        pollingTask = nil
         isConnecting = true
-        await MainActor.run {
-            self.connectionState = .connecting
+        connectionState = .connecting
+        currentDeviceId = selectedDeviceId
+        defer {
+            if connectionGeneration == generation {
+                isConnecting = false
+                if Task.isCancelled {
+                    connectionState = .disconnected
+                }
+            }
         }
 
-        currentDeviceId = dependencies.selectedDeviceID()
-
         guard let deviceId = currentDeviceId, !deviceId.isEmpty else {
-            await MainActor.run {
-                self.connectionState = .disconnected
-                self.errorMessage = "No miner IP address configured"
-            }
-            isConnecting = false
+            connectionState = .disconnected
+            errorMessage = "No miner IP address configured"
             return
         }
 
         do {
             let telemetry = try await dependencies.network.fetchMinerTelemetry(deviceId)
+            guard !Task.isCancelled, connectionGeneration == generation else { return }
             let metrics = DeviceMetrics(from: telemetry)
 
-            await MainActor.run {
-                self.currentMetrics = metrics
-                self.errorMessage = ""
-                self.errorDeviceInfo = ""
-                self.connectionState = .connected
-                self.startPolling()
-            }
+            currentMetrics = metrics
+            errorMessage = ""
+            errorDeviceInfo = ""
+            connectionState = .connected
+            startPolling(deviceId: deviceId, generation: generation)
         } catch {
+            guard !Task.isCancelled, connectionGeneration == generation else { return }
             let (message, deviceInfo) = handleConnectionError(error, deviceId: deviceId)
-            await MainActor.run {
-                self.connectionState = .disconnected
-                self.errorMessage = message
-                self.errorDeviceInfo = deviceInfo
-                self.showErrorAlert = true
-            }
+            connectionState = .disconnected
+            errorMessage = message
+            errorDeviceInfo = deviceInfo
+            showErrorAlert = true
+            // A reconnect may replace an existing retry loop while the miner is still
+            // rebooting. Keep retrying this generation until it recovers or disconnects.
+            startPolling(deviceId: deviceId, generation: generation)
         }
-
-        isConnecting = false
     }
 
     private func handleConnectionError(_ error: Error, deviceId: String) -> (
@@ -293,47 +300,51 @@ final class DashboardViewModel {
     }
 
     func disconnect() {
+        connectionGeneration = UUID()
+        isConnectionRequested = false
+        isConnecting = false
         connectionState = .disconnected
         pollingTask?.cancel()
         pollingTask = nil
     }
 
-    private func startPolling() {
+    private func startPolling(deviceId: String, generation: UUID) {
         pollingTask?.cancel()
         pollingTask = Task {
-            while !Task.isCancelled && connectionState == .connected {
+            // A failed sample changes the visible status, but the selected miner still
+            // needs polling so it can recover after a reboot or a temporary network error.
+            var consecutiveFailures = 0
+            while !Task.isCancelled, connectionGeneration == generation {
                 await dependencies.sleep(dependencies.pollingInterval)
-
-                guard !Task.isCancelled else { continue }
-
-                let deviceId = await MainActor.run { self.currentDeviceId }
-                guard let deviceId = deviceId, !deviceId.isEmpty else { continue }
+                guard !Task.isCancelled, connectionGeneration == generation else { return }
 
                 do {
                     let telemetry = try await dependencies.network.fetchMinerTelemetry(deviceId)
+                    guard !Task.isCancelled, connectionGeneration == generation else { return }
+                    consecutiveFailures = 0
                     let metrics = DeviceMetrics(from: telemetry)
-
-                    await MainActor.run {
-                        self.currentMetrics = metrics
-                        self.errorMessage = ""
-                        self.errorDeviceInfo = ""
-
-                        if !self.initialFetchComplete {
-                            self.initialFetchComplete = true
-                        }
-                    }
-
+                    currentMetrics = metrics
+                    errorMessage = ""
+                    errorDeviceInfo = ""
+                    connectionState = .connected
+                    initialFetchComplete = true
                     saveHistoricalData(metrics: metrics)
-
                 } catch {
-                    if !Task.isCancelled {
-                        let (message, deviceInfo) = handleConnectionError(error, deviceId: deviceId)
-                        await MainActor.run {
-                            self.errorMessage = message
-                            self.errorDeviceInfo = deviceInfo
-                            self.connectionState = .disconnected
-                        }
+                    guard !Task.isCancelled, connectionGeneration == generation else { return }
+                    consecutiveFailures += 1
+                    // One dropped request on Wi-Fi is common. A connected miner keeps its last
+                    // metrics on screen until a second sample in a row fails, the tolerance
+                    // `MinerAlertStateMachine` uses before it reports a miner offline. A miner
+                    // that has not answered since connecting stays disconnected.
+                    if connectionState == .connected,
+                        consecutiveFailures < Self.failedPollsBeforeDisconnected
+                    {
+                        continue
                     }
+                    let (message, deviceInfo) = handleConnectionError(error, deviceId: deviceId)
+                    errorMessage = message
+                    errorDeviceInfo = deviceInfo
+                    connectionState = .disconnected
                 }
             }
         }
@@ -381,16 +392,18 @@ final class DashboardViewModel {
 
     func loadHistoricalData() {
         let device = currentDeviceId
-        let descriptor = FetchDescriptor<HistoricalDataPoint>(
+        // Newest first with a fetch limit, so a miner that was polled for weeks does not load
+        // every stored point only to keep the last 100. Reversed below into chart order.
+        var descriptor = FetchDescriptor<HistoricalDataPoint>(
             predicate: #Predicate<HistoricalDataPoint> { $0.deviceId == device },
-            // Ascending chronological order (oldest -> newest) for chart correctness
-            sortBy: [SortDescriptor(\.timestamp)]
+            sortBy: [SortDescriptor(\.timestamp, order: .reverse)]
         )
+        descriptor.fetchLimit = 100
 
         do {
-            let allData = try modelContext.fetch(descriptor)
-            // Keep only the most recent 100 while preserving ascending order
-            historicalData = Array(allData.suffix(100))
+            let newestFirst = try modelContext.fetch(descriptor)
+            // Ascending chronological order (oldest -> newest) for chart correctness
+            historicalData = newestFirst.reversed()
         } catch {
         }
     }
