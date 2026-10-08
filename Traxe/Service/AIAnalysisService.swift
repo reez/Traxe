@@ -185,8 +185,8 @@ actor AIAnalysisService {
         let metrics = DeviceMetrics(from: telemetry)
 
         let hashRate = metrics.hashrate
-        let temperature = metrics.temperature
-        let power = metrics.power
+        let temperature = telemetry.temperature
+        let power = telemetry.power
         let fanSpeedPercent = metrics.fanSpeedPercent
         let miningLuckSentence = MiningLuckPresenter.makeSummarySentence(from: metrics)
 
@@ -195,11 +195,16 @@ actor AIAnalysisService {
 
         if !historicalData.isEmpty {
             let historicalTrend = analyzeHistoricalTrend(
-                currentHashRate: hashRate,
                 historicalData: historicalData
             )
             if !historicalTrend.isEmpty {
-                summary = "Your miner \(historicalTrend)."
+                // Recorded facts must not pass through a free-form model rewrite.
+                return AISummary(
+                    content: appendingMiningLuckSentence(
+                        miningLuckSentence,
+                        to: historicalTrend
+                    )
+                )
             } else {
                 // Fall back to current stats if trend is empty
                 summary =
@@ -208,23 +213,36 @@ actor AIAnalysisService {
         } else {
             // No historical data; show current stats
             summary =
-                "Your miner is producing \(hashRateFormatted.value) \(hashRateFormatted.unit)"
+                metrics.isHashrateKnown
+                ? "Your miner is producing \(hashRateFormatted.value) \(hashRateFormatted.unit)"
+                : "Your miner’s hash rate is unavailable"
 
-            if temperature > AppConstants.AI.hotTemperatureThreshold {
-                summary += ", running warm at \(Int(temperature))°C with fan at \(fanSpeedPercent)%"
-                if fanSpeedPercent < AppConstants.AI.lowFanSpeedThreshold {
-                    summary += " - consider improving ventilation or increasing fan speed"
+            if let temperature, temperature.isFinite {
+                if temperature > AppConstants.AI.hotTemperatureThreshold {
+                    summary +=
+                        ", running warm at \(temperature.rounded(.towardZero).formatted(.number.precision(.fractionLength(0))))°C with fan at \(fanSpeedPercent)%"
+                    if fanSpeedPercent < AppConstants.AI.lowFanSpeedThreshold {
+                        summary += " - consider improving ventilation or increasing fan speed"
+                    } else {
+                        summary += " - consider improving ventilation"
+                    }
+                } else if temperature < AppConstants.AI.coolTemperatureThreshold {
+                    summary +=
+                        ", running cool at \(temperature.rounded(.towardZero).formatted(.number.precision(.fractionLength(0))))°C with fan at \(fanSpeedPercent)%"
                 } else {
-                    summary += " - consider improving ventilation"
+                    summary +=
+                        ", running at a stable \(temperature.rounded(.towardZero).formatted(.number.precision(.fractionLength(0))))°C with fan at \(fanSpeedPercent)%"
                 }
-            } else if temperature < AppConstants.AI.coolTemperatureThreshold {
-                summary += ", running cool at \(Int(temperature))°C with fan at \(fanSpeedPercent)%"
-            } else {
-                summary +=
-                    ", running at a stable \(Int(temperature))°C with fan at \(fanSpeedPercent)%"
-            }
 
-            summary += " while consuming \(Int(power))W of power."
+            } else {
+                summary += ", temperature unavailable"
+            }
+            if let power, power.isFinite {
+                summary +=
+                    " while consuming \(power.rounded(.towardZero).formatted(.number.precision(.fractionLength(0))))W of power."
+            } else {
+                summary += ", power unavailable."
+            }
         }
 
         #if canImport(FoundationModels)
@@ -234,11 +252,10 @@ actor AIAnalysisService {
                 do {
                     let variation = try await generateDeviceSummaryVariation(
                         using: session,
-                        hashRate: hashRate,
+                        hashRate: telemetry.hashrate,
                         temperature: temperature,
                         power: power,
-                        fanSpeed: fanSpeedPercent,
-                        historicalData: historicalData
+                        fanSpeed: fanSpeedPercent
                     )
                     lastGenerationFailed = false
                     lastErrorMessage = nil
@@ -288,7 +305,6 @@ actor AIAnalysisService {
     }
 
     private func analyzeHistoricalTrend(
-        currentHashRate: Double,
         historicalData: [HistoricalDataPoint]
     ) -> String {
         guard historicalData.count >= 2 else { return "" }
@@ -305,7 +321,7 @@ actor AIAnalysisService {
         let windowText = formatDuration(seconds: duration)
 
         return
-            "has been averaging \(avgFormatted.value) \(avgFormatted.unit) over the last \(windowText)"
+            "Averaged \(avgFormatted.value) \(avgFormatted.unit) across samples spanning \(windowText)."
     }
 
     private func formatDuration(seconds: TimeInterval) -> String {
@@ -331,61 +347,37 @@ actor AIAnalysisService {
         @available(iOS 26.0, macOS 26.0, *)
         private func generateDeviceSummaryVariation(
             using session: LanguageModelSession,
-            hashRate: Double,
-            temperature: Double,
-            power: Double,
-            fanSpeed: Int,
-            historicalData: [HistoricalDataPoint]
+            hashRate: Double?,
+            temperature: Double?,
+            power: Double?,
+            fanSpeed: Int
         ) async throws -> String {
-            let hashRateFormatted = hashRate.formattedHashRateWithUnit()
-            let historicalTrend =
-                !historicalData.isEmpty
-                ? analyzeHistoricalTrend(currentHashRate: hashRate, historicalData: historicalData)
-                : ""
+            let hashRateText =
+                hashRate.map {
+                    let formatted = $0.formattedHashRateWithUnit()
+                    return "\(formatted.value) \(formatted.unit)"
+                } ?? "Unavailable"
+            let temperatureText =
+                temperature.flatMap { $0.isFinite ? $0 : nil }.map {
+                    "\($0.rounded(.towardZero).formatted(.number.precision(.fractionLength(0))))°C"
+                } ?? "Unavailable"
+            let powerText =
+                power.flatMap { $0.isFinite ? $0 : nil }.map {
+                    "\($0.rounded(.towardZero).formatted(.number.precision(.fractionLength(0))))W"
+                } ?? "Unavailable"
+            let prompt = """
+                Create a miner summary with these details:
+                - Current hashrate: \(hashRateText)
+                - Temperature: \(temperatureText)
+                - Fan speed: \(fanSpeed)%
+                - Power consumption: \(powerText)
 
-            // Log actual historical data for verification
-            if !historicalData.isEmpty {
-                let sorted = historicalData.sorted { $0.timestamp < $1.timestamp }
-                let actualAverage = sorted.map { $0.hashrate }.reduce(0, +) / Double(sorted.count)
-                if let firstPoint = sorted.first, let lastPoint = sorted.last {
-                    let actualRange = lastPoint.timestamp.timeIntervalSince(firstPoint.timestamp)
-                    _ = formatDuration(seconds: actualRange)
-                }
-                _ = actualAverage.formattedHashRateWithUnit()
-
-            }
-
-            let prompt: String
-            if !historicalData.isEmpty && !historicalTrend.isEmpty {
-                // Only historical data
-                prompt = """
-                    Rewrite this historical mining performance summary to be more specific:
-                    \(historicalTrend)
-
-                    Requirements:
-                    - Focus ONLY on historical averages and time periods
-                    - Do NOT mention current hashrate
-                    - Be very specific about the historical numbers and timeframe
-                    - Keep it conversational and natural
-                    - Under 20 words
-                    - No introductory phrases
-                    """
-            } else {
-                // Current stats (when no history)
-                prompt = """
-                    Create a miner summary with these details:
-                    - Current hashrate: \(hashRateFormatted.value) \(hashRateFormatted.unit)
-                    - Temperature: \(Int(temperature))°C
-                    - Fan speed: \(fanSpeed)%
-                    - Power consumption: \(Int(power))W
-
-                    Requirements:
-                    - Include all technical numbers exactly
-                    - Keep it conversational and natural
-                    - Under 40 words
-                    - No introductory phrases
-                    """
-            }
+                Requirements:
+                - Include all technical numbers exactly
+                - Keep it conversational and natural
+                - Under 40 words
+                - No introductory phrases
+                """
 
             let response = try await session.respond(
                 to: prompt,

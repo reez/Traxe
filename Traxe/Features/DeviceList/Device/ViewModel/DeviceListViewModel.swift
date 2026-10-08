@@ -89,6 +89,8 @@ final class DeviceListViewModel {
             )
         }
     }
+    private var lastLoadedSavedDevicesData: Data?
+    private var cachedReadings: [String: CachedDeviceMetrics] = [:]
     private var hasCompletedAggregatedStatsRefresh = false
     private var cachedFleetHealth: FleetHealthCacheEntry?
 
@@ -100,6 +102,8 @@ final class DeviceListViewModel {
     private var historicalDataRetentionController: HistoricalDataRetentionController?
     private var historicalDataRelocator: HistoricalDataRelocator?
     private var lastRelocationScanAt: Date?
+    private var aggregatedStatsRefreshTask: Task<Void, Never>?
+    private var needsAggregatedStatsFollowup = false
 
     private final class WeakModelContext {
         weak var value: ModelContext?
@@ -165,7 +169,9 @@ final class DeviceListViewModel {
         self.deviceGridSortOption =
             defaults.string(forKey: StorageKeys.deviceGridSortOption)
             .flatMap(DeviceGridSortOption.init(rawValue:)) ?? .savedOrder
-        loadDevices()
+        // SwiftUI can construct models that never become the retained view state.
+        // Loading local state must not start a network task that keeps those copies alive.
+        loadDevices(refreshAfterLoad: false)
         cachedFleetHealth = loadCachedFleetHealth()
         loadCacheAndComputeTotals()
         // If we couldn't build a summary from cached metrics (e.g., cache is empty),
@@ -220,9 +226,10 @@ final class DeviceListViewModel {
         savedDevices.map(\.ipAddress).sorted()
     }
 
-    func loadDevices() {
+    func loadDevices(refreshAfterLoad: Bool = true) {
         let previousDevices = savedDevices
         let previousIPAddresses = Set(previousDevices.map(\.ipAddress))
+        let previousIdentifiers = Set(previousDevices.map(\.id))
 
         var loadedDevices: [SavedDevice] = []
         if let data = defaults.data(forKey: "savedDevices"),
@@ -251,10 +258,24 @@ final class DeviceListViewModel {
         }
 
         followRelocatedDevices(from: previousDevices, to: loadedDevices)
+        discardMetricsForReplacedDevices(from: previousDevices, to: loadedDevices)
         self.savedDevices = loadedDevices
+        lastLoadedSavedDevicesData = defaults.data(forKey: "savedDevices")
         updateFleetHealthRefreshState(previousIPAddresses: previousIPAddresses)
-        saveIPsAndReloadWidget()
-        scheduleAggregatedStatsRefreshIfNeeded()
+        if Set(loadedDevices.map(\.id)) != previousIdentifiers {
+            hasCompletedAggregatedStatsRefresh = false
+            cachedFleetHealth = nil
+        }
+        if refreshAfterLoad {
+            saveIPsAndReloadWidget()
+            scheduleAggregatedStatsRefreshIfNeeded()
+        }
+    }
+
+    func synchronizeSavedDevices() {
+        guard defaults.data(forKey: "savedDevices") != lastLoadedSavedDevicesData else { return }
+        loadDevices(refreshAfterLoad: false)
+        loadCacheAndComputeTotals()
     }
 
     private func updateFleetHealthRefreshState(previousIPAddresses: Set<String>) {
@@ -267,7 +288,15 @@ final class DeviceListViewModel {
 
     private func scheduleAggregatedStatsRefreshIfNeeded() {
         guard dependencies.autoRefreshOnLoad else { return }
-        Task { await updateAggregatedStats() }
+        requestAggregatedStatsRefresh()
+    }
+
+    private func requestAggregatedStatsRefresh() {
+        if aggregatedStatsRefreshTask != nil {
+            needsAggregatedStatsFollowup = true
+        } else {
+            Task { await updateAggregatedStats() }
+        }
     }
 
     func configureModelContextIfNeeded(_ modelContext: ModelContext) -> Bool {
@@ -295,15 +324,46 @@ final class DeviceListViewModel {
         let cachedMetrics = metricsCache.loadAll()
         // Prune cache to only include current devices
         let currentIPs = savedDevices.map { $0.ipAddress }
-        metricsCache.prune(ips: currentIPs)
         let currentIPSet = Set(currentIPs)
-        let prunedMetrics = cachedMetrics.filter { currentIPSet.contains($0.key) }
+        let prunedMetrics = cachedMetrics.filter { ipAddress, cached in
+            guard currentIPSet.contains(ipAddress) else { return false }
+            guard let savedMAC = savedDevices.first(where: { $0.ipAddress == ipAddress })?.macAddress,
+                let cachedMAC = cached.macAddress
+            else { return true }
+            return savedMAC == cachedMAC
+        }
+        if prunedMetrics.count != cachedMetrics.count {
+            metricsCache.saveAll(prunedMetrics)
+        }
+        deviceMetrics = deviceMetrics.filter { ipAddress, metrics in
+            guard currentIPSet.contains(ipAddress) else { return false }
+            guard let savedMAC = savedDevices.first(where: { $0.ipAddress == ipAddress })?.macAddress,
+                let metricsMAC = metrics.macAddress
+            else { return true }
+            return savedMAC == metricsMAC
+        }
+        reachableIPs.formIntersection(Set(deviceMetrics.keys))
+        cachedReadings = prunedMetrics
 
         // Apply pruned cache to current devices (merge defensively, avoid zeroing temps)
         for device in savedDevices {
             if let cached = prunedMetrics[device.ipAddress] {
                 var merged = DeviceMetrics(from: cached)
                 if let existing = deviceMetrics[device.ipAddress] {
+                    // A defaults notification can reenter this load while a
+                    // refresh persists learned MAC addresses. Identity was
+                    // checked above; never replace that miner's newer sample
+                    // with an older cache entry from the previous refresh.
+                    if existing.timestamp > cached.measurementDate {
+                        var preferred = CachedDeviceMetrics(
+                            from: existing,
+                            isReachable: reachableIPs.contains(device.ipAddress)
+                        )
+                        preferred.observedAt = existing.timestamp
+                        preferred.isIncludedInLastKnownTotal = cached.isIncludedInLastKnownTotal
+                        cachedReadings[device.ipAddress] = preferred
+                        continue
+                    }
                     // If cached temp is missing/zero but we have a non-zero in-memory temp, keep it
                     if (cached.temperature ?? 0.0) == 0.0, existing.temperature > 0.0 {
                         merged.temperature = existing.temperature
@@ -327,30 +387,37 @@ final class DeviceListViewModel {
 
     }
 
+    var fleetMetricSnapshot: FleetMetricSnapshot {
+        FleetMetricSnapshot.make(
+            readings: deviceMetrics.map { ipAddress, metrics in
+                if !hasCompletedAggregatedStatsRefresh, let cached = cachedReadings[ipAddress] {
+                    return cached.reading(id: ipAddress)
+                }
+                return FleetMetricSnapshot.Reading(
+                    id: ipAddress,
+                    hashrate: metrics.isHashrateKnown ? metrics.hashrate : nil,
+                    power: metrics.power,
+                    measuredAt: metrics.timestamp,
+                    isReachable: reachableIPs.contains(ipAddress),
+                    isIncludedInLastKnownTotal: cachedReadings[ipAddress]?.isIncludedInLastKnownTotal
+                )
+            },
+            totalDevices: savedDevices.count
+        )
+    }
+
     private func computeTotals() {
-        var currentTotalHashRate: Double = 0.0
-        var currentTotalPower: Double = 0.0
-        var currentBestDiff: Double = 0.0
-
-        for metrics in deviceMetrics.values {
-            currentTotalHashRate += metrics.hashrate
-            currentTotalPower += metrics.power
-            currentBestDiff = max(currentBestDiff, metrics.bestDifficulty)
+        totalHashRate = fleetMetricSnapshot.totalHashrate ?? 0
+        totalPower = fleetMetricSnapshot.totalPower ?? 0
+        // Best difficulty is a historical record, independent of connectivity.
+        bestOverallDiff = deviceMetrics.values.map(\.bestDifficulty).max() ?? 0
+        if let measuredAt = fleetMetricSnapshot.measuredAt {
+            lastDataUpdate = measuredAt
         }
 
-        totalHashRate = currentTotalHashRate
-        totalPower = currentTotalPower
-        bestOverallDiff = currentBestDiff
-        lastDataUpdate = Date()
-
-        // Keep fleet summary in lockstep with totals based on the same snapshot
-        if AIFeatureFlags.isAvailable,
-            AIFeatureFlags.isEnabledByUser,
-            savedDevices.count > 1,
-            let summary = buildFleetSummaryFromMetrics(Array(deviceMetrics.values))
-        {
-            self.fleetAISummary = summary
-        }
+        // The displayed summary uses exactly the readings and qualifications
+        // used for the total, including stale and partially reporting fleets.
+        fleetAISummary = currentFleetSummary
     }
 
     func markWhatsNewTipSeen() {
@@ -409,8 +476,14 @@ final class DeviceListViewModel {
     }
 
     private func deleteDevices(_ devicesToDelete: [SavedDevice]) {
+        synchronizeSavedDevices()
         recentRelocations = [:]
-        for device in devicesToDelete {
+        for selectedDevice in devicesToDelete {
+            // A different window may have moved this miner or replaced the occupant
+            // of its old IP. Resolve the selection by its persisted identity first.
+            guard let device = savedDevices.first(where: { $0.id == selectedDevice.id }) else {
+                continue
+            }
             do {
                 try dependencies.deviceManagement.deleteDevice(device.ipAddress)
                 savedDevices.removeAll { $0.ipAddress == device.ipAddress }
@@ -425,13 +498,42 @@ final class DeviceListViewModel {
         metricsCache.prune(ips: currentIPs)
         computeTotals()
 
-        Task { await updateAggregatedStats() }
+        requestAggregatedStatsRefresh()
     }
 
     func updateAggregatedStats() async {
-        await refreshAggregatedStats()
-        await relocateMissingDevicesIfNeeded()
-        scheduleHistoryRelocations()
+        guard !Task.isCancelled else { return }
+        while let refresh = aggregatedStatsRefreshTask {
+            await refresh.value
+            guard !Task.isCancelled else { return }
+            // An overlapping request can share a completed refresh. A canceled scene
+            // request discarded its results, so a live caller must replace that work.
+            if !refresh.isCancelled { return }
+        }
+
+        let refresh = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                aggregatedStatsRefreshTask = nil
+                if needsAggregatedStatsFollowup {
+                    needsAggregatedStatsFollowup = false
+                    requestAggregatedStatsRefresh()
+                }
+            }
+            guard !Task.isCancelled else { return }
+            synchronizeSavedDevices()
+            await refreshAggregatedStats()
+            guard !Task.isCancelled else { return }
+            await relocateMissingDevicesIfNeeded()
+            guard !Task.isCancelled else { return }
+            scheduleHistoryRelocations()
+        }
+        aggregatedStatsRefreshTask = refresh
+        await withTaskCancellationHandler {
+            await refresh.value
+        } onCancel: {
+            refresh.cancel()
+        }
     }
 
     private func refreshAggregatedStats() async {
@@ -448,51 +550,21 @@ final class DeviceListViewModel {
         let checkDevice = dependencies.deviceManagement.checkDevice
 
         // Perform network fetches off the main actor, then apply results on main
-        let fetchedResults: [(String, DeviceMetrics?)] = await Task.detached(
+        let fetchedResults: [(UUID, String, DeviceMetrics?)] = await Task.detached(
             priority: .userInitiated
         ) {
-            await withTaskGroup(of: (String, DeviceMetrics?).self) { group in
+            await withTaskGroup(of: (UUID, String, DeviceMetrics?).self) { group in
                 for device in devicesSnapshot {
                     group.addTask {
                         do {
                             let discoveredDevice = try await checkDevice(device.ipAddress)
-                            // Inline parse to avoid touching main-actor method
-                            let parsedDifficulty: Double = {
-                                let multipliers: [Character: Double] = [
-                                    "K": 1_000,
-                                    "M": 1_000_000,
-                                    "G": 1_000_000_000,
-                                    "T": 1_000_000_000_000,
-                                    "P": 1_000_000_000_000_000,
-                                ]
-                                let trimmed = discoveredDevice.bestDiff.trimmingCharacters(
-                                    in: .whitespacesAndNewlines
-                                )
-                                guard !trimmed.isEmpty else { return 0.0 }
-                                guard let lastChar = trimmed.last else { return 0.0 }
-                                var numeric = trimmed
-                                var mult: Double = 1.0
-                                if let suffix = lastChar.uppercased().first,
-                                    let m = multipliers[suffix]
-                                {
-                                    mult = m
-                                    numeric = String(trimmed.dropLast())
-                                } else if lastChar.isLetter {
-                                    return 0.0
-                                }
-                                let cleaned =
-                                    numeric
-                                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                                    .replacing(",", with: "")
-                                guard let value = Double(cleaned) else { return 0.0 }
-                                return value / 1_000_000.0 * mult
-                            }()
-
                             let metrics = DeviceMetrics(
                                 hashrate: discoveredDevice.hashrate,
                                 temperature: discoveredDevice.temperature,
                                 power: discoveredDevice.power,
-                                bestDifficulty: parsedDifficulty,
+                                bestDifficulty: DeviceMetrics.parseBestDifficultyInMillions(
+                                    discoveredDevice.bestDiff
+                                ),
                                 poolURL: discoveredDevice.poolURL,
                                 hostname: discoveredDevice.name,
                                 blockHeight: discoveredDevice.blockHeight,
@@ -503,19 +575,27 @@ final class DeviceListViewModel {
                                 isMiningPausedKnown: discoveredDevice.isMiningPausedKnown,
                                 macAddress: discoveredDevice.macAddress
                             )
-                            return (device.ipAddress, metrics)
+                            return (device.id, device.ipAddress, metrics)
                         } catch {
-                            return (device.ipAddress, nil)
+                            return (device.id, device.ipAddress, nil)
                         }
                     }
                 }
 
-                var results: [(String, DeviceMetrics?)] = []
+                var results: [(UUID, String, DeviceMetrics?)] = []
                 for await item in group { results.append(item) }
                 return results
             }
         }.value
 
+        guard !Task.isCancelled else {
+            isLoadingAggregatedStats = false
+            return
+        }
+        synchronizeSavedDevices()
+        // A widget or another window may have observed a newer fleet while
+        // these requests were pending. Keep its last-known total on failure.
+        loadCacheAndComputeTotals()
         // Apply fetched results on main actor
         let activeIPs = Set(savedDevices.map(\.ipAddress))
         // Drop any cached metrics for devices that were removed mid-refresh so totals stay accurate
@@ -527,8 +607,12 @@ final class DeviceListViewModel {
         var newReachables: Set<String> = []
         var successfulFetchCount = 0
         var successfulSamples: [(deviceId: String, metrics: DeviceMetrics)] = []
-        for (ipAddress, metrics) in fetchedResults {
-            guard activeIPs.contains(ipAddress), let metrics else { continue }
+        for (deviceID, ipAddress, metrics) in fetchedResults {
+            // IP reuse must not attach an old response (or its MAC address) to
+            // a replacement saved while this request was suspended.
+            guard savedDevices.contains(where: { $0.id == deviceID && $0.ipAddress == ipAddress }),
+                let metrics
+            else { continue }
 
             // The MAC address is the miner's identity. Learn it the first time a saved
             // miner answers; when a different miner answers at this address, DHCP has
@@ -550,9 +634,9 @@ final class DeviceListViewModel {
         }
         // Atomically update reachable set to avoid mid-refresh greying
         reachableIPs = newReachables
+        hasCompletedAggregatedStatsRefresh = true
         computeTotals()
         persistHistoricalSamples(successfulSamples)
-        hasCompletedAggregatedStatsRefresh = true
 
         isLoadingAggregatedStats = false
 
@@ -568,15 +652,21 @@ final class DeviceListViewModel {
 
     private func saveCacheFromCurrentMetrics() {
         var cacheMetrics: [String: CachedDeviceMetrics] = [:]
+        let snapshot = fleetMetricSnapshot
 
         for (ipAddress, metrics) in deviceMetrics {
-            var cached = CachedDeviceMetrics(from: metrics)
+            var cached = CachedDeviceMetrics(
+                from: metrics,
+                isReachable: reachableIPs.contains(ipAddress)
+            )
             if cached.macAddress == nil {
                 cached.macAddress = savedDevices.first(where: { $0.ipAddress == ipAddress })?.macAddress
             }
+            cached.isIncludedInLastKnownTotal = snapshot.includedDeviceIDs.contains(ipAddress)
             cacheMetrics[ipAddress] = cached
         }
 
+        cachedReadings = cacheMetrics
         metricsCache.saveAll(cacheMetrics)
         #if os(iOS)
             WatchSyncManager.shared.updateCacheMetrics(cacheMetrics)
@@ -704,6 +794,33 @@ final class DeviceListViewModel {
 
     // MARK: - Stable miner identity
 
+    private func discardMetricsForReplacedDevices(
+        from previousDevices: [SavedDevice],
+        to currentDevices: [SavedDevice]
+    ) {
+        let previousIDs = Set(previousDevices.map(\.id))
+        let previousIPs = Set(previousDevices.map(\.ipAddress))
+        let replacements = currentDevices.filter {
+            previousIPs.contains($0.ipAddress) && !previousIDs.contains($0.id)
+        }
+        guard !replacements.isEmpty else { return }
+        var cache = metricsCache.loadAll()
+        let previousCacheCount = cache.count
+        for replacement in replacements {
+            deviceMetrics.removeValue(forKey: replacement.ipAddress)
+            reachableIPs.remove(replacement.ipAddress)
+            cachedReadings.removeValue(forKey: replacement.ipAddress)
+            // Another model may already have measured this replacement. Retain
+            // that entry only when its known hardware identity proves the match.
+            if replacement.macAddress == nil
+                || cache[replacement.ipAddress]?.macAddress != replacement.macAddress
+            {
+                cache.removeValue(forKey: replacement.ipAddress)
+            }
+        }
+        if cache.count != previousCacheCount { metricsCache.saveAll(cache) }
+    }
+
     private func recordMACAddress(_ macAddress: String, forDeviceAt index: Int) {
         savedDevices[index].macAddress = macAddress
         do {
@@ -734,9 +851,11 @@ final class DeviceListViewModel {
         {
             return
         }
-        lastRelocationScanAt = now
-
         let discoveredDevices = await dependencies.deviceManagement.scanLocalNetwork(reachableIPs)
+        guard !Task.isCancelled else { return }
+        // An interrupted scan did not establish a result and must not suppress
+        // the next foreground attempt. Completed empty scans still throttle.
+        lastRelocationScanAt = Date()
         let missingMACAddresses = Set(missingDevices.compactMap(\.macAddress))
         let matches = discoveredDevices.filter { discovered in
             guard let macAddress = SavedDevice.normalizedMACAddress(discovered.macAddress) else {
@@ -748,10 +867,11 @@ final class DeviceListViewModel {
 
         do {
             let relocations = try dependencies.deviceManagement.relocateDevices(matches)
+            // A second model may already have persisted the same move.
+            synchronizeSavedDevices()
             guard !relocations.isEmpty else { return }
-            // Reloading applies the moves the same way as any other saved-device change,
-            // including a follow-up refresh that fetches from the new addresses.
-            loadDevices()
+            saveIPsAndReloadWidget()
+            scheduleAggregatedStatsRefreshIfNeeded()
         } catch {
             // The miners stay listed as offline at their old addresses until the next scan.
         }
@@ -783,11 +903,14 @@ final class DeviceListViewModel {
         // Every destination reads the original snapshot, including when miners swap
         // addresses or move around a cycle.
         let previousMetrics = deviceMetrics
+        let previousReadings = cachedReadings
         let changedIPAddresses = Set(currentByPrevious.keys)
             .union(currentByPrevious.values)
         deviceMetrics = previousMetrics.filter { !changedIPAddresses.contains($0.key) }
+        cachedReadings = previousReadings.filter { !changedIPAddresses.contains($0.key) }
         for (previous, current) in currentByPrevious {
             deviceMetrics[current] = previousMetrics[previous]
+            cachedReadings[current] = previousReadings[previous]
         }
         reachableIPs.subtract(changedIPAddresses)
         computeTotals()
@@ -917,7 +1040,7 @@ final class DeviceListViewModel {
                 guard let originalCache,
                     originalCache.macAddress == nil,
                     let cutoff = firstCutoffByMAC[macAddress],
-                    originalCache.lastUpdated <= cutoff
+                    originalCache.measurementDate <= cutoff
                 else { return nil }
                 return originalCache
             }()
@@ -1076,20 +1199,20 @@ final class DeviceListViewModel {
 
     // MARK: - Fleet AI Analysis (consolidated)
 
-    private func buildFleetSummaryFromMetrics(_ metrics: [DeviceMetrics]) -> AISummary? {
-        AISummaryFormatter.fleetSummary(from: metrics)
+    var currentFleetSummary: AISummary {
+        AISummaryFormatter.fleetSummary(
+            from: deviceMetrics,
+            snapshot: fleetMetricSnapshot
+        )
     }
 
     @available(iOS 18.0, macOS 15.0, *)
     func generateFleetAISummary() async {
         guard savedDevices.count > 1 else { return }
 
-        // Build from cached metrics (simple and immediate)
-        let metrics = Array(deviceMetrics.values)
-        if let summary = buildFleetSummaryFromMetrics(metrics) {
-            await MainActor.run { self.fleetAISummary = summary }
-            saveCachedFleetSummary(summary)
-        }
+        let summary = currentFleetSummary
+        fleetAISummary = summary
+        saveCachedFleetSummary(summary)
     }
 
     // MARK: - Fleet AI summary cache (simple, app-group backed)

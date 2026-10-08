@@ -106,15 +106,19 @@ import Foundation
             encoder.dateEncodingStrategy = .iso8601
             guard let data = try? encoder.encode(metrics) else { return nil }
 
-            let totalHashrate = metrics.values.reduce(0.0) { $0 + $1.hashrate }
-            let lastUpdated = metrics.values.compactMap(\.lastUpdated).max() ?? Date()
-
-            return [
-                "cacheData": data,
-                "totalHashrate": totalHashrate,
-                "lastUpdated": lastUpdated,
-                "deviceCount": metrics.count,
-            ]
+            let deviceCount =
+                (UserDefaults(suiteName: appGroupID)?
+                .array(forKey: "savedDeviceIPs") as? [String])?.count ?? metrics.count
+            let snapshot = FleetMetricSnapshot.make(
+                readings: metrics.map { $0.value.reading(id: $0.key) },
+                totalDevices: deviceCount
+            )
+            var payload: [String: Any] = ["cacheData": data, "deviceCount": deviceCount]
+            if let totalHashrate = snapshot.totalHashrate {
+                payload["totalHashrate"] = totalHashrate
+            }
+            if let measuredAt = snapshot.measuredAt { payload["lastUpdated"] = measuredAt }
+            return payload
         }
 
         private func loadExistingPayloadFromDefaults() {

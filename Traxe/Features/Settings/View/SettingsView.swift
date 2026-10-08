@@ -16,10 +16,12 @@ struct SettingsView: View {
     @State private var isAIEnabled = UserDefaults.standard.bool(forKey: "ai_enabled")
     @State private var alertsViewModel: MinerAlertsSettingsViewModel
     @State private var showingPaywallSheet = false
-    @State private var customerInfo: CustomerInfo? = nil
+    @State private var subscriptionStatus = SubscriptionStatusViewModel()
+    @State private var restoreViewModel = RestorePurchasesViewModel()
     private let onMinerDeleted: (String) -> Void
 
     @Environment(\.dismiss) var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.requestReview) var requestReview
     #if DEBUG
         @Environment(\.previewUpgradeState) private var previewUpgradeState
@@ -28,11 +30,11 @@ struct SettingsView: View {
     #endif
 
     private var proIsActive: Bool {
-        customerInfo?.entitlements["Pro"]?.isActive == true
+        subscriptionStatus.plan == .pro
     }
 
     private var miners5IsActive: Bool {
-        customerInfo?.entitlements["Miners_5"]?.isActive == true
+        subscriptionStatus.plan == .miners5
     }
 
     private var upgradeState: UpgradeState {
@@ -44,6 +46,9 @@ struct SettingsView: View {
         }
         if miners5IsActive {
             return .activePlan("Traxe Pro (One-Time, 5 Miners)")
+        }
+        guard subscriptionStatus.hasCurrentResponse else {
+            return subscriptionStatus.refreshFailed ? .unavailable : .loading
         }
         return .upgrade
     }
@@ -156,6 +161,7 @@ struct SettingsView: View {
                                     Text("View Plans")
                                         .foregroundStyle(.primary)
                                 }
+                                .disabled(restoreViewModel.isRestoring)
 
                                 Text("Want to support Traxe or unlock more miners?")
                                     .font(.subheadline)
@@ -168,6 +174,29 @@ struct SettingsView: View {
                         } header: {
                             Text("Plan")
                         }
+                    case .unavailable:
+                        Section {
+                            Text("Plan status unavailable")
+                            Text(
+                                "Your saved miners remain available. Try again to verify your plan."
+                            )
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            Button("Retry") {
+                                Task { await subscriptionStatus.refresh() }
+                            }
+                            .disabled(
+                                subscriptionStatus.isRefreshing || restoreViewModel.isRestoring
+                            )
+                            Button("View Plans") {
+                                showingPaywallSheet = true
+                            }
+                            .foregroundStyle(.primary)
+                            .disabled(restoreViewModel.isRestoring)
+                        } header: {
+                            Text("Plan")
+                        }
+                        .id("unavailable-plan")
                     case .loading:
                         Section {
                             HStack(spacing: 12) {
@@ -182,6 +211,10 @@ struct SettingsView: View {
                         } header: {
                             Text("Plan")
                         }
+                    }
+
+                    Section {
+                        RestorePurchasesButton(viewModel: restoreViewModel)
                     }
 
                     //                    Section {
@@ -280,15 +313,15 @@ struct SettingsView: View {
                     Text(viewModel.deleteMinerErrorMessage ?? "Traxe could not delete this miner.")
                 }
                 .sheet(isPresented: $showingPaywallSheet) {
-                    PaywallView()
+                    PaywallView(subscriptionStatus: subscriptionStatus)
                 }
             }
         }
-        .task {
-            guard previewUpgradeState == nil, !ProcessInfo.isPreview else { return }
-            for await info in Purchases.shared.customerInfoStream {
-                customerInfo = info
-            }
+        .task(id: scenePhase) {
+            guard scenePhase == .active, previewUpgradeState == nil,
+                !ProcessInfo.isPreview, Purchases.isConfigured
+            else { return }
+            await subscriptionStatus.observe()
         }
     }
 }
@@ -365,8 +398,9 @@ struct SettingsView: View {
         .modelContainer(previewContainer)
 }
 
-private enum UpgradeState {
+enum UpgradeState {
     case loading
+    case unavailable
     case upgrade
     case activePlan(String)
 }
@@ -388,7 +422,7 @@ private struct PreviewUpgradeStateKey: EnvironmentKey {
 }
 
 extension EnvironmentValues {
-    fileprivate var previewUpgradeState: UpgradeState? {
+    var previewUpgradeState: UpgradeState? {
         get { self[PreviewUpgradeStateKey.self] }
         set { self[PreviewUpgradeStateKey.self] = newValue }
     }

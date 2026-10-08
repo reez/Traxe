@@ -8,7 +8,36 @@ private struct CachedDeviceMetrics: Codable {
     var hostname: String?
     var poolURL: String?
     var temperature: Double?
-    var lastUpdated: Date
+    var lastUpdated: Date {
+        didSet { lastUpdatedReferenceTime = lastUpdated.timeIntervalSinceReferenceDate }
+    }
+    // Keep the legacy ISO8601 date for older readers. Its whole-second encoding
+    // cannot order samples from separate refreshes within the same second.
+    var lastUpdatedReferenceTime: TimeInterval?
+    var measurementDate: Date {
+        guard let lastUpdatedReferenceTime, lastUpdatedReferenceTime.isFinite else {
+            return lastUpdated
+        }
+        return Date(timeIntervalSinceReferenceDate: lastUpdatedReferenceTime)
+    }
+    var isReachable: Bool?
+    var isHashrateKnown: Bool?
+    var isHashrateReporting: Bool?
+    var observedAt: Date?
+    var isIncludedInLastKnownTotal: Bool?
+
+    func reading(id: String) -> FleetMetricSnapshot.Reading {
+        .init(
+            id: id,
+            hashrate: isHashrateKnown == false ? nil : hashrate,
+            power: power,
+            measuredAt: measurementDate,
+            isReachable: isReachable,
+            isHashrateReporting: isHashrateReporting,
+            observedAt: observedAt,
+            isIncludedInLastKnownTotal: isIncludedInLastKnownTotal
+        )
+    }
 }
 
 struct WatchMinerSummary: Identifiable, Hashable {
@@ -18,6 +47,7 @@ struct WatchMinerSummary: Identifiable, Hashable {
     let hashrateValue: String
     let hashrateUnit: String
     let lastUpdated: Date?
+    var statusText: String = ""
 
     static func sample(id: String, name: String, ip: String, hashrate: Double) -> WatchMinerSummary
     {
@@ -43,6 +73,7 @@ final class HashrateViewModel {
     var totalHashrateValue: String = "--"
     var totalHashrateUnit: String = ""
     var totalLastUpdated: Date?
+    var metricStatus: String = "No readings yet"
     var miners: [WatchMinerSummary] = []
 
     func start() async {
@@ -88,23 +119,33 @@ final class HashrateViewModel {
     }
 
     private func applyCache(_ cache: [String: CachedDeviceMetrics]) {
-        let totalHashrate = cache.values.reduce(0.0) { $0 + $1.hashrate }
-        let formattedTotal = totalHashrate.formattedHashRateWithUnit()
-        totalHashrateValue = formattedTotal.value
-        totalHashrateUnit = formattedTotal.unit
-        totalLastUpdated = cache.values.compactMap(\.lastUpdated).max()
+        let deviceCount =
+            UserDefaults(suiteName: appGroupID)?.integer(forKey: "fleetDeviceCount") ?? cache.count
+        let snapshot = FleetMetricSnapshot.make(
+            readings: cache.map { $0.value.reading(id: $0.key) },
+            totalDevices: deviceCount
+        )
+        let formattedTotal = snapshot.totalHashrate?.formattedHashRateWithUnit()
+        totalHashrateValue = formattedTotal?.value ?? "--"
+        totalHashrateUnit = formattedTotal?.unit ?? ""
+        totalLastUpdated = snapshot.measuredAt
+        metricStatus = snapshot.statusText
 
         let summariesWithHashrate = cache.map {
             (ip, metrics) -> (summary: WatchMinerSummary, hashrate: Double) in
-            let formatted = metrics.hashrate.formattedHashRateWithUnit()
+            let formatted =
+                metrics.isHashrateKnown == false
+                ? nil : metrics.hashrate.formattedHashRateWithUnit()
+            let rowStatus = snapshot.rowStatusText(for: metrics.reading(id: ip))
             let displayName = metrics.hostname?.isEmpty == false ? (metrics.hostname ?? ip) : ip
             let summary = WatchMinerSummary(
                 id: ip,
                 name: displayName,
                 ipAddress: ip,
-                hashrateValue: formatted.value,
-                hashrateUnit: formatted.unit,
-                lastUpdated: metrics.lastUpdated
+                hashrateValue: formatted?.value ?? "--",
+                hashrateUnit: formatted?.unit ?? "",
+                lastUpdated: metrics.measurementDate,
+                statusText: rowStatus
             )
             return (summary, metrics.hashrate)
         }
@@ -119,6 +160,7 @@ final class HashrateViewModel {
         totalHashrateValue = legacyHashrate
         totalHashrateUnit = unit ?? ""
         totalLastUpdated = date
+        metricStatus = "Last known · stale"
         miners = []
     }
 
@@ -126,6 +168,7 @@ final class HashrateViewModel {
         totalHashrateValue = "--"
         totalHashrateUnit = ""
         totalLastUpdated = nil
+        metricStatus = "No readings yet"
         miners = []
     }
 }

@@ -1,6 +1,6 @@
 import Foundation
 
-struct CachedDeviceMetrics: Codable {
+struct CachedDeviceMetrics: Codable, Sendable {
     var hashrate: Double
     var power: Double?
     var bestDifficulty: Double?
@@ -15,9 +15,38 @@ struct CachedDeviceMetrics: Codable {
     // Added: cache temperature (optional for backward compatibility)
     var temperature: Double?
     var macAddress: String?
-    var lastUpdated: Date
+    var lastUpdated: Date {
+        didSet { lastUpdatedReferenceTime = lastUpdated.timeIntervalSinceReferenceDate }
+    }
+    // Keep the legacy ISO8601 date for older readers. Its whole-second encoding
+    // cannot order samples from separate refreshes within the same second.
+    var lastUpdatedReferenceTime: TimeInterval?
+    var measurementDate: Date {
+        guard let lastUpdatedReferenceTime, lastUpdatedReferenceTime.isFinite else {
+            return lastUpdated
+        }
+        return Date(timeIntervalSinceReferenceDate: lastUpdatedReferenceTime)
+    }
+    // Nil preserves the behavior of caches written before reachability was recorded.
+    var isReachable: Bool?
+    var isHashrateReporting: Bool?
+    var observedAt: Date?
+    var isIncludedInLastKnownTotal: Bool?
 
-    init(from metrics: DeviceMetrics) {
+    func reading(id: String) -> FleetMetricSnapshot.Reading {
+        .init(
+            id: id,
+            hashrate: isHashrateKnown == false ? nil : hashrate,
+            power: power,
+            measuredAt: measurementDate,
+            isReachable: isReachable,
+            isHashrateReporting: isHashrateReporting,
+            observedAt: observedAt,
+            isIncludedInLastKnownTotal: isIncludedInLastKnownTotal
+        )
+    }
+
+    init(from metrics: DeviceMetrics, isReachable: Bool? = nil) {
         self.hashrate = metrics.hashrate
         self.power = metrics.power
         self.bestDifficulty = metrics.bestDifficulty
@@ -31,7 +60,11 @@ struct CachedDeviceMetrics: Codable {
         self.isMiningPausedKnown = metrics.isMiningPausedKnown
         self.temperature = metrics.temperature
         self.macAddress = SavedDevice.normalizedMACAddress(metrics.macAddress)
-        self.lastUpdated = Date()
+        self.lastUpdated = metrics.timestamp
+        self.lastUpdatedReferenceTime = metrics.timestamp.timeIntervalSinceReferenceDate
+        self.isReachable = isReachable
+        self.isHashrateReporting = metrics.isHashrateKnown
+        self.observedAt = isReachable == nil ? nil : Date()
     }
 }
 
@@ -41,15 +74,17 @@ extension DeviceMetrics {
             hashrate: cached.hashrate,
             temperature: cached.temperature ?? 0.0,
             power: cached.power ?? 0.0,
+            timestamp: cached.measurementDate,
             bestDifficulty: cached.bestDifficulty ?? 0.0,
             poolURL: cached.poolURL,
             hostname: cached.hostname,
             blockHeight: cached.blockHeight,
             networkDifficulty: cached.networkDifficulty,
-            isHashrateKnown: cached.isHashrateKnown ?? false,
+            isHashrateKnown: cached.isHashrateKnown ?? true,
             isTemperatureKnown: cached.isTemperatureKnown ?? false,
             isMiningPaused: cached.isMiningPaused ?? false,
-            isMiningPausedKnown: cached.isMiningPausedKnown ?? false
+            isMiningPausedKnown: cached.isMiningPausedKnown ?? false,
+            macAddress: cached.macAddress
         )
     }
 }

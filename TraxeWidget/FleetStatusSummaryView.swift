@@ -36,7 +36,7 @@ struct FleetStatusSummaryView: View {
                 if status.offline > 0 {
                     FleetStatusRow(
                         count: status.offline,
-                        title: "Offline",
+                        title: "Unreachable",
                         color: FleetStatusPalette.offline
                     )
                 }
@@ -50,6 +50,10 @@ struct FleetStatusSummaryView: View {
             }
 
             FleetStatusBar(status: status)
+
+            if status.zeroHashrate > 0 {
+                FleetZeroHashrateAlertView(count: status.zeroHashrate)
+            }
         }
         .fontDesign(.rounded)
         .accessibilityElement(children: .combine)

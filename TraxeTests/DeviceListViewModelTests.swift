@@ -67,6 +67,53 @@ final class DeviceListViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.isLoadingAggregatedStats)
     }
 
+    func testInvalidDifficultyDoesNotPreventSavingOtherFleetMeasurements() async throws {
+        for invalidDifficulty in ["nan", "inf", "1e999", "1e308P"] {
+            let suiteName = "DeviceListViewModelTests.invalidDifficulty.\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+            defer { defaults.removePersistentDomain(forName: suiteName) }
+            let devices = [
+                SavedDevice(name: "Invalid difficulty", ipAddress: "192.0.2.1"),
+                SavedDevice(name: "Healthy", ipAddress: "192.0.2.2"),
+            ]
+            defaults.set(try JSONEncoder().encode(devices), forKey: "savedDevices")
+            let dependencies = DeviceListViewModel.Dependencies(
+                deviceManagement: .init(
+                    checkDevice: { ip in
+                        DiscoveredDevice(
+                            ip: ip,
+                            name: ip,
+                            hashrate: ip == "192.0.2.1" ? 500 : 800,
+                            temperature: 50,
+                            bestDiff: ip == "192.0.2.1" ? invalidDifficulty : "7 M",
+                            power: 15,
+                            poolURL: nil,
+                            blockHeight: nil,
+                            networkDifficulty: nil
+                        )
+                    },
+                    deleteDevice: { _ in },
+                    reorderDevices: { _ in }
+                ),
+                reloadWidget: {},
+                autoRefreshOnLoad: false
+            )
+            let viewModel = DeviceListViewModel(defaults: defaults, dependencies: dependencies)
+
+            await viewModel.updateAggregatedStats()
+
+            XCTAssertEqual(viewModel.totalHashRate, 1_300, invalidDifficulty)
+            XCTAssertEqual(viewModel.bestOverallDiff, 7, invalidDifficulty)
+            XCTAssertEqual(viewModel.deviceMetrics["192.0.2.1"]?.bestDifficulty, 0)
+            let cache = DeviceMetricsCache(defaults: defaults).loadAll()
+            XCTAssertEqual(cache.count, 2, invalidDifficulty)
+            XCTAssertEqual(cache["192.0.2.1"]?.hashrate, 500, invalidDifficulty)
+            XCTAssertEqual(cache["192.0.2.1"]?.bestDifficulty, 0, invalidDifficulty)
+            XCTAssertEqual(cache["192.0.2.2"]?.hashrate, 800, invalidDifficulty)
+            XCTAssertEqual(cache["192.0.2.2"]?.bestDifficulty, 7, invalidDifficulty)
+        }
+    }
+
     func testUpdateAggregatedStatsExcludesUnreachableDevicesFromReachability() async {
         let responses: [String: DiscoveredDevice] = [
             "192.168.1.20": makeDiscoveredDevice(
@@ -94,6 +141,137 @@ final class DeviceListViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.reachableIPs, Set(["192.168.1.20"]))
         XCTAssertNotNil(viewModel.deviceMetrics["192.168.1.20"])
         XCTAssertNil(viewModel.deviceMetrics["192.168.1.21"])
+    }
+
+    func testFailedRefreshPreservesMeasurementTimeAndExcludesOfflineLiveTotalsUntilRecovery()
+        async throws
+    {
+        actor Availability {
+            var secondMinerIsOffline = true
+            func recover() { secondMinerIsOffline = false }
+        }
+        let availability = Availability()
+        let suiteName = "DeviceListViewModelTests.freshness.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let devices = [
+            SavedDevice(name: "Online", ipAddress: "192.168.1.10"),
+            SavedDevice(name: "Offline", ipAddress: "192.168.1.11"),
+        ]
+        defaults.set(try JSONEncoder().encode(devices), forKey: "savedDevices")
+        let measurementTime = Date(timeIntervalSince1970: 1_700_000_000)
+        let oldMetrics = DeviceMetrics(
+            hashrate: 700,
+            power: 20,
+            timestamp: measurementTime,
+            bestDifficulty: 9
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        defaults.set(
+            try encoder.encode([
+                "192.168.1.11": CachedDeviceMetrics(from: oldMetrics, isReachable: true)
+            ]),
+            forKey: "cachedDeviceMetricsV2"
+        )
+        let dependencies = DeviceListViewModel.Dependencies(
+            deviceManagement: .init(
+                checkDevice: { ip in
+                    if ip == "192.168.1.11", await availability.secondMinerIsOffline {
+                        throw URLError(.cannotConnectToHost)
+                    }
+                    return DiscoveredDevice(
+                        ip: ip,
+                        name: ip,
+                        hashrate: ip == "192.168.1.10" ? 500 : 800,
+                        temperature: 50,
+                        bestDiff: ip == "192.168.1.10" ? "3 M" : "9 M",
+                        power: ip == "192.168.1.10" ? 10 : 20,
+                        poolURL: nil,
+                        blockHeight: nil,
+                        networkDifficulty: nil
+                    )
+                },
+                deleteDevice: { _ in },
+                reorderDevices: { _ in }
+            ),
+            reloadWidget: {},
+            autoRefreshOnLoad: false
+        )
+        let viewModel = DeviceListViewModel(defaults: defaults, dependencies: dependencies)
+        await viewModel.updateAggregatedStats()
+        XCTAssertEqual(viewModel.totalHashRate, 500)
+        XCTAssertEqual(viewModel.totalPower, 10)
+        XCTAssertEqual(viewModel.bestOverallDiff, 9)
+        XCTAssertEqual(viewModel.deviceMetrics["192.168.1.11"]?.hashrate, 700)
+        XCTAssertEqual(viewModel.deviceMetrics["192.168.1.11"]?.timestamp, measurementTime)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let cached = try decoder.decode(
+            [String: CachedDeviceMetrics].self,
+            from: XCTUnwrap(defaults.data(forKey: "cachedDeviceMetricsV2"))
+        )
+        XCTAssertEqual(cached["192.168.1.11"]?.lastUpdated, measurementTime)
+        XCTAssertEqual(cached["192.168.1.11"]?.isReachable, false)
+        XCTAssertEqual(cached["192.168.1.10"]?.isReachable, true)
+        let reloaded = DeviceListViewModel(defaults: defaults, dependencies: dependencies)
+        XCTAssertEqual(reloaded.totalHashRate, 500)
+        XCTAssertEqual(reloaded.totalPower, 10)
+        XCTAssertEqual(reloaded.bestOverallDiff, 9)
+
+        await availability.recover()
+        await viewModel.updateAggregatedStats()
+        XCTAssertEqual(viewModel.totalHashRate, 1300)
+        XCTAssertEqual(viewModel.totalPower, 30)
+        let recoveredCache = try decoder.decode(
+            [String: CachedDeviceMetrics].self,
+            from: XCTUnwrap(defaults.data(forKey: "cachedDeviceMetricsV2"))
+        )
+        XCTAssertEqual(recoveredCache["192.168.1.11"]?.isReachable, true)
+        XCTAssertGreaterThan(
+            try XCTUnwrap(recoveredCache["192.168.1.11"]?.lastUpdated),
+            measurementTime
+        )
+    }
+
+    func testAllFailedRefreshDoesNotAdvanceLastMeasurementDate() async throws {
+        let suiteName = "DeviceListViewModelTests.allOffline.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(
+            try JSONEncoder().encode([SavedDevice(name: "Miner", ipAddress: "192.168.1.10")]),
+            forKey: "savedDevices"
+        )
+        let measurementTime = Date(timeIntervalSince1970: 1_700_000_000)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        defaults.set(
+            try encoder.encode([
+                "192.168.1.10": CachedDeviceMetrics(
+                    from: DeviceMetrics(hashrate: 700, timestamp: measurementTime)
+                )
+            ]),
+            forKey: "cachedDeviceMetricsV2"
+        )
+        let viewModel = DeviceListViewModel(
+            defaults: defaults,
+            dependencies: .init(
+                deviceManagement: .init(
+                    checkDevice: { _ in throw URLError(.cannotConnectToHost) },
+                    deleteDevice: { _ in },
+                    reorderDevices: { _ in }
+                ),
+                reloadWidget: {},
+                autoRefreshOnLoad: false
+            )
+        )
+        // Legacy caches with unknown reachability remain available before the first refresh.
+        XCTAssertEqual(viewModel.totalHashRate, 700)
+        XCTAssertEqual(viewModel.lastDataUpdate, measurementTime)
+        await viewModel.updateAggregatedStats()
+        XCTAssertEqual(viewModel.totalHashRate, 700)
+        XCTAssertTrue(viewModel.fleetMetricSnapshot.isStale)
+        XCTAssertEqual(viewModel.lastDataUpdate, measurementTime)
     }
 
     func testRefreshLearnsMACAddressForMinerSavedWithoutOne() async throws {

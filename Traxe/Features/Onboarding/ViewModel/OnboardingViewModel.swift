@@ -8,6 +8,7 @@ import WidgetKit
 enum ScanInitiationResult {
     case success
     case permissionDenied
+    case networkUnavailable
     case alreadyScanning
 }
 
@@ -37,6 +38,9 @@ final class OnboardingViewModel {
             var checkDevice: @Sendable (_ ip: String) async throws -> DiscoveredDevice
             var saveDevice: @Sendable (_ device: SavedDevice) throws -> Void
             var saveDevices: @Sendable (_ devices: [SavedDevice]) throws -> Void
+            var saveNewDevice: @Sendable (_ device: SavedDevice) throws -> Void = { device in
+                try DeviceManagementService.saveNewDevice(device)
+            }
 
             static let live = Self(
                 checkDevice: { ip in
@@ -522,14 +526,16 @@ final class OnboardingViewModel {
                     "Could not determine a local network interface to scan."
                 )
                 isScanning = false
-                return .permissionDenied
+                hasScanned = true
+                return .networkUnavailable
             }
         } else {
             handleError(
                 "Could not find any suitable network interfaces on your device."
             )
             isScanning = false
-            return .permissionDenied
+            hasScanned = true
+            return .networkUnavailable
         }
 
         Task { @MainActor [weak self] in
@@ -586,6 +592,24 @@ final class OnboardingViewModel {
         }
     }
 
+    func checkAndSaveDevice(ip: String, requireNewDevice: Bool = false) async throws -> DiscoveredDevice {
+        try Task.checkCancellation()
+        let discoveredDevice = try await dependencies.deviceManagement.checkDevice(ip)
+        // A request can finish after its sheet closes, even if it ignores cancellation.
+        try Task.checkCancellation()
+        let deviceToSave = SavedDevice(
+            name: discoveredDevice.name,
+            ipAddress: discoveredDevice.ip,
+            macAddress: discoveredDevice.macAddress
+        )
+        if requireNewDevice {
+            try dependencies.deviceManagement.saveNewDevice(deviceToSave)
+        } else {
+            try dependencies.deviceManagement.saveDevice(deviceToSave)
+        }
+        return discoveredDevice
+    }
+
     func connectManually() async -> Bool {
         let ip = manualIPAddress.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -597,14 +621,7 @@ final class OnboardingViewModel {
         }
 
         do {
-            let discoveredDevice = try await dependencies.deviceManagement.checkDevice(ip)
-
-            let deviceToSave = SavedDevice(
-                name: discoveredDevice.name,
-                ipAddress: discoveredDevice.ip,
-                macAddress: discoveredDevice.macAddress
-            )
-            try dependencies.deviceManagement.saveDevice(deviceToSave)
+            let discoveredDevice = try await checkAndSaveDevice(ip: ip)
 
             await MainActor.run {
                 if !discoveredDevices.contains(where: { $0.ip == ip }) {
@@ -614,6 +631,8 @@ final class OnboardingViewModel {
 
             return true
 
+        } catch is CancellationError {
+            return false
         } catch let error as DeviceCheckError {
             // Try to extract device info if it's a decoding error
             if case .decodingError(_, _, let jsonData) = error, let data = jsonData {

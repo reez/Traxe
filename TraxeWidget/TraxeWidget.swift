@@ -14,7 +14,7 @@ extension Color {
 
 // Minimal copy of the app's cached device metrics structure for the widget target
 // Stored under the same app group key so both app and widget stay in sync.
-private struct CachedDeviceMetrics: Codable {
+private struct CachedDeviceMetrics: Codable, Sendable {
     var hashrate: Double
     var power: Double?
     var bestDifficulty: Double?
@@ -26,7 +26,29 @@ private struct CachedDeviceMetrics: Codable {
     var isMiningPausedKnown: Bool?
     // Include temperature so widget preserves it in the shared cache
     var temperature: Double?
-    var lastUpdated: Date
+    var lastUpdated: Date {
+        didSet { lastUpdatedReferenceTime = lastUpdated.timeIntervalSinceReferenceDate }
+    }
+    // Keep the legacy ISO8601 date for older readers. Its whole-second encoding
+    // cannot order samples from separate refreshes within the same second.
+    var lastUpdatedReferenceTime: TimeInterval?
+    var measurementDate: Date {
+        guard let lastUpdatedReferenceTime, lastUpdatedReferenceTime.isFinite else {
+            return lastUpdated
+        }
+        return Date(timeIntervalSinceReferenceDate: lastUpdatedReferenceTime)
+    }
+    var isReachable: Bool?
+    var isHashrateReporting: Bool?
+    var observedAt: Date?
+    var isIncludedInLastKnownTotal: Bool?
+
+    func reading(id: String) -> FleetMetricSnapshot.Reading {
+        .init(id: id, hashrate: isHashrateKnown == false ? nil : hashrate,
+              power: power, measuredAt: measurementDate, isReachable: isReachable,
+              isHashrateReporting: isHashrateReporting, observedAt: observedAt,
+              isIncludedInLastKnownTotal: isIncludedInLastKnownTotal)
+    }
 }
 
 struct Provider: AppIntentTimelineProvider {
@@ -108,8 +130,12 @@ struct Provider: AppIntentTimelineProvider {
         // fall back to a representative fleet for first-time installs.
         let cache = loadDeviceMetricsCache()
         if !cache.isEmpty {
-            let total = cache.values.reduce(0.0) { $0 + $1.hashrate }
+            let snapshot = FleetMetricSnapshot.make(
+                readings: cache.map { $0.value.reading(id: $0.key) },
+                totalDevices: (UserDefaults(suiteName: appGroupID)?.array(forKey: savedDevicesKey) as? [String])?.count ?? cache.count
+            )
             let deviceIDs = Array(cache.keys)
+            let reachableDeviceIDs = snapshot.reportingDeviceIDs
             let pausedDeviceIDs = Set(
                 cache.compactMap { deviceID, metrics in
                     metrics.isMiningPausedKnown == true && metrics.isMiningPaused == true
@@ -118,17 +144,22 @@ struct Provider: AppIntentTimelineProvider {
             )
             return SimpleEntry(
                 date: Date(),
-                hashrate: total.formatted(
+                hashrate: snapshot.totalHashrate?.formatted(
                     .number.grouping(.never).precision(.fractionLength(1))
-                ),
-                totalDevices: cache.count,
-                successfulFetches: cache.count,
-                lastUpdated: cache.values.map(\.lastUpdated).max(),
+                ) ?? "--",
+                totalDevices: snapshot.totalDevices,
+                successfulFetches: reachableDeviceIDs.count,
+                lastUpdated: snapshot.measuredAt,
+                metricStatus: snapshot.statusText,
+                compactMetricStatus: snapshot.compactStatusText,
                 fleetStatus: WidgetFleetStatus.make(
                     deviceIDs: deviceIDs,
-                    respondedDeviceIDs: Set(deviceIDs),
-                    deviceIDsWithMetrics: Set(deviceIDs),
-                    pausedDeviceIDs: pausedDeviceIDs
+                    respondedDeviceIDs: reachableDeviceIDs,
+                    deviceIDsWithMetrics: snapshot.includedDeviceIDs,
+                    pausedDeviceIDs: pausedDeviceIDs,
+                    knownHashratesByDeviceID: cache.compactMapValues {
+                        $0.isHashrateKnown == false ? nil : $0.hashrate
+                    }
                 )
             )
         }
@@ -153,8 +184,8 @@ struct Provider: AppIntentTimelineProvider {
         in context: Context
     ) async -> Timeline<SimpleEntry> {
         guard let sharedDefaults = UserDefaults(suiteName: appGroupID),
-            let ipAddresses = sharedDefaults.array(forKey: savedDevicesKey) as? [String],
-            !ipAddresses.isEmpty
+            let initialIPAddresses = sharedDefaults.array(forKey: savedDevicesKey) as? [String],
+            !initialIPAddresses.isEmpty
         else {
             let entry = SimpleEntry(
                 date: Date(),
@@ -171,47 +202,46 @@ struct Provider: AppIntentTimelineProvider {
             let currentDate = Date()
             let refreshDate = Calendar.current.date(byAdding: .minute, value: 10, to: currentDate)!
             let networkService = getNetworkService()
-            // Load existing per-device cache (shared with the app)
-            let perDeviceCache = loadDeviceMetricsCache()
-
-            // Fetch per-device hashrates in parallel and merge with cache
-            var fetchedHashrates: [String: Double] = [:]
-            var fetchedTemps: [String: Double] = [:]
-            var respondedIPAddresses: Set<String> = []
-            await withTaskGroup(
-                of: (String, (responded: Bool, hash: Double?, temp: Double?)).self
-            ) { group in
-                for ip in ipAddresses {
-                    group.addTask {
-                        do {
-                            let telemetry = try await networkService.fetchMinerTelemetry(
-                                ipAddressOverride: ip
-                            )
-                            return (
-                                ip,
-                                (
-                                    responded: true,
-                                    hash: telemetry.hashrate,
-                                    temp: telemetry.temp
-                                )
-                            )
-                        } catch {
-                            return (ip, (responded: false, hash: nil, temp: nil))
-                        }
-                    }
+            let initialState = WidgetFleetRefresh<CachedDeviceMetrics>.State(
+                ipAddresses: initialIPAddresses,
+                savedDevicesData: sharedDefaults.data(forKey: "savedDevices"),
+                metricsByIP: loadDeviceMetricsCache()
+            )
+            let refresh = await WidgetFleetRefresh<CachedDeviceMetrics>.run(
+                initialState: initialState,
+                fetch: { ip in
+                    let telemetry = try await networkService.fetchMinerTelemetry(
+                        ipAddressOverride: ip
+                    )
+                    return .init(hashrate: telemetry.hashrate, temperature: telemetry.temp)
+                },
+                loadCurrentState: {
+                    .init(
+                        ipAddresses: sharedDefaults.array(forKey: savedDevicesKey) as? [String] ?? [],
+                        savedDevicesData: sharedDefaults.data(forKey: "savedDevices"),
+                        metricsByIP: loadDeviceMetricsCache()
+                    )
                 }
-
-                for await (ip, fresh) in group {
-                    if fresh.responded { respondedIPAddresses.insert(ip) }
-                    if let hashrate = fresh.hash { fetchedHashrates[ip] = hashrate }
-                    if let temp = fresh.temp { fetchedTemps[ip] = temp }
-                }
+            )
+            let ipAddresses = refresh.state.ipAddresses
+            let perDeviceCache = refresh.state.metricsByIP
+            let fetchedHashrates = refresh.responses.compactMapValues(\.hashrate)
+            let fetchedTemps = refresh.responses.compactMapValues(\.temperature)
+            let respondedIPAddresses = Set(refresh.responses.keys)
+            guard !ipAddresses.isEmpty else {
+                saveDeviceMetricsCache([:])
+                let entry = SimpleEntry(
+                    date: Date(), hashrate: "Setup", totalDevices: 0, lastUpdated: nil
+                )
+                return Timeline(entries: [entry], policy: .after(refreshDate))
             }
 
             // Merge: prefer fresh values; fallback to cached per device; prune to current IPs
-            var merged: [String: CachedDeviceMetrics] = [:]
+            let currentIPs = Set(ipAddresses)
+            var merged: [String: CachedDeviceMetrics] = refresh.canApplyResponses
+                ? [:] : perDeviceCache.filter { currentIPs.contains($0.key) }
             let now = Date()
-            for ip in ipAddresses {
+            for ip in ipAddresses where refresh.canApplyResponses {
                 if let fresh = fetchedHashrates[ip] {
                     var entry =
                         perDeviceCache[ip]
@@ -235,17 +265,43 @@ struct Provider: AppIntentTimelineProvider {
                         entry.isTemperatureKnown = true
                     }
                     entry.lastUpdated = now
+                    entry.isReachable = true
+                    entry.isHashrateReporting = true
+                    entry.observedAt = now
                     merged[ip] = entry
-                } else if let cached = perDeviceCache[ip] {
+                } else if var cached = perDeviceCache[ip] {
+                    cached.isReachable = respondedIPAddresses.contains(ip)
+                    cached.isHashrateReporting = false
+                    cached.observedAt = now
                     merged[ip] = cached
+                } else if respondedIPAddresses.contains(ip) {
+                    merged[ip] = CachedDeviceMetrics(
+                        hashrate: 0, power: nil, bestDifficulty: nil, hostname: nil,
+                        poolURL: nil, isMiningPaused: nil, isHashrateKnown: false,
+                        isTemperatureKnown: false, isMiningPausedKnown: false,
+                        temperature: fetchedTemps[ip], lastUpdated: now,
+                        lastUpdatedReferenceTime: now.timeIntervalSinceReferenceDate,
+                        isReachable: true, isHashrateReporting: false, observedAt: now
+                    )
                 }
             }
 
-            // Compute total from merged per-device metrics (only current IPs)
-            let totalHashrate = merged.values.reduce(0.0) { $0 + $1.hashrate }
-            let successfulFetches = respondedIPAddresses.count
-            let displayHashrate =
-                totalHashrate.formatted(.number.grouping(.never).precision(.fractionLength(1)))
+            // Failed requests preserve their measurements. Reporting totals only
+            // include hash rates actually returned in this observation.
+            let snapshot = FleetMetricSnapshot.make(
+                readings: ipAddresses.map { ip in
+                    merged[ip]?.reading(id: ip) ?? .init(
+                        id: ip, hashrate: nil, measuredAt: now,
+                        isReachable: respondedIPAddresses.contains(ip)
+                    )
+                },
+                totalDevices: ipAddresses.count,
+                referenceDate: now
+            )
+            let successfulFetches = snapshot.reportingDeviceIDs.count
+            let displayHashrate = snapshot.totalHashrate?.formatted(
+                .number.grouping(.never).precision(.fractionLength(1))
+            ) ?? "--"
             let pausedDeviceIDs = Set(
                 merged.compactMap { deviceID, metrics in
                     metrics.isMiningPausedKnown == true && metrics.isMiningPaused == true
@@ -254,40 +310,41 @@ struct Provider: AppIntentTimelineProvider {
             )
             let fleetStatus = WidgetFleetStatus.make(
                 deviceIDs: ipAddresses,
-                respondedDeviceIDs: respondedIPAddresses,
-                deviceIDsWithMetrics: Set(merged.keys),
-                pausedDeviceIDs: pausedDeviceIDs
+                respondedDeviceIDs: snapshot.reportingDeviceIDs,
+                deviceIDsWithMetrics: snapshot.includedDeviceIDs,
+                pausedDeviceIDs: pausedDeviceIDs,
+                knownHashratesByDeviceID: merged.compactMapValues {
+                    $0.isHashrateKnown == false ? nil : $0.hashrate
+                }
             )
 
-            // Determine freshness timestamp
-            let mostRecentUpdate = merged.values.map(\.lastUpdated).max()
-            let freshnessDate: Date
-            if successfulFetches > 0 {
-                freshnessDate = now  // Some data is fresh this run
-            } else {
-                freshnessDate = mostRecentUpdate ?? currentDate  // Use oldest real data from cache
+            // Preserve exactly this total if the next refresh cannot reach any
+            // miners, rather than re-adding recently failed miners from cache.
+            for ip in merged.keys {
+                merged[ip]?.isIncludedInLastKnownTotal = snapshot.includedDeviceIDs.contains(ip)
             }
-
             // Save merged per-device cache for app + widget consistency
             saveDeviceMetricsCache(merged)
 
             // Piggyback miner health alerts on this refresh (no-op unless the
             // user enabled them in Settings and granted notification permission).
-            await MinerAlertEvaluator.evaluate(
-                ipAddresses: ipAddresses,
-                respondedIPAddresses: respondedIPAddresses,
-                baselineReachableIPAddresses: Set(
-                    perDeviceCache.compactMap { ipAddress, metrics in
-                        currentDate.timeIntervalSince(metrics.lastUpdated) <= 30 * 60
-                            ? ipAddress : nil
-                    }
-                ),
-                fetchedTemps: fetchedTemps,
-                hostnames: merged.compactMapValues(\.hostname)
-            )
+            if refresh.canApplyResponses {
+                await MinerAlertEvaluator.evaluate(
+                    ipAddresses: ipAddresses,
+                    respondedIPAddresses: respondedIPAddresses,
+                    baselineReachableIPAddresses: Set(
+                        perDeviceCache.compactMap { ipAddress, metrics in
+                            currentDate.timeIntervalSince(metrics.measurementDate) <= 30 * 60
+                                ? ipAddress : nil
+                        }
+                    ),
+                    fetchedTemps: fetchedTemps,
+                    hostnames: merged.compactMapValues(\.hostname)
+                )
+            }
 
             // Also keep lastKnownWidgetData for backward compatibility
-            if successfulFetches > 0 {
+            if snapshot.totalHashrate != nil, !snapshot.isStale {
                 cacheLastKnownData(
                     hashrate: displayHashrate,
                     totalDevices: ipAddresses.count,
@@ -299,21 +356,37 @@ struct Provider: AppIntentTimelineProvider {
             // shared cache above always cover the whole fleet.
             if let selected = configuration.miner {
                 let selectedMetrics = merged[selected.ipAddress]
-                let selectedHashrate = selectedMetrics?.hashrate ?? 0
+                var selectedReading = selectedMetrics?.reading(id: selected.ipAddress) ?? .init(
+                    id: selected.ipAddress, hashrate: nil, measuredAt: now,
+                    isReachable: respondedIPAddresses.contains(selected.ipAddress)
+                )
+                // An individually selected miner keeps its own last reading even
+                // when that miner was excluded from the last fleet total.
+                selectedReading.isIncludedInLastKnownTotal = nil
+                let selectedSnapshot = FleetMetricSnapshot.make(
+                    readings: [selectedReading],
+                    totalDevices: 1,
+                    referenceDate: now
+                )
                 let entry = SimpleEntry(
                     date: currentDate,
-                    hashrate: selectedHashrate.formatted(
+                    hashrate: selectedSnapshot.totalHashrate?.formatted(
                         .number.grouping(.never).precision(.fractionLength(1))
-                    ),
+                    ) ?? "--",
                     totalDevices: 1,
-                    successfulFetches: respondedIPAddresses.contains(selected.ipAddress) ? 1 : 0,
-                    lastUpdated: selectedMetrics?.lastUpdated ?? freshnessDate,
+                    successfulFetches: selectedSnapshot.reportingDeviceIDs.count,
+                    lastUpdated: selectedSnapshot.measuredAt,
+                    metricStatus: selectedSnapshot.statusText,
+                    compactMetricStatus: selectedSnapshot.compactStatusText,
                     minerName: selectedMetrics?.hostname ?? selected.name,
                     fleetStatus: WidgetFleetStatus.make(
                         deviceIDs: [selected.ipAddress],
-                        respondedDeviceIDs: respondedIPAddresses,
-                        deviceIDsWithMetrics: Set(merged.keys),
-                        pausedDeviceIDs: pausedDeviceIDs
+                        respondedDeviceIDs: snapshot.reportingDeviceIDs,
+                        deviceIDsWithMetrics: snapshot.includedDeviceIDs,
+                        pausedDeviceIDs: pausedDeviceIDs,
+                        knownHashratesByDeviceID: merged.compactMapValues {
+                            $0.isHashrateKnown == false ? nil : $0.hashrate
+                        }
                     )
                 )
                 return Timeline(entries: [entry], policy: .after(refreshDate))
@@ -324,7 +397,9 @@ struct Provider: AppIntentTimelineProvider {
                 hashrate: displayHashrate,
                 totalDevices: ipAddresses.count,
                 successfulFetches: successfulFetches,
-                lastUpdated: freshnessDate,
+                lastUpdated: snapshot.measuredAt,
+                metricStatus: snapshot.statusText,
+                compactMetricStatus: snapshot.compactStatusText,
                 fleetStatus: fleetStatus
             )
             return Timeline(entries: [entry], policy: .after(refreshDate))
@@ -343,15 +418,15 @@ struct Provider: AppIntentTimelineProvider {
         encoder.dateEncodingStrategy = .iso8601
         guard let data = try? encoder.encode(metrics) else { return }
 
-        let totalHashrate = metrics.values.reduce(0.0) { $0 + $1.hashrate }
-        let lastUpdated = metrics.values.compactMap(\.lastUpdated).max() ?? Date()
-
-        let payload: [String: Any] = [
-            "cacheData": data,
-            "totalHashrate": totalHashrate,
-            "lastUpdated": lastUpdated,
-            "deviceCount": metrics.count,
-        ]
+        let deviceCount = (UserDefaults(suiteName: "group.matthewramsden.traxe")?
+            .array(forKey: "savedDeviceIPs") as? [String])?.count ?? metrics.count
+        let snapshot = FleetMetricSnapshot.make(
+            readings: metrics.map { $0.value.reading(id: $0.key) },
+            totalDevices: deviceCount
+        )
+        var payload: [String: Any] = ["cacheData": data, "deviceCount": deviceCount]
+        if let totalHashrate = snapshot.totalHashrate { payload["totalHashrate"] = totalHashrate }
+        if let measuredAt = snapshot.measuredAt { payload["lastUpdated"] = measuredAt }
 
         if session.isReachable {
             session.sendMessage(payload, replyHandler: nil, errorHandler: nil)
@@ -375,6 +450,8 @@ struct SimpleEntry: TimelineEntry {
     var successfulFetches: Int = 0
     var isPlaceholder: Bool = false
     let lastUpdated: Date?
+    var metricStatus: String = ""
+    var compactMetricStatus: String = ""
     /// Set when the widget is configured to a single miner.
     var minerName: String? = nil
     var fleetStatus: WidgetFleetStatus = .empty
@@ -392,7 +469,7 @@ struct TraxeWidgetEntryView: View {
         case .accessoryCircular:
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("HASH RATE".uppercased())
+                Text(entry.compactMetricStatus.isEmpty ? "HASH RATE" : entry.compactMetricStatus)
                     //                    .font(.caption2)
                     .font(.custom("system", size: 10))
                     //                        .foregroundStyle(.primary)
@@ -444,7 +521,7 @@ struct TraxeWidgetEntryView: View {
                 //                    .fontDesign(.rounded)
                 //                    .minimumScaleFactor(0.5)
 
-                Text("\(valueText) \(unitText)")
+                Text("\(valueText) \(unitText) \(entry.compactMetricStatus)")
                     .fontDesign(.rounded)
                     .minimumScaleFactor(0.5)
 
@@ -456,7 +533,7 @@ struct TraxeWidgetEntryView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     let (valueText, unitText) = Self.formatHashrate(entry.hashrate)
                     HStack {
-                        Text("HASH RATE".uppercased())
+                        Text(entry.compactMetricStatus.isEmpty ? "HASH RATE" : entry.compactMetricStatus)
                             .font(.caption2)
                             //                        .foregroundStyle(.primary)
                             .fontDesign(.rounded)
@@ -537,10 +614,14 @@ struct TraxeWidgetEntryView: View {
 
                     Spacer()
 
-                    Text("at \(entry.lastUpdated ?? entry.date, style: .time)")
+                    Text(entry.metricStatus)
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .fontDesign(.rounded)
+                        .foregroundStyle(.secondary)
+                    if let lastUpdated = entry.lastUpdated {
+                        Text("Last reading \(lastUpdated, style: .relative) ago")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
 
                 }
                 //        .padding(.vertical, 10)
@@ -557,9 +638,10 @@ struct TraxeWidgetEntryView: View {
                 minerName: entry.minerName,
                 hashrateValue: valueText,
                 hashrateUnit: unitText,
-                updatedAt: entry.lastUpdated ?? entry.date,
+                updatedAt: entry.lastUpdated,
                 isRedacted: entry.isPlaceholder || entry.hashrate == "Error",
-                status: entry.fleetStatus
+                status: entry.fleetStatus,
+                metricStatus: entry.metricStatus
             )
 
         }
@@ -786,6 +868,43 @@ struct TraxeWidget: Widget {
             paused: 0,
             offline: 2,
             unknown: 0
+        )
+    )
+}
+
+#Preview("systemLarge zero hashrate", as: .systemLarge) {
+    TraxeWidget()
+} timeline: {
+    SimpleEntry(
+        date: .now,
+        hashrate: "10500.0",
+        totalDevices: 7,
+        successfulFetches: 5,
+        lastUpdated: .now,
+        metricStatus: "5 of 7 miners reporting",
+        fleetStatus: WidgetFleetStatus(
+            total: 7,
+            online: 5,
+            paused: 0,
+            offline: 2,
+            unknown: 0,
+            zeroHashrate: 1
+        )
+    )
+    SimpleEntry(
+        date: .now,
+        hashrate: "10500.0",
+        totalDevices: 7,
+        successfulFetches: 5,
+        lastUpdated: .now,
+        metricStatus: "4 of 7 miners with hash rate",
+        fleetStatus: WidgetFleetStatus(
+            total: 7,
+            online: 3,
+            paused: 1,
+            offline: 2,
+            unknown: 1,
+            zeroHashrate: 1
         )
     )
 }

@@ -48,6 +48,14 @@ final class SettingsViewModel {
     private(set) var isSettingsConfigurationEditable: Bool = false
     private(set) var settingsConfigurationMessage: String? = nil
     var deleteMinerErrorMessage: String? = nil
+    /// Set by a successful pool or hostname save that the miner only applies while booting.
+    /// ESP-Miner before 2.15 keeps the flat pool settings in NVS and reads them at startup, and
+    /// ESP-Miner and NerdQAxe both read a saved hostname only while Wi-Fi and mDNS start, so
+    /// the miner keeps its old configuration until it restarts; both web UIs warn the same way
+    /// after a save. NerdQAxe reconnects to a changed pool on its own and the ESP-Miner 2.15
+    /// pool catalog restarts when needed, so neither sets this for a pool save. The settings
+    /// screens present their restart alert from it and clear it when the alert closes.
+    var needsRestartToApplySettings: Bool = false
 
     var canDeleteCurrentMiner: Bool {
         !deleteMinerIPAddress.isEmpty
@@ -60,6 +68,8 @@ final class SettingsViewModel {
     private let shouldFetchDeviceSettingsOnLoad: Bool
     private let deleteDevice: (_ ipAddressToDelete: String) throws -> Void
     private var selectedMinerIPAddress: String = ""
+    /// The hostname the miner last reported, so a save can tell a rename from a no-op.
+    private var reportedHostname: String = ""
 
     static let sharedUserDefaultsSuiteName = "group.matthewramsden.traxe"
 
@@ -165,6 +175,7 @@ final class SettingsViewModel {
                 currentVersion = telemetry.version
                 fanSpeed = telemetry.fanspeed ?? 0
                 hostname = telemetry.hostname
+                reportedHostname = telemetry.hostname
                 isConnected = true
                 isSettingsConfigurationEditable = false
                 settingsConfigurationMessage = Self.settingsConfigurationUnavailableMessage
@@ -217,6 +228,7 @@ final class SettingsViewModel {
         poolMode = detectedPoolMode == 1 ? 1 : 0
         isDualPool = poolMode == 1
         hostname = systemInfo.hostname
+        reportedHostname = systemInfo.hostname
         isConnected = true
         isSettingsConfigurationEditable = true
         settingsConfigurationMessage = nil
@@ -238,7 +250,13 @@ final class SettingsViewModel {
         isUpdatingFan = true
         let newSpeed = max(0, min(100, fanSpeed + amount))
         do {
-            try await networkService.updateSystemSettings(manualFanSpeed: newSpeed)
+            // ESP-Miner 2.11 and later read the manual speed from `manualFanSpeed`; 2.10 and
+            // earlier only read `fanspeed`. Each ignores the key it does not know and answers
+            // 200 either way, so both are sent.
+            try await networkService.updateSystemSettings(
+                fanspeed: newSpeed,
+                manualFanSpeed: newSpeed
+            )
             fanSpeed = newSpeed
         } catch {
         }
@@ -253,6 +271,7 @@ final class SettingsViewModel {
 
         isUpdatingPoolConfiguration = true
         poolConfigurationError = nil
+        needsRestartToApplySettings = false
         var success = false
         let targetPoolBalance =
             supportsPoolModeSettings && poolMode == 1 ? max(1, min(99, poolBalance)) : nil
@@ -451,6 +470,26 @@ final class SettingsViewModel {
                 poolBalance: targetPoolBalance,
                 poolMode: supportsPoolModeSettings ? poolMode : nil
             )
+            // ESP-Miner before 2.15 keeps these flat settings in NVS and reads them while
+            // booting, so a changed pool only takes effect after a restart. NerdQAxe, which
+            // reports `stratum.poolMode`, reconnects on its own after a save.
+            needsRestartToApplySettings =
+                !currentSystemInfo.supportsPoolModeSettings
+                && Self.flatPoolSettingsDiffer(
+                    from: currentSystemInfo,
+                    stratumURL: stratumURL.isEmpty ? nil : stratumURL,
+                    stratumPort: portToSave,
+                    stratumUser: stratumUser.isEmpty ? nil : stratumUser,
+                    fallbackStratumURL: fallbackStratumURL.isEmpty ? nil : fallbackStratumURL,
+                    fallbackStratumPort: fallbackPortToSave,
+                    fallbackStratumUser: fallbackStratumUser.isEmpty ? nil : fallbackStratumUser,
+                    stratumProtocol: stratumProtocolToSave,
+                    fallbackStratumProtocol: fallbackStratumProtocolToSave,
+                    stratumV2ChannelType: stratumV2ChannelTypeToSave,
+                    fallbackStratumV2ChannelType: fallbackStratumV2ChannelTypeToSave,
+                    stratumV2AuthorityPubkey: stratumV2AuthorityPubkeyToSave,
+                    fallbackStratumV2AuthorityPubkey: fallbackStratumV2AuthorityPubkeyToSave
+                )
 
             if supportsPoolModeSettings {
                 let systemInfo = try await networkService.fetchSystemInfo()
@@ -511,6 +550,7 @@ final class SettingsViewModel {
 
         isUpdatingPoolConfiguration = true
         poolConfigurationError = nil
+        needsRestartToApplySettings = false
 
         do {
             let currentSystemInfo = try await networkService.fetchSystemInfo()
@@ -636,12 +676,16 @@ final class SettingsViewModel {
 
         isUpdatingHostname = true
         hostnameConfigurationError = nil
+        needsRestartToApplySettings = false
         var success = false
 
         do {
-            try await networkService.updateSystemSettings(
-                hostname: hostname.isEmpty ? nil : hostname
-            )
+            let hostnameToSave = hostname.isEmpty ? nil : hostname
+            try await networkService.updateSystemSettings(hostname: hostnameToSave)
+            // ESP-Miner and NerdQAxe both store the hostname and read it while Wi-Fi and mDNS
+            // start, and each web UI asks for a restart after changing it.
+            needsRestartToApplySettings =
+                hostnameToSave != nil && hostnameToSave != reportedHostname
             await fetchDeviceSettings()
             success = true
         } catch let error {
@@ -663,6 +707,44 @@ final class SettingsViewModel {
         )
         guard trimmedSelectedIPAddress.isEmpty else { return trimmedSelectedIPAddress }
         return trimmedMinerIPAddress
+    }
+
+    /// Whether any value in a flat pool PATCH differs from what the miner last reported.
+    /// Values the request leaves out are not compared, and a reported `nil` counts as empty,
+    /// so saving unchanged settings does not ask for a restart while a real change always does.
+    private static func flatPoolSettingsDiffer(
+        from systemInfo: SystemInfoDTO,
+        stratumURL: String?,
+        stratumPort: Int?,
+        stratumUser: String?,
+        fallbackStratumURL: String?,
+        fallbackStratumPort: Int?,
+        fallbackStratumUser: String?,
+        stratumProtocol: String?,
+        fallbackStratumProtocol: String?,
+        stratumV2ChannelType: String?,
+        fallbackStratumV2ChannelType: String?,
+        stratumV2AuthorityPubkey: String?,
+        fallbackStratumV2AuthorityPubkey: String?
+    ) -> Bool {
+        let values: [(sent: String?, reported: String?)] = [
+            (stratumURL, systemInfo.stratumURL),
+            (stratumPort.map { String($0) }, String(systemInfo.stratumPort)),
+            (stratumUser, systemInfo.stratumUser),
+            (fallbackStratumURL, systemInfo.fallbackStratumURL),
+            (fallbackStratumPort.map { String($0) }, systemInfo.fallbackStratumPort.map { String($0) }),
+            (fallbackStratumUser, systemInfo.fallbackStratumUser),
+            (stratumProtocol, systemInfo.stratumProtocol),
+            (fallbackStratumProtocol, systemInfo.fallbackStratumProtocol),
+            (stratumV2ChannelType, systemInfo.stratumV2ChannelType),
+            (fallbackStratumV2ChannelType, systemInfo.fallbackStratumV2ChannelType),
+            (stratumV2AuthorityPubkey, systemInfo.stratumV2AuthorityPubkey),
+            (fallbackStratumV2AuthorityPubkey, systemInfo.fallbackStratumV2AuthorityPubkey),
+        ]
+        return values.contains { sent, reported in
+            guard let sent else { return false }
+            return sent != (reported ?? "")
+        }
     }
 
     private func resetStratumProtocolDetails() {

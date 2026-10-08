@@ -59,7 +59,7 @@ struct MinerAlertsSection: View {
             Text("Alerts")
         } footer: {
             Text(
-                "Notifies you when this miner (\(viewModel.ipAddress)) goes offline or runs hot. Every miner has its own setting, so other miners are not affected. Checks run when widgets refresh and only while this device is on the same Wi-Fi network as your miners."
+                "Notifies you when this miner (\(viewModel.ipAddress)) goes offline or runs hot. Every miner has its own setting, so other miners are not affected. Add a Traxe widget to receive alerts. Checks run when widgets refresh and only while this device is on the same Wi-Fi network as your miners."
             )
         }
     }

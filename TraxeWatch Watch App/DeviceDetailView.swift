@@ -25,8 +25,9 @@ struct DeviceDetailView: View {
                 //                    .fontDesign(.rounded)
                 //                    .foregroundStyle(.secondary)
             } footer: {
+                Text(miner.statusText)
                 if let updated = miner.lastUpdated {
-                    Text("Updated \(updated, style: .time)")
+                    Text("Last reading \(updated, style: .relative) ago")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }

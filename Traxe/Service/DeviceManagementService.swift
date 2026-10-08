@@ -9,7 +9,6 @@ struct DeviceManagementService {
         WidgetCenter.shared.reloadTimelines(ofKind: kind)
     }
 
-    private static let session = URLSession.shared
     private static let decoder = JSONDecoder()
     private static let savedDevicesKey = "savedDevices"
     private static let savedDeviceIPsKey = "savedDeviceIPs"
@@ -28,7 +27,10 @@ struct DeviceManagementService {
     static func checkDevice(
         ip: String,
         timeout: TimeInterval = 5.0,
-        retryOnTimeout: Bool = true
+        retryOnTimeout: Bool = true,
+        fetchData: (_ request: URLRequest) async throws -> (Data, URLResponse) = { request in
+            try await URLSession.shared.data(for: request)
+        }
     ) async throws -> DiscoveredDevice {
         let urlString = "http://\(ip)/api/system/info"
         guard let url = URL(string: urlString) else {
@@ -39,26 +41,17 @@ struct DeviceManagementService {
         // Slightly higher timeout to reduce -1001 churn on local devices
         request.timeoutInterval = timeout
 
-        // One-time retry on timeout for resiliency
-        func fetchOnce() async throws -> (Data, URLResponse) {
-            try await session.data(for: request)
-        }
-
-        let (data, response): (Data, URLResponse)
         do {
-            (data, response) = try await fetchOnce()
-        } catch let error as URLError {
-            if error.code == .timedOut, retryOnTimeout {
-                // Retry once on timeout
-                (data, response) = try await fetchOnce()
-            } else {
-                throw error
+            try Task.checkCancellation()
+            let (data, response): (Data, URLResponse)
+            do {
+                (data, response) = try await fetchData(request)
+            } catch let error as URLError where error.code == .timedOut && retryOnTimeout {
+                // Retry once on timeout, unless the caller has cancelled the check.
+                try Task.checkCancellation()
+                (data, response) = try await fetchData(request)
             }
-        } catch {
-            throw error
-        }
 
-        do {
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw DeviceCheckError.invalidResponse
             }
@@ -91,6 +84,8 @@ struct DeviceManagementService {
                     } else {
                         throw DeviceCheckError.notBitaxeDevice
                     }
+                } catch let error as DeviceCheckError {
+                    throw error
                 } catch let swiftDecodingError as Swift.DecodingError {
                     var fieldName: String? = nil
                     switch swiftDecodingError {
@@ -122,7 +117,12 @@ struct DeviceManagementService {
             default:
                 throw DeviceCheckError.invalidResponse
             }
+        } catch let error as CancellationError {
+            throw error
         } catch let error as URLError {
+            if error.code == .cancelled {
+                throw error
+            }
             throw DeviceCheckError.requestFailed(error.code)
         } catch let error as DeviceCheckError {
             throw error
@@ -135,7 +135,25 @@ struct DeviceManagementService {
         try saveDevices([deviceToSave])
     }
 
+    static func saveNewDevice(_ deviceToSave: SavedDevice) throws {
+        guard let sharedDefaults else {
+            throw NSError(
+                domain: "DeviceSaveError",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Cannot access shared storage."]
+            )
+        }
+        guard !loadSavedDevices(from: sharedDefaults).contains(where: {
+            $0.ipAddress == deviceToSave.ipAddress
+        }) else {
+            throw DeviceSaveError.addressAlreadySaved
+        }
+        try saveDevice(deviceToSave)
+    }
+
     static func saveDevices(_ devicesToSave: [SavedDevice]) throws {
+        guard !devicesToSave.isEmpty else { return }
+
         guard let sharedDefaults else {
             throw NSError(
                 domain: "DeviceSaveError",
@@ -178,6 +196,8 @@ struct DeviceManagementService {
         }
 
         guard firstAddedIPAddress != nil || !relocations.isEmpty else {
+            // Selecting an already saved miner also completes onboarding.
+            onboardingDefaults.set(true, forKey: hasCompletedOnboardingKey)
             return
         }
 
@@ -187,8 +207,8 @@ struct DeviceManagementService {
 
         if let firstAddedIPAddress {
             sharedDefaults.set(firstAddedIPAddress, forKey: selectedDeviceKey)
-            onboardingDefaults.set(true, forKey: hasCompletedOnboardingKey)
         }
+        onboardingDefaults.set(true, forKey: hasCompletedOnboardingKey)
 
         reloadWidgetTimelines("TraxeWidget")
     }
@@ -511,6 +531,14 @@ struct DeviceManagementService {
             }
         }
         return nil
+    }
+}
+
+enum DeviceSaveError: Error, LocalizedError {
+    case addressAlreadySaved
+
+    var errorDescription: String? {
+        "This IP address is already saved. If it now belongs to a different miner, remove the saved miner before adding its replacement."
     }
 }
 

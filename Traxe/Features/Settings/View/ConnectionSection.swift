@@ -17,7 +17,7 @@ struct ConnectionSection: View {
                 }
                 Spacer()
                 TextField("e.g., 192.168.1.100", text: $ipAddress)
-                    .keyboardType(.decimalPad)
+                    .keyboardType(.numbersAndPunctuation)
                     .multilineTextAlignment(.trailing)
                     .onSubmit(onSubmit)
                     .textContentType(.URL)

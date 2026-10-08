@@ -290,6 +290,8 @@ actor NetworkService {
         }
     }
 
+    // `fanspeed` is the manual fan speed key on ESP-Miner 2.10 and earlier, `manualFanSpeed`
+    // on 2.11 and later. Firmware ignores keys it does not know, so a fan change sends both.
     func updateSystemSettings(
         fanspeed: Int? = nil,
         manualFanSpeed: Int? = nil,

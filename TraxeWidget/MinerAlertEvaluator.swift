@@ -71,7 +71,8 @@ enum MinerAlertEvaluator {
                     center: center,
                     identifier: "hot-\(ipAddress)",
                     title: "\(name) is running hot",
-                    body: "Temperature is \(Int(temperature))°C. Check ventilation."
+                    body:
+                        "Temperature is \(temperature.rounded(.towardZero).formatted(.number.precision(.fractionLength(0))))°C. Check ventilation."
                 )
             }
         }

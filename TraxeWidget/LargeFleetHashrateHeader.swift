@@ -4,7 +4,7 @@ struct LargeFleetHashrateHeader: View {
     let minerName: String?
     let hashrateValue: String
     let hashrateUnit: String
-    let updatedAt: Date
+    let updatedAt: Date?
     let isRedacted: Bool
 
     var body: some View {
@@ -35,10 +35,12 @@ struct LargeFleetHashrateHeader: View {
                 .foregroundStyle(.secondary)
                 .padding(.top, -6)
 
-            Text("at \(updatedAt, style: .time)")
-                .font(.subheadline)
-                .foregroundStyle(.tertiary)
-                .padding(.top, 8)
+            if let updatedAt {
+                Text("Last reading \(updatedAt, style: .relative) ago")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 8)
+            }
         }
         .fontDesign(.rounded)
         .foregroundStyle(.primary)

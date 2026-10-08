@@ -45,8 +45,9 @@ struct ContentView: View {
                     //                        .fontDesign(.rounded)
                     //                        .foregroundStyle(.secondary)
                 } footer: {
+                    Text(viewModel.metricStatus)
                     if let timestamp = viewModel.totalLastUpdated {
-                        Text("Updated \(timestamp, style: .time)")
+                        Text("Last reading \(timestamp, style: .relative) ago")
                             .font(.caption2)
                             .fontDesign(.rounded)
                             .foregroundStyle(.tertiary)
@@ -86,6 +87,14 @@ struct ContentView: View {
                                                 .fontDesign(.rounded)
                                                 .foregroundStyle(.secondary)
                                         }
+                                    }
+                                    Text(miner.statusText)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                    if let timestamp = miner.lastUpdated {
+                                        Text(timestamp, style: .relative)
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
                                     }
                                 }
                                 .padding(.all, 4)

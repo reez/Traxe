@@ -14,6 +14,8 @@ final class AppStoreScreenshotRenderTests: XCTestCase {
 
     override func setUpWithError() throws {
         try super.setUpWithError()
+        // Validate opt-in and output isolation before changing process-wide preview state.
+        outputDirectory = try Self.makeOutputDirectory()
         setenv("XCODE_RUNNING_FOR_PREVIEWS", "1", 1)
         UIView.setAnimationsEnabled(false)
 
@@ -23,12 +25,11 @@ final class AppStoreScreenshotRenderTests: XCTestCase {
             forKey: "preview_device_summary"
         )
 
-        outputDirectory = try Self.makeOutputDirectory()
         try FileManager.default.createDirectory(
             at: outputDirectory,
             withIntermediateDirectories: true
         )
-        try Self.removeExistingPNGs(in: outputDirectory)
+        print("Traxe screenshot output: \(outputDirectory.path)")
     }
 
     override func tearDownWithError() throws {
@@ -163,9 +164,13 @@ final class AppStoreScreenshotRenderTests: XCTestCase {
             forKey: "lastSeenWhatsNewVersion"
         )
         let dashboardContext = PreviewFixtures.makeDashboardPreviewContext()
+        let fleetRequests = expectation(description: "Five active fleet fixtures request their saved miners")
+        fleetRequests.expectedFulfillmentCount = 5 * PreviewFixtures.sampleSavedDevices.count
+        fleetRequests.assertForOverFulfill = false
         let viewModelDependencies = DeviceListViewModel.Dependencies(
             deviceManagement: .init(
                 checkDevice: { ipAddress in
+                    fleetRequests.fulfill()
                     guard let metrics = PreviewFixtures.sampleDeviceMetricsByIP[ipAddress] else {
                         throw DeviceCheckError.requestFailed(.timedOut)
                     }
@@ -387,6 +392,7 @@ final class AppStoreScreenshotRenderTests: XCTestCase {
         ) {
             WhatsNewSheetScreenshotView()
         }
+        await fulfillment(of: [fleetRequests], timeout: 2)
     }
 
     private func render<Content: View>(
@@ -468,34 +474,31 @@ final class AppStoreScreenshotRenderTests: XCTestCase {
 
     private static func makeOutputDirectory() throws -> URL {
         let environment = ProcessInfo.processInfo.environment
+        guard let path = environment["TRAXE_SCREENSHOT_OUTPUT_DIR"], !path.isEmpty else {
+            throw XCTSkip("Set TRAXE_SCREENSHOT_OUTPUT_DIR to an external directory to render screenshots.")
+        }
+        guard path.hasPrefix("/") else {
+            throw NSError(
+                domain: "ScreenshotOutput", code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Screenshot output must be an absolute path outside the repository."]
+            )
+        }
         let repositoryRoot = URL(fileURLWithPath: #filePath, isDirectory: false)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-
-        if let path = environment["TRAXE_SCREENSHOT_OUTPUT_DIR"], !path.isEmpty {
-            if path.hasPrefix("/") {
-                return URL(fileURLWithPath: path, isDirectory: true)
-            }
-
-            return repositoryRoot.appendingPathComponent(path, isDirectory: true)
+            .resolvingSymlinksInPath().standardizedFileURL
+        let parent = URL(fileURLWithPath: path, isDirectory: true)
+            .resolvingSymlinksInPath().standardizedFileURL
+        guard parent.path != repositoryRoot.path,
+            !parent.path.hasPrefix(repositoryRoot.path + "/")
+        else {
+            throw NSError(
+                domain: "ScreenshotOutput", code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "Screenshot output cannot be inside the repository."]
+            )
         }
-
-        return repositoryRoot.appendingPathComponent(
-            "screenshots/raw/en-US/APP_IPHONE_67",
-            isDirectory: true
-        )
-    }
-
-    private static func removeExistingPNGs(in directory: URL) throws {
-        guard FileManager.default.fileExists(atPath: directory.path) else { return }
-
-        let files = try FileManager.default.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: nil
-        )
-        for file in files where file.pathExtension == "png" {
-            try FileManager.default.removeItem(at: file)
-        }
+        // Every run owns a new directory. Never clear or overwrite an earlier screenshot set.
+        return parent.appendingPathComponent("Traxe-\(UUID().uuidString)", isDirectory: true)
     }
 }
 
@@ -566,6 +569,7 @@ private struct FleetDashboardScreenshotView: View {
             viewModelDependencies: viewModelDependencies
         )
         .modelContainer(modelContainer)
+        .environment(\.scenePhase, .active)
     }
 }
 

@@ -264,7 +264,7 @@ extension DeviceMetrics {
     }
 
     // Converts strings like "598.7M", "2.3G", "4,070,000 T" to a Double representing millions (M)
-    fileprivate static func parseBestDifficultyInMillions(_ diffString: String) -> Double {
+    nonisolated static func parseBestDifficultyInMillions(_ diffString: String) -> Double {
         let trimmed = diffString.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return 0.0 }
 
@@ -278,7 +278,8 @@ extension DeviceMetrics {
         ]
 
         var numericPart = trimmed
-        var multiplier: Double = 1.0
+        // Unsuffixed values are raw difficulty; all results use millions.
+        var multiplier: Double = 1.0 / 1_000_000.0
 
         if let last = trimmed.last, let mult = multipliersInM[last.uppercased().first ?? last] {
             multiplier = mult
@@ -289,11 +290,10 @@ extension DeviceMetrics {
             numericPart
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacing(",", with: "")
-        guard let value = Double(cleaned) else { return 0.0 }
-        if multiplier == 1.0, trimmed.last?.isNumber == true {
-            // No suffix: treat as raw diff and normalize to millions.
-            return value / 1_000_000.0
-        }
-        return value * multiplier
+        guard let value = Double(cleaned), value.isFinite, value >= 0 else { return 0.0 }
+        let difficulty = value * multiplier
+        // A finite numeric string can overflow when its unit is converted. Keep
+        // one malformed reading from making the entire cache/watch payload unencodable.
+        return difficulty.isFinite ? difficulty : 0.0
     }
 }
